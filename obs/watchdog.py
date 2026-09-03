@@ -22,8 +22,17 @@ def twitch_live():
                                      headers={"Client-Id": CLIENT_ID, "Authorization": "Bearer " + token()})
         with urllib.request.urlopen(req, timeout=15) as r: return len(json.load(r).get("data", [])) > 0
     except Exception as e: log("twitch query failed:", e); return None
+def obs_auth(ws, password):
+    """obs-websocket v5 handshake: answer the Hello challenge with the password (from OBS_WS_PASSWORD in .env)."""
+    import base64, hashlib
+    hello = json.loads(ws.recv()); auth = (hello.get("d") or {}).get("authentication"); ident = {"rpcVersion": 1}
+    if auth:
+        secret = base64.b64encode(hashlib.sha256((password + auth["salt"]).encode()).digest()).decode()
+        ident["authentication"] = base64.b64encode(hashlib.sha256((secret + auth["challenge"]).encode()).digest()).decode()
+    ws.send(json.dumps({"op": 1, "d": ident}))
+    if json.loads(ws.recv()).get("op") != 2: raise RuntimeError("obs-websocket rejected the password (OBS_WS_PASSWORD in .env)")
 def obs(requests):
-    ws = websocket.create_connection("ws://127.0.0.1:4455", timeout=10); ws.recv(); ws.send(json.dumps({"op": 1, "d": {"rpcVersion": 1}})); ws.recv(); out = []
+    ws = websocket.create_connection("ws://127.0.0.1:4455", timeout=10); obs_auth(ws, ENV.get("OBS_WS_PASSWORD", "")); out = []
     for i, (t, d) in enumerate(requests):
         ws.send(json.dumps({"op": 6, "d": {"requestType": t, "requestId": str(i), "requestData": d or {}}}))
         while True:

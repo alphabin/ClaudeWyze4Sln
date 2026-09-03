@@ -11,7 +11,7 @@ pprof: no
 playback: no
 
 rtsp: yes
-rtspAddress: :8555
+rtspAddress: 127.0.0.1:8555      # loopback only: OBS and the bot's ffmpeg are on this Mac
 rtspTransports: [tcp]
 rtspEncryption: "no"
 
@@ -21,14 +21,24 @@ srt: no
 moq: no
 
 webrtc: yes
-webrtcAddress: :8890
+webrtcAddress: 127.0.0.1:8890    # WHIP publishers are the two headless Chromes on this Mac
 webrtcEncryption: no
 webrtcAllowOrigin: "*"
-webrtcLocalUDPAddress: :8190
-webrtcLocalTCPAddress: :8190
+webrtcLocalUDPAddress: 127.0.0.1:8190
+webrtcLocalTCPAddress: 127.0.0.1:8190
 webrtcIPsFromInterfaces: no
 webrtcAdditionalHosts: [127.0.0.1]
 webrtcICEServers2: []
+
+# Even on loopback: only this Mac may publish or read (a rogue publisher would replace the live picture on Twitch).
+authMethod: internal
+authInternalUsers:
+  - user: any
+    pass:
+    ips: ['127.0.0.1', '::1']
+    permissions:
+      - action: publish
+      - action: read
 
 pathDefaults:
   source: publisher

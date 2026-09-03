@@ -3,10 +3,10 @@ services:
     container_name: wyze-bridge
     image: mrlt8/wyze-bridge:latest
     restart: unless-stopped
-    ports:
-      - "5050:5000"   # web UI  -> http://localhost:5050  (5000 is taken by macOS AirPlay)
-      - "8554:8554"   # RTSP    -> what ffmpeg pulls from
-      - "8888:8888"   # HLS     -> handy for testing in a browser
+    ports:            # bound to 127.0.0.1 on purpose: WB_AUTH is off, and the UI/API can reboot cameras and hand out stream sessions
+      - "127.0.0.1:5050:5000"   # web UI  -> http://localhost:5050  (5000 is taken by macOS AirPlay)
+      - "127.0.0.1:8554:8554"   # RTSP    -> what ffmpeg pulls from
+      - "127.0.0.1:8888:8888"   # HLS     -> handy for testing in a browser
     environment:
       WYZE_EMAIL:    ${WYZE_EMAIL}
       WYZE_PASSWORD: ${WYZE_PASSWORD}
@@ -21,8 +21,8 @@ services:
       ON_DEMAND: "True"
       # HD<n> where n is kB/s, 30-255. 180 ~= 1.4Mbps, a sane 1080p/wifi tradeoff.
       QUALITY:   HD180
-      # No auth on RTSP: nothing outside this Mac can reach port 8554 anyway,
-      # and ffmpeg would otherwise need credentials in the URL.
+      # No auth on the UI/RTSP: only acceptable because every port above is bound to 127.0.0.1
+      # (the UI can reboot/power-off cameras and serves the players' session files).
       WB_AUTH:   "False"
     volumes:
       - ./tokens:/tokens                                   # Wyze login/camera cache - keeps the bridge from re-logging in (Wyze rate-limits that)
@@ -39,7 +39,7 @@ services:
     restart: unless-stopped
     entrypoint: ["python3", "/lake/provision.py"]
     ports:
-      - "5051:5051"   # on-demand session endpoint: the player POSTs /provision/<cam> on every start
+      - "127.0.0.1:5051:5051"   # on-demand session endpoint (returns the Agora token + key): loopback only
     environment:
       LAKE_CAMS: ""                 # comma-separated camera nicknames; empty = every camera Wyze marks as "lake"      # comma-separated nicknames; empty = every camera Wyze marks as "lake"
       RENEW_EVERY: "2700"

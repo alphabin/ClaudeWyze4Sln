@@ -16,12 +16,15 @@ cp "$KIT/obs/basic.ini"    "$OBS/basic/profiles/SnakeCam/basic.ini"
 # never clobber a stream key the user already pasted into OBS
 [ -f "$OBS/basic/profiles/SnakeCam/service.json" ] || cp "$KIT/obs/service.json" "$OBS/basic/profiles/SnakeCam/"
 
-# obs-websocket on localhost:4455, no auth: doctor.sh, the watchdog and obsstat.py talk to OBS through it.
-# Only written when OBS has never configured it (we never touch an existing password).
+# obs-websocket on :4455 WITH a password: obs-websocket listens on every interface, so without one anybody on the
+# Wi-Fi could stop the stream, swap the stream key or add sources. The password lives in .env as OBS_WS_PASSWORD;
+# doctor.sh, the watchdog and obsstat.py read it from there. Only written when OBS has never configured it.
 WSCFG="$OBS/plugin_config/obs-websocket/config.json"
 if [ ! -f "$WSCFG" ]; then
+  PW="$(grep -E '^OBS_WS_PASSWORD=' "$HERE/.env" | head -1 | cut -d= -f2- | tr -d '"')"
+  if [ -z "$PW" ]; then PW="$(openssl rand -hex 16)"; printf '\nOBS_WS_PASSWORD=%s\n' "$PW" >> "$HERE/.env"; chmod 600 "$HERE/.env"; fi
   mkdir -p "$(dirname "$WSCFG")"
-  printf '{"alerts_enabled":false,"auth_required":false,"first_load":false,"server_enabled":true,"server_password":"","server_port":4455}\n' > "$WSCFG"
+  printf '{"alerts_enabled":false,"auth_required":true,"first_load":false,"server_enabled":true,"server_password":"%s","server_port":4455}\n' "$PW" > "$WSCFG"
 fi
 
 # make it the active profile/collection (OBS 31 uses user.ini, older uses global.ini)

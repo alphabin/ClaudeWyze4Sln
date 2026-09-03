@@ -127,12 +127,22 @@ esac
 # ---- 4. OBS + Twitch ------------------------------------------------------------------------------------
 head_ "OBS and Twitch"
 if pgrep -xq OBS; then pass "OBS process" "running$(loaded com.snakecam.obs || echo ' (but the launchd agent is NOT loaded)')"; else fail "OBS process" "not running" "$LOAD.obs.plist"; fi
-O="$($PY - <<'PY' 2>&1
+O="$(SNAKECAM_ENV="$ROOT/.env" $PY - <<'PY' 2>&1
 import json
 try: import websocket
 except ImportError: print("NOWS"); raise SystemExit
 try:
-    ws=websocket.create_connection("ws://127.0.0.1:4455",timeout=8); ws.recv(); ws.send(json.dumps({"op":1,"d":{"rpcVersion":1}})); ws.recv()
+    import base64,hashlib,os,re
+    pw=""
+    for l in open(os.environ["SNAKECAM_ENV"]):
+        m=re.match(r'\s*OBS_WS_PASSWORD=\s*"?([^"#]*)',l)
+        if m: pw=m.group(1).strip()
+    ws=websocket.create_connection("ws://127.0.0.1:4455",timeout=8); hello=json.loads(ws.recv()); auth=(hello.get("d") or {}).get("authentication"); ident={"rpcVersion":1}
+    if auth:
+        secret=base64.b64encode(hashlib.sha256((pw+auth["salt"]).encode()).digest()).decode()
+        ident["authentication"]=base64.b64encode(hashlib.sha256((secret+auth["challenge"]).encode()).digest()).decode()
+    ws.send(json.dumps({"op":1,"d":ident}))
+    if json.loads(ws.recv()).get("op")!=2: print("obs-websocket rejected the password (OBS_WS_PASSWORD in .env)"); raise SystemExit
     def req(t,i):
         ws.send(json.dumps({"op":6,"d":{"requestType":t,"requestId":str(i),"requestData":{}}}))
         while True:
@@ -147,7 +157,7 @@ case "$O" in
   LIVE*) pass "OBS streaming (obs-websocket :4455)" "${O#LIVE }" ;;
   IDLE*) fail "OBS streaming (obs-websocket :4455)" "OBS is up but not streaming" "OBS > Start Streaming (the agent passes --startstreaming; check the stream key: Settings > Stream)" ;;
   NOWS) warn "OBS streaming" "python websocket-client missing; skipped" "$CHATBOT/.venv/bin/python -m pip install websocket-client" ;;
-  *) fail "obs-websocket :4455" "$O" "OBS > Tools > WebSocket Server Settings > Enable, port 4455, no auth (obs/install-obs-config.sh writes this when OBS is closed)" ;;
+  *) fail "obs-websocket :4455" "$O" "OBS > Tools > WebSocket Server Settings > Enable, port 4455, password = OBS_WS_PASSWORD from .env (obs/install-obs-config.sh writes this when OBS is closed)" ;;
 esac
 T="$($PY - "$CHATBOT/token.json" "$CID" "$CHAN" <<'PY' 2>&1
 import json,sys,time,urllib.request,urllib.parse
