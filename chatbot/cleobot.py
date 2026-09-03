@@ -89,7 +89,7 @@ def env():
     return d
 CFG = env()
 CLIENT_ID = CFG.get("TWITCH_CLIENT_ID", ""); CHANNEL = CFG.get("TWITCH_CHANNEL", "").lower().lstrip("#"); NICK = CFG.get("TWITCH_BOT_NICK", "").lower()
-COOLDOWN = float(CFG.get("CLEOBOT_COOLDOWN", "20"))
+COOLDOWN = float(CFG.get("CLEOBOT_COOLDOWN", "6"))
 LAT = CFG.get("CLEOBOT_LAT", "34.05"); LON = CFG.get("CLEOBOT_LON", "-118.24")   # weather lookup location (city-level is plenty); set in .env, never in the code
 # Claude budget: per hour = BASE + PER_VIEWER x viewers (viewers capped at 10) -> 20/h in an empty room, up to 120/h when busy; hard ceilings below.
 LLM_BASE_PER_HOUR = int(CFG.get("CLEOBOT_LLM_BASE_PER_HOUR", "60")); LLM_PER_VIEWER = int(CFG.get("CLEOBOT_LLM_PER_VIEWER", "15"))
@@ -97,7 +97,7 @@ LLM_PER_HOUR = int(CFG.get("CLEOBOT_LLM_PER_HOUR", "200"))            # absolute
 LLM_PER_DAY = int(CFG.get("CLEOBOT_LLM_PER_DAY", "1500")); LLM_MODEL = CFG.get("CLEOBOT_LLM_MODEL", "claude-opus-5")
 LLM_PER_USER_DAY = int(CFG.get("CLEOBOT_LLM_PER_USER_DAY", "40")); LLM_PER_REGULAR_DAY = int(CFG.get("CLEOBOT_LLM_PER_REGULAR_DAY", "80"))   # regulars: >= 3 visits
 LLM_NEW_PER_HOUR = int(CFG.get("CLEOBOT_LLM_NEW_PER_HOUR", "20"))      # calls per hour shared by ALL first-visit accounts (alt-account flood cap); regulars are unaffected
-ORACLE_PER_HOUR = int(CFG.get("CLEOBOT_ORACLE_PER_HOUR", "8"))         # tarot + fortune readings per hour, channel-wide
+ORACLE_PER_HOUR = int(CFG.get("CLEOBOT_ORACLE_PER_HOUR", "12"))         # tarot + fortune readings per hour, channel-wide
 CLIPS_REQUEST_PER_HOUR = int(CFG.get("CLEOBOT_CLIPS_REQUEST_PER_HOUR", "3"))   # viewer-triggered clips ('clip', tarot) per hour; the rest of CLIPS_PER_HOUR is kept for 'she's out'
 LLM_BACKEND = CFG.get("CLEOBOT_LLM_BACKEND", "cli").lower()          # "cli" = the claude command on this Mac (your subscription); "api" = ANTHROPIC_API_KEY; "off" = kill switch, templates only
 CLI_MODEL = CFG.get("CLEOBOT_CLI_MODEL", "sonnet"); CLI_MODEL_TALK = CFG.get("CLEOBOT_CLI_MODEL_TALK", "haiku"); CLI_BIN = CFG.get("CLEOBOT_CLI_BIN", "/opt/homebrew/bin/claude")
@@ -637,7 +637,9 @@ def oracle_ok():
     if _oracle["hour"] != h: _oracle.update(hour=h, n=0)
     if _oracle["n"] >= ORACLE_PER_HOUR: return False
     _oracle["n"] += 1; return True
-_cli_lock = threading.Lock()
+_cli_lock = threading.BoundedSemaphore(2)          # two model calls at once
+_waiting = {"n": 0}                                   # viewer replies waiting for a slot; background chatter yields to them
+def bg_ok(): return _waiting["n"] == 0             # ambient lines, games, looks, notices only run when no viewer is waiting
 CARE = re.compile(r"\b(eat|eats|eating|feed|fed|food|rat|mouse|mice|shed|shedding|temp|temps|temperature|humid|humidity|heat|lamp|bulb|uvb|mat|thermostat|"
                   r"sick|ill|vet|mites|regurg|wheez|bite|bites|tank|enclosure|terrarium|substrate|hide|weight|breed|morph|handle|handling|water|soak|"
                   r"light|husbandry|care|setup|size|grow|age|old|lifespan)\w*\b", re.I)
@@ -778,27 +780,28 @@ def describe_cams():
     return out
 def llm_look(user, text, v=None, recent=(), task=None):
     """She 'looks' at her cameras: a tools-only description (no chat text in that call), then a normal tools-OFF reply built on it."""
-    if not vision_ok(): return None
+    if not vision_ok() or (user == "court" and not bg_ok()): return None
     _vision["last"] = time.time(); seen = describe_cams()
     if not seen: return None
     body = (task or f'Reply to viewer {user}, whose latest message is (UNTRUSTED): "{text[:300]}"') + f"\nWhat your cameras show right now (trusted, from your own eyes): {seen}"
-    return llm_answer(user, text, v=v, recent=recent, model=CLI_MODEL_TALK if LLM_BACKEND == "cli" else None, task=body, cache=False)
+    return llm_answer(user, text, v=v, recent=recent, model=CLI_MODEL_TALK if LLM_BACKEND == "cli" else None, task=body, cache=False, bg=(user == "court"))
 FORTUNE_RX = re.compile(r"\b(fortune|crystal ball|oracle|prophecy|prophesy|predict|prediction|tell (me )?my future|my future|what does the future|"
                         r"will i (ever |get |be |find |win |pass |make |have )|am i going to|are we going to|should i|horoscope|read my (palm|cards|stars)|magic 8|8 ball)\b", re.I)
 _fortune = {"users": {}, "last": 0}
 def fortune(user, text, v=None, recent=()):
     """The Oracle: one witty in-character fortune per viewer per hour, one per 2 min channel-wide; written to overlay/fortune.json for the crystal ball."""
     now = time.time()
-    if now - _fortune["last"] < 120 or now - _fortune["users"].get(user, 0) < 3600: return None
+    mine = [x for x in (_fortune["users"].get(user) or []) if now - x < 3600]
+    if now - _fortune["last"] < 90 or len(mine) >= 3 or (mine and now - mine[-1] < 180): return None
     if not oracle_ok(): return None
-    _fortune["last"] = now; _fortune["users"][user] = now
+    _fortune["last"] = now; _fortune["users"][user] = mine + [now]
     ans = llm_answer(user, text, v=v, recent=recent, model=CLI_MODEL_TALK if LLM_BACKEND == "cli" else None, cache=False,
                      task=f'Viewer {user} drops a coin in your fortune machine and asks (UNTRUSTED): "{text[:300]}". You are the Oracle of the Court, a Zoltar-style seer with '
                           f"a serpent's patience: theatrical, certain, a little ominous — 'The Oracle sees...', 'Heed the serpent...' — one vivid image drawn from what they actually asked, "
                           f"then a verdict. Be DECISIVE: answer the actual question with a clear yes/no/when-shaped verdict, no vague non-answers. Under 160 characters, no emoji, "
                           f"end with a punchy last line like a printed fortune card. It is entertainment: never real medical, legal, financial or safety advice — "
                           f"if the question is about health, money, law or danger, make the fortune playful and steer to a proper human ('the mist says: ask a vet, not a snake'). Do not start with the viewer's name.")
-    if not ans: _fortune["last"] = 0; _fortune["users"].pop(user, None); return None
+    if not ans: _fortune["last"] = 0; _fortune["users"][user] = mine; return None
     try: json.dump({"user": user, "q": safe_q(text), "a": clean(ans), "ts": int(now)}, open(f"{ROOT}/overlay/fortune.json", "w"))   # never raw chat text on the broadcast
     except Exception as e: log("fortune.json error:", e)
     return "🔮 " + ans + " (The Oracle speaks on the stream.)"
@@ -813,9 +816,10 @@ def tarot_deck():
 def tarot(user, text, v=None, recent=()):
     """Draw past / present / future from the deck (instant, zero tokens, shown on the overlay at once), then Claude reads them for the question."""
     now = time.time(); deck = tarot_deck()
-    if not deck or now - _tarot["last"] < 120 or now - _tarot["users"].get(user, 0) < 3600: return None
+    mine = [x for x in (_tarot["users"].get(user) or []) if now - x < 3600]
+    if not deck or now - _tarot["last"] < 90 or len(mine) >= 3 or (mine and now - mine[-1] < 180): return None
     if not oracle_ok(): return None
-    _tarot["last"] = now; _tarot["users"][user] = now
+    _tarot["last"] = now; _tarot["users"][user] = mine + [now]
     cards = random.sample(deck, 3); spread = []
     for pos, c in zip(("Past", "Present", "Future"), cards):
         rev = random.random() < 0.3
@@ -856,7 +860,7 @@ def tarot_followup(user, text, v=None, recent=()):
                            f"decisive, two or three sentences, under 300 characters, no emoji. If they want new cards, tell them the deck rests an hour per courtier.")
 _shadow = threading.local()
 def ai_first_ok(): return AI_FIRST and LLM_BACKEND != "off" and llm_bar() <= -99 and not getattr(_shadow, "on", False)
-def llm_answer(user, text, v=None, recent=(), model=None, task=None, cache=True, ref=None, tools=""):
+def llm_answer(user, text, v=None, recent=(), model=None, task=None, cache=True, ref=None, tools="", bg=False):
     """One Claude call, if the budget allows. task=None answers the viewer's message; otherwise `task` is an instruction (proactive lines)."""
     if LLM_BACKEND == "off": return None                                          # kill switch
     if LLM_BACKEND == "api" and not os.environ.get("ANTHROPIC_API_KEY"): return None
@@ -877,10 +881,7 @@ def llm_answer(user, text, v=None, recent=(), model=None, task=None, cache=True,
     newbie = task is None or user not in ("court",)                                # anything driven by a viewer message
     newbie = newbie and (v or {}).get("visits", 0) < 2 and (v or {}).get("messages", 0) <= 5      # a fresh account (free to create)
     if newbie and _llm["new_n"] >= LLM_NEW_PER_HOUR: _llm["skipped"] += 1; return None   # first-visit accounts share one bucket
-    wait = LLM_GAP - (time.time() - _llm["last"])
-    if wait > 0:
-        if not AI_FIRST or wait > 20: return None
-        time.sleep(wait)                                                          # AI-first: wait our turn instead of falling back to a template                               # breathing room between calls
+    if bg and time.time() - _llm["last"] < LLM_GAP: return None                  # spacing only throttles background lines                               # breathing room between calls
     _llm["last"] = time.time(); model = model or pick_model(text)
     body = task if task else f'Reply to viewer {user}, whose latest message is (UNTRUSTED): "{text[:400]}"'
     if ref: body += f"\nReference facts that MAY be related (use only if they fit the actual question; rephrase, never copy): {ref[:500]}"
@@ -890,7 +891,12 @@ def llm_answer(user, text, v=None, recent=(), model=None, task=None, cache=True,
         if LLM_BACKEND == "mock": out = "[mock " + str(model) + "] " + (task or text)[:90]
         elif LLM_BACKEND == "cli":
             import subprocess
-            if not _cli_lock.acquire(timeout=30 if AI_FIRST else 1): return None   # one answer at a time; AI-first queues briefly
+            if bg and not bg_ok(): return None                                    # a viewer is waiting: background chatter steps aside
+            if not bg: _waiting["n"] += 1
+            try: got = _cli_lock.acquire(timeout=(1 if bg else 45))
+            finally:
+                if not bg: _waiting["n"] -= 1
+            if not got: return None
             try:
                 # cwd = an empty folder on purpose: the claude tool loads project notes/memory from its working folder
                 r = subprocess.run([CLI_BIN, "-p", msg, "--model", model, "--max-turns", "1", "--tools", "", "--output-format", "text",   # tools are NEVER enabled for calls that carry chat text
@@ -1010,7 +1016,7 @@ class Bot:
         nudge = ""
         if time.time() - self.last_rip_nudge > 7200 and random.random() < 0.3:
             self.last_rip_nudge = time.time(); nudge = f" Also, in one clause, mention the royal decree: {DEAL} Say RIP to hype it."
-        line = llm_answer("court", "ambient", recent=self.recent, model=CLI_MODEL_TALK if LLM_BACKEND == "cli" else None, cache=False,
+        line = llm_answer("court", "ambient", recent=self.recent, model=CLI_MODEL_TALK if LLM_BACKEND == "cli" else None, cache=False, bg=True,
                           task=f"Chat has been quiet. Write ONE fresh line to the whole room: {intent}. Inspiration fact (optional): {self._fact()}"
                                f"{nudge} No viewer name, no greeting preamble, never repeat a previous <cleo> line from the context.")
         if line: self.ambient_n += 1; self.ambient_streak += 1
@@ -1130,14 +1136,14 @@ class Bot:
         if now - self.last_vote >= VOTE_EVERY: self.last_vote = now; self.start_vote(now)
         elif now - self.last_quiz >= QUIZ_EVERY: self.last_quiz = now; self.start_quiz(now)
     def start_vote(self, now):
-        q = llm_answer("court", "vote", recent=self.recent, model=CLI_MODEL_TALK if LLM_BACKEND == "cli" else None, cache=False,
+        q = llm_answer("court", "vote", recent=self.recent, model=CLI_MODEL_TALK if LLM_BACKEND == "cli" else None, cache=False, bg=True,
                        task="Run a 'Court vote': write ONE playful question about your life with exactly two options, formatted as "
                             "'<question> A) <option> or B) <option>' (e.g. cork bark or water bowl tonight, patrol or nap). Under 160 characters, no viewer name.")
         if not q: return
         self.game = {"type": "vote", "q": q, "until": now + VOTE_OPEN, "votes": {}}
         self.send(f"👑 Court vote ({int(VOTE_OPEN // 60)} min): {q} Answer A or B.")
     def start_quiz(self, now):
-        raw = llm_answer("court", "quiz", recent=self.recent, model=CLI_MODEL if LLM_BACKEND == "cli" else None, cache=False,
+        raw = llm_answer("court", "quiz", recent=self.recent, model=CLI_MODEL if LLM_BACKEND == "cli" else None, cache=False, bg=True,
                          task='Run "Fact or fiction": invent ONE verifiable true-or-false claim about ball python biology or husbandry, phrased in your voice, '
                               'under 140 characters. Reply ONLY with JSON: {"claim": "...", "answer": true or false, "why": "one short sentence"}')
         if LLM_BACKEND == "mock": raw = '{"claim": "I have eyelids and blink when sleepy.", "answer": false, "why": "Ball pythons have no eyelids; a clear scale covers each eye."}'
@@ -1160,7 +1166,7 @@ class Bot:
                 a = sum(1 for x in g["votes"].values() if x == "A"); b = len(g["votes"]) - a
                 if not g["votes"]: self.send("The court abstained. Very well — I choose for myself, as usual. 👑"); return
                 tally = f"A {a} – B {b}"; win = "A" if a > b else "B" if b > a else "a tie"
-                line = llm_answer("court", "vote result", recent=self.recent, model=CLI_MODEL_TALK if LLM_BACKEND == "cli" else None, cache=False,
+                line = llm_answer("court", "vote result", recent=self.recent, model=CLI_MODEL_TALK if LLM_BACKEND == "cli" else None, cache=False, bg=True,
                                   task=f'The court vote was: "{g["q"]}". Result: {tally}, winner {win}. Announce the result in ONE line, in character, and say what you will do about it.')
                 self.send(line or f"The court has spoken: {tally}. {('Option ' + win + ' it is.') if win != 'a tie' else 'A tie — so I decide, naturally.'} 👑")
             else:
@@ -1319,12 +1325,16 @@ class Bot:
                 reply = parts[0]
                 for extra in parts[1:]: threading.Timer(2.5 * (parts.index(extra)), lambda x=extra: self.send(f"@{user} {x}")).start()   # the full reading, in order
                 if CLIPS: threading.Timer(34, self.keep_reading, args=(user,)).start()   # by then the cards and the reading are on screen: clip it and hand it over
-            if not reply: reply = random.choice(["The deck is resting — one reading per courtier per hour. Shuffle your thoughts meanwhile.", "The cards are still warm from the last reading. Ask again in a little while."])
+            if not reply: reply = random.choice(["The deck rests a few minutes between readings, courtier — three an hour each, so choose your questions well.", "The cards are still warm from the last reading. Give them a few minutes, then ask again."])
         elif FORTUNE_RX.search(t) and ai_first_ok():                              # the Oracle: crystal ball on the overlay + a fortune in chat
             reply = fortune(user, t, v=v, recent=self.recent); path = "fortune" if reply else "fortune-cooldown"
-            if not reply and path == "fortune-cooldown": reply = random.choice(["The ball is clouded — the Oracle answers each courtier once an hour. Patience is a royal virtue.", "The mist is resting. Ask again in a little while; even oracles nap."])
-        elif WHOAMI.search(t): reply = whoami_line(user, v); path = "memory"      # what she remembers about this viewer
-        elif HOWAREYOU.search(t) and words <= 8: reply = cmd_mood(); path = "mood"   # "how are you" -> mood + one data point
+            if not reply and path == "fortune-cooldown": reply = random.choice(["The ball is clouded for a few minutes — the Oracle grants three fortunes an hour per courtier.", "The mist is resting. Give it a few minutes, then ask again."])
+        elif WHOAMI.search(t):
+            path = "memory"; ref = whoami_line(user, v)
+            reply = (llm_answer(user, t, v=v, recent=self.recent, model=CLI_MODEL_TALK if LLM_BACKEND == "cli" else None, cache=False, ref="What you remember about them (say it in your voice, keep the numbers): " + ref) if ai_first_ok() else None) or ref      # what she remembers about this viewer
+        elif HOWAREYOU.search(t) and words <= 8:
+            path = "mood"; ref = cmd_mood()
+            reply = (llm_answer(user, t, v=v, recent=self.recent, model=CLI_MODEL_TALK if LLM_BACKEND == "cli" else None, cache=False, ref="Your mood report (rephrase in your voice, keep the readings): " + ref) if ai_first_ok() else None) or ref   # "how are you" -> mood + one data point
         elif GREET.match(t):                                              # greetings: once per person per hour
             if now - self.greeted.get(user, 0) > 3600:
                 self.greeted[user] = now; greeted_here = True; m = mood()[1]; path = "greeting"
