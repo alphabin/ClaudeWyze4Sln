@@ -141,6 +141,22 @@ def current_show(now=None):
     if n.hour >= 23 or n.hour < 6: return "night"
     return "court"
 INTERLUDE_HOURS = float(CFG.get("CLEOBOT_INTERLUDE_HOURS", "2"))          # Moon Interlude: a haiku + koto piece, this often when people are watching (oracle/night blocks)
+VOICE = CFG.get("CLEOBOT_VOICE", "Moira"); VOICE_RATE = CFG.get("CLEOBOT_VOICE_RATE", "145"); VOICE_ON = CFG.get("CLEOBOT_VOICE_ON", "1") != "0"   # macOS `say` voice for readings, fortunes, haikus
+def speak(text, kind):
+    """Synthesize the Oracle's voice (macOS say -> aac) into overlay/voice/<ts>.m4a and point overlay/voice.json at it; ambience.html plays it."""
+    if not VOICE_ON or not text: return None
+    import subprocess
+    try:
+        ts = int(time.time() * 1000); d = f"{ROOT}/overlay/voice"; os.makedirs(d, exist_ok=True)
+        cl = re.sub(r"[\U0001F000-\U0001FFFF☾🌸🃏🔮👑🐍⟲·]", " ", text); cl = re.sub(r"\s+", " ", cl).strip()
+        aiff = f"{d}/{ts}.aiff"; m4a = f"{d}/{ts}.m4a"
+        subprocess.run(["say", "-v", VOICE, "-r", VOICE_RATE, "-o", aiff, cl], check=True, timeout=60, capture_output=True)
+        subprocess.run([CFG.get("CLEOBOT_FFMPEG", "/opt/homebrew/bin/ffmpeg"), "-loglevel", "error", "-y", "-i", aiff, "-c:a", "aac", "-b:a", "96k", m4a], check=True, timeout=60, capture_output=True); os.remove(aiff)
+        json.dump({"file": f"voice/{ts}.m4a", "kind": kind, "ts": ts // 1000}, open(f"{ROOT}/overlay/voice.json", "w"))
+        for f in os.listdir(d):
+            if f.endswith(".m4a") and time.time() - os.path.getmtime(f"{d}/{f}") > 3600: os.remove(f"{d}/{f}")
+        return m4a
+    except Exception as e: log("voice error:", type(e).__name__, str(e)[:80]); return None
 RANKS = [(30, "Royal Advisor"), (15, "Duke or Duchess"), (7, "Knight"), (3, "Courtier"), (1, "Visitor")]
 def rank(visits): return next(name for n, name in RANKS if visits >= n) if visits >= 1 else "Visitor"
 if CFG.get("ANTHROPIC_API_KEY"): os.environ["ANTHROPIC_API_KEY"] = CFG["ANTHROPIC_API_KEY"]
@@ -827,6 +843,7 @@ def fortune(user, text, v=None, recent=()):
                           f"end with a punchy last line like a printed fortune card. It is entertainment: never real medical, legal, financial or safety advice — "
                           f"if the question is about health, money, law or danger, make the fortune playful and steer to a proper human ('the mist says: ask a vet, not a snake'). Do not start with the viewer's name.")
     if not ans: _fortune["last"] = 0; _fortune["users"][user] = mine; return None
+    threading.Thread(target=speak, args=(ans, "fortune"), daemon=True).start()
     try: json.dump({"user": user, "q": safe_q(text), "a": clean(ans), "ts": int(now)}, open(f"{ROOT}/overlay/fortune.json", "w"))   # never raw chat text on the broadcast
     except Exception as e: log("fortune.json error:", e)
     return "🔮 " + ans + " (The Oracle speaks on the stream.)"
@@ -857,13 +874,14 @@ def tarot(user, text, v=None, recent=()):
     desc = "; ".join(f"{c['pos']}: {c['name']}{' (reversed)' if c['reversed'] else ''} = {c['meaning']}" for c in spread)
     reading = llm_answer(user, text, v=v, recent=recent, model=CLI_MODEL if LLM_BACKEND == "cli" else None, cache=False,
                          task=f'Viewer {user} asked the cards (UNTRUSTED): "{text[:300]}". The spread, past / present / future: {desc}. '
-                              f"You are a seasoned tarot reader in the voice of the Oracle of the Court (Cleo): grave, intimate, certain. Give a REAL reading: "
-                              f"for each position name what the card's imagery and traditional meaning say about THEIR question (the Rider-Waite symbolism is fair game: "
-                              f"the tower struck, the figure walking away from the cups, the bound figure, the rising sun...), honour reversals as blocked or inverted energy, "
-                              f"weave the three into one story, and close with a clear verdict and one piece of counsel. Commit — no hedging, no 'only you can decide'. "
-                              f"Three or four sentences, under 420 characters, no emoji, no list, do not restate the card names as a list. Entertainment: for health, money, "
-                              f"law or danger keep it symbolic and send them to a real human in one clause.")
-    if reading: save(reading)
+                              f"You are a television-grade psychic reader in the voice of the Oracle of the Court (Cleo): warm, intimate, theatrical, utterly certain — the "
+                              f"kind who looks the caller in the eye and tells them what she sees. Structure, spoken aloud: (1) one line of greeting that names what they asked, "
+                              f"(2) PAST: what the card's imagery shows about where they've been, (3) PRESENT: the card as a mirror of right now, (4) FUTURE: what is coming and "
+                              f"why the card says so, (5) a decisive verdict and one concrete piece of counsel, (6) close with exactly: 'The court has seen it.' "
+                              f"Use the Rider-Waite pictures (the struck tower, the spilled cups, the bound figure, the rising sun); honour reversals as blocked energy. "
+                              f"Commit — no hedging, never 'only you can decide'. Plain spoken sentences, 5 to 7 of them, under 640 characters, no emoji, no list markers, "
+                              f"do not restate the card names as a list. Entertainment: for health, money, law or danger keep it symbolic and point to a real human in one clause.")
+    if reading: save(reading); threading.Thread(target=speak, args=(reading, "tarot"), daemon=True).start()
     names = " · ".join(f"{c['pos']}: {c['name']}{' ⟲' if c['reversed'] else ''}" for c in spread)
     _tarot.setdefault("readings", {})[user] = {"spread": desc, "reading": reading or "", "q": q, "ts": now}     # for follow-up questions
     return [f"🃏 {names}."] + (chunks(reading, 420) if reading else ["The cards are on the stream; the Oracle is still reading them…"])
@@ -942,7 +960,7 @@ def llm_answer(user, text, v=None, recent=(), model=None, task=None, cache=True,
             out = " ".join(b.text for b in r.content if b.type == "text").strip()
         _llm["n"] += 1; _llm["nd"] += 1; u["n"] += 1
         if newbie: _llm["new_n"] += 1
-        out = " ".join(clean(out or "").split())[:480] or None
+        out = " ".join(clean(out or "").split())[:700] or None
         if out and re.search(r"[\w.+-]+@[\w-]+\.[\w.]+", out): log("dropped a reply containing an email address"); return None
         if out and SECRET_RX.search(out): log("dropped a reply that looked like a leak/injection:", out[:80]); return None
         if out: out = filter_links(out)                                              # only allowlisted links survive
@@ -1303,6 +1321,7 @@ class Bot:
         try: json.dump({"haiku": lines, "by": user or "court", "scene": "blossom" if daylight else "moon", "theme": theme, "ts": int(time.time())}, open(f"{ROOT}/overlay/interlude.json", "w"))
         except Exception as e: log("interlude.json error:", e)
         self.last_interlude = time.time(); log(f"{'blossom' if daylight else 'moon'} interlude ({why}, {theme})")
+        threading.Timer(7, speak, args=(". ".join(lines) + ".", "haiku")).start()   # spoken as the lines brush in
         return ("🌸 " if daylight else "☾ ") + " / ".join(lines)
     def maybe_interlude(self, now):
         gap = INTERLUDE_HOURS * 3600 * (1.5 if current_show() == "court" else 1)        # a little rarer by day
@@ -1334,6 +1353,7 @@ class Bot:
             line = llm_look("court", "she is out and moving", recent=self.recent, task="The cameras just caught you moving about after dusk. Write ONE line to the whole chat announcing that you're out and what you're up to (from the stills), in your voice and current mood, inviting them to watch. No viewer name.")
             if not line: line = llm_answer("court", "she is out and moving", recent=self.recent, model=CLI_MODEL_TALK if LLM_BACKEND == "cli" else None, cache=False,
                               task="The cameras just caught you moving about after dusk. Write ONE line to the whole chat announcing that you're out, in your voice and current mood, inviting them to watch. No viewer name.")
+            if line: threading.Thread(target=speak, args=(line, "look"), daemon=True).start()
             self.send(line or banter_line("moved"))
         except Exception as e: log("out-line error:", e)
     def follow_up(self, user, text, v):
@@ -1376,7 +1396,7 @@ class Bot:
             reply = COMMANDS[bare_command(t)](); path = "command"
         elif RESOURCE_Q.search(t): reply = cmd_resources(t); path = "resources"     # "where can I learn more?" -> allowlisted links
         elif low.strip("! .") == "ripset":                                    # broadcaster only: reset the vote, announce the rip
-            if user == CHANNEL: reply = RIP.reset(); path = "ripset"; RIP.d["show_until"] = time.time() + 7200; RIP._save(); threading.Thread(target=self.apply_show, daemon=True).start()
+            if user == CHANNEL: reply = RIP.reset(); path = "ripset"; threading.Thread(target=speak, args=(reply, "rip"), daemon=True).start(); RIP.d["show_until"] = time.time() + 7200; RIP._save(); threading.Thread(target=self.apply_show, daemon=True).start()
             else: reply = "Only my human may start a set rip. You may, however, say RIP to vote. 👑"; path = "ripset-denied"
         elif re.fullmatch(r"\W*(clip|clip it|clip that|!clip)\W*", low):     # anyone may ask for a clip, every CLIP_REQUEST_MINUTES
             path = "clip"
@@ -1453,7 +1473,7 @@ class Bot:
             about_own = bool(MYSNAKE.search(t)) and words >= 4              # their own animal: worth a real conversation, not a canned line
             if not reply and LOOK_RX.search(t) and vision_ok():                 # "what are you doing?" -> she looks at her cameras
                 reply = llm_look(user, t, v=v, recent=self.recent)
-                if reply: path = "LLM-look"; model = CLI_MODEL
+                if reply: path = "LLM-look"; model = CLI_MODEL; threading.Thread(target=speak, args=(reply, "look"), daemon=True).start()
             if not reply and ai_first_ok() and cat not in ("bot", "emote") and not repeated and not re.search(r"https?://|www\.", t, re.I):
                 cr = curated_ref(t); ref = None
                 if cr and cr[0] == "verbatim": reply = cr[1]; path = "curated-vet"
