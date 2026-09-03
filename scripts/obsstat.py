@@ -3,10 +3,11 @@ import json,websocket,time,sys,base64,os
 def _env():
     d={}
     try:
-        for l in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),"..",".env")):
+        here=os.path.dirname(os.path.abspath(__file__)); cand=[os.path.join(here,".env"),os.path.join(here,"..",".env")]
+        for l in open(next(c for c in cand if os.path.exists(c))):
             l=l.split("#",1)[0].strip()
             if "=" in l: k,v=l.split("=",1); d[k.strip()]=v.strip().strip('"')
-    except FileNotFoundError: pass
+    except (FileNotFoundError, StopIteration): pass
     return d
 def obs_auth(ws, password):
     """obs-websocket v5 handshake: answer the Hello challenge with the password (from OBS_WS_PASSWORD in .env)."""

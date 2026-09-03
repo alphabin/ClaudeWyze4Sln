@@ -219,3 +219,14 @@ pmset -g 2>/dev/null | grep -qE "^\s*autorestart\s+1" && pass "restart after pow
 
 printf '\n%s%d PASS, %d WARN, %d FAIL%s\n' "$B" "$NP" "$NW" "$NF" "$N"
 exit $NF
+# ---- security: nothing project-related may listen on all interfaces; no secrets tracked by git ----
+if command -v lsof >/dev/null; then
+  EXPOSED=$(lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | awk '$9 ~ /^\*:(4455|5050|5051|8554|8555|8888|8890|8190|5090|9223|9224|9225)$/ {print $1" "$9}' | sort -u | tr '\n' ' ')
+  if [ -z "$EXPOSED" ]; then pass "LAN exposure" "no project port listens on *"; else
+    case "$EXPOSED" in *4455*) warn "LAN exposure" "$EXPOSED" "obs-websocket cannot bind loopback: keep auth_required on (OBS_WS_PASSWORD) and block 4455 in the macOS firewall";; *) fail "LAN exposure" "$EXPOSED" "bind 127.0.0.1 (docker-compose ports, mediamtx.yml) and restart the service";; esac; fi
+fi
+if [ -d "$ROOT/.git" ]; then
+  T=$(git -C "$ROOT" ls-files 2>/dev/null | grep -E '(^|/)(\.env|token\.json|court\.json|seen\.json|rip\.json|private_guard\.py)$|(^|/)tokens/' | tr '\n' ' ')
+  if [ -z "$T" ]; then pass "secrets not tracked" "ok"; else fail "secrets tracked by git" "$T" "git rm --cached <file>; they are in .gitignore"; fi
+fi
+

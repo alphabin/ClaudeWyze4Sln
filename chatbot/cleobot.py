@@ -120,6 +120,24 @@ NOTICE_HOURS = float(CFG.get("CLEOBOT_NOTICE_HOURS", "2.5"))              # rota
 RANKS = [(30, "Royal Advisor"), (15, "Duke or Duchess"), (7, "Knight"), (3, "Courtier"), (1, "Visitor")]
 def rank(visits): return next(name for n, name in RANKS if visits >= n) if visits >= 1 else "Visitor"
 if CFG.get("ANTHROPIC_API_KEY"): os.environ["ANTHROPIC_API_KEY"] = CFG["ANTHROPIC_API_KEY"]
+# Private guard: operators may drop a chatbot/private_guard.py (gitignored, never published) exposing any of
+#   inbound(user, text, meta) -> None | "drop" | "shadow"   (shadow = templates only for this viewer, silently)
+#   outbound(text) -> str | None                             (None = do not send)
+#   prompt_suffix() -> str                                   (appended to the system prompt; keep your tripwires private)
+# so the rules that matter most are not readable by the people they are meant to catch.
+try:
+    import importlib.util as _ilu; _spec = _ilu.spec_from_file_location("private_guard", f"{HERE}/private_guard.py"); GUARD = None
+    if _spec and os.path.exists(f"{HERE}/private_guard.py"): GUARD = _ilu.module_from_spec(_spec); _spec.loader.exec_module(GUARD); log("private guard loaded")
+except Exception as _e: GUARD = None; log("private guard failed to load:", _e)
+def guard_in(user, text, meta=None):
+    try: return GUARD.inbound(user, text, meta or {}) if GUARD and hasattr(GUARD, "inbound") else None
+    except Exception as e: log("guard inbound error:", e); return None
+def guard_out(text):
+    try: return GUARD.outbound(text) if GUARD and hasattr(GUARD, "outbound") else text
+    except Exception as e: log("guard outbound error:", e); return None
+def guard_suffix():
+    try: return (" " + GUARD.prompt_suffix()) if GUARD and hasattr(GUARD, "prompt_suffix") else ""
+    except Exception as e: log("guard suffix error:", e); return ""
 IGNORE = {"nightbot", "streamelements", "streamlabs", "moobot", "fossabot", "wizebot", "soundalerts"}
 
 # ------------------------------------------------------------- twitch token --
@@ -660,7 +678,7 @@ def _system_prompt():
             "Format: one short reply, at most 220 characters (300 if it carries a resource link), plain text, no markdown, no hashtags, at most one emoji (👑 or 🐍), "
             "no greeting preamble, no sign-off, do not start with the viewer's name. "
             "Current mood: %s — %s Let it colour the reply lightly. " % mood() +
-            "Facts you may use: " + " ".join(facts()))
+            "Facts you may use: " + " ".join(facts()) + guard_suffix())
 def _context(user, v, recent):
     """Untrusted chat context + what she knows, for one call. Chat text is quoted, never interpreted."""
     import datetime
@@ -836,7 +854,8 @@ def tarot_followup(user, text, v=None, recent=()):
                       task=f'Viewer {user} had a tarot reading minutes ago. Their question then (UNTRUSTED): "{r["q"]}". The spread: {r["spread"]}. Your reading: "{r["reading"][:420]}". '
                            f'Now they ask (UNTRUSTED): "{text[:300]}". Answer as the Oracle of the Court, staying inside that spread — draw on the same cards and imagery, be specific and '
                            f"decisive, two or three sentences, under 300 characters, no emoji. If they want new cards, tell them the deck rests an hour per courtier.")
-def ai_first_ok(): return AI_FIRST and LLM_BACKEND != "off" and llm_bar() <= -99
+_shadow = threading.local()
+def ai_first_ok(): return AI_FIRST and LLM_BACKEND != "off" and llm_bar() <= -99 and not getattr(_shadow, "on", False)
 def llm_answer(user, text, v=None, recent=(), model=None, task=None, cache=True, ref=None, tools=""):
     """One Claude call, if the budget allows. task=None answers the viewer's message; otherwise `task` is an instruction (proactive lines)."""
     if LLM_BACKEND == "off": return None                                          # kill switch
@@ -918,6 +937,8 @@ class Bot:
         self.last_notice = time.time(); self.notice_i = 0
         self.clips = {"hour": 0, "n": 0, "day": 0, "nd": 0, "last_request": 0, "disabled": False}; self.moving_since = 0
     def send(self, text):
+        text = guard_out(text)
+        if not text: log("guard blocked an outgoing line"); return
         with self.lock:
             gap = time.time() - self.last_send
             if gap < 1.6: time.sleep(1.6 - gap)
@@ -1237,6 +1258,9 @@ class Bot:
     def handle(self, user, text, tags=None):
         t = text.strip(); self.last_decision = {"score": None, "path": "ignored", "model": None}
         if user in IGNORE: return                                             # other bots
+        verdict = guard_in(user, t, {"first": user not in self.seen, "visits": (self.court.get(user) or {}).get("visits", 0)})
+        if verdict == "drop": self.last_decision["path"] = "guard-drop"; return
+        shadow = verdict == "shadow"                                          # templates only, silently
         if t in self.own_recent or (user == NICK and t.startswith("@")): return   # echoes of its own lines (the bot posts as the channel account; the owner's own chat still counts)
         now = time.time()
         first = GREET_ON and self._first_time(user)                           # first message ever from this viewer -> a welcome
@@ -1253,6 +1277,7 @@ class Bot:
         reply_to_bot = bool(tags) and tags.get("reply-parent-user-login", "").lower() == NICK
         directed = mentioned or reply_to_bot or bool(DIRECTED.search(t))     # a statement aimed at her, not just a question
         snake = (v or {}).get("snake_name"); visits = (v or {}).get("visits", 1)
+        _shadow.on = shadow                                                  # each message runs in its own thread
         if t.startswith("!"):                                             # classic commands
             name = (t[1:].split() or [""])[0].lower()
             if name in COMMANDS: reply = COMMANDS[name](); path = "command"
