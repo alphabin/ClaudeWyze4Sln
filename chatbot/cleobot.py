@@ -43,6 +43,9 @@ AI-first (CLEOBOT_AI_FIRST=1): while at least CLEOBOT_AI_FIRST_FLOOR (0.25) of t
   30% reversed, written to overlay/tarot.json instantly (the overlay flips them), then a decisive Claude reading (haiku) is added and posted.
   One per viewer per hour, one per 2 min channel-wide. The full reading goes to chat in sentence-split messages, and for 10 minutes
   afterwards that viewer's questions are answered by the Oracle with their spread in hand (tarot_followup).
+  Moon Interlude (CLEOBOT_INTERLUDE_HOURS, 2): in the oracle/night blocks with someone watching and chat quiet, she writes a haiku about the
+  moment (overlay/interlude.json); the overlay dims to moonlight and brushes the lines in while ambience.html plays a generative Japanese
+  piece (koto, shakuhachi, taiko, wind chimes; hirajōshi scale, ~70 s). 'haiku' / 'poem' in chat asks for one (room: 10 min apart).
   Vision (CLEOBOT_VISION=1, cli backend): she can look at her own cameras — one still per camera from the relay (CLEOBOT_RTSP, ffmpeg) read
   by Claude (sonnet, Read tool) — when asked "what are you doing / where are you / what do you see", for some ambient lines (40%), and for
   the after-dusk "she's out" line; at most one look per CLEOBOT_VISION_MINUTES (8). Only what is really in the stills; the camera's green
@@ -137,6 +140,7 @@ def current_show(now=None):
     if sset and n >= sset.replace(second=0) and n.hour < 23: return "oracle"
     if n.hour >= 23 or n.hour < 6: return "night"
     return "court"
+INTERLUDE_HOURS = float(CFG.get("CLEOBOT_INTERLUDE_HOURS", "2"))          # Moon Interlude: a haiku + koto piece, this often when people are watching (oracle/night blocks)
 RANKS = [(30, "Royal Advisor"), (15, "Duke or Duchess"), (7, "Knight"), (3, "Courtier"), (1, "Visitor")]
 def rank(visits): return next(name for n, name in RANKS if visits >= n) if visits >= 1 else "Visitor"
 if CFG.get("ANTHROPIC_API_KEY"): os.environ["ANTHROPIC_API_KEY"] = CFG["ANTHROPIC_API_KEY"]
@@ -919,8 +923,11 @@ def llm_answer(user, text, v=None, recent=(), model=None, task=None, cache=True,
             if not got: return None
             try:
                 # cwd = an empty folder on purpose: the claude tool loads project notes/memory from its working folder
-                r = subprocess.run([CLI_BIN, "-p", msg, "--model", model, "--max-turns", "1", "--tools", "", "--output-format", "text",   # tools are NEVER enabled for calls that carry chat text
-                                    "--system-prompt", _system_prompt()], capture_output=True, text=True, timeout=75, cwd=f"{HERE}/cli-workdir")
+                args = [CLI_BIN, "-p", msg, "--model", model, "--max-turns", "1", "--tools", "", "--output-format", "text",   # tools are NEVER enabled for calls that carry chat text
+                        "--system-prompt", _system_prompt()]
+                try: r = subprocess.run(args, capture_output=True, text=True, timeout=40, cwd=f"{HERE}/cli-workdir")
+                except subprocess.TimeoutExpired:                                     # the CLI occasionally hangs on one call; one retry usually lands in seconds
+                    log("claude cli hung 40 s — retrying once"); r = subprocess.run(args, capture_output=True, text=True, timeout=40, cwd=f"{HERE}/cli-workdir")
                 if r.returncode != 0: log("claude cli error:", (r.stderr or r.stdout)[:200]); return None
                 out = r.stdout.strip()
             finally: _cli_lock.release()
@@ -1025,6 +1032,7 @@ class Bot:
                        "a fun ball-python fact told in your voice (the inspiration fact is below)",
                        "an invitation to ask you anything, phrased in a fresh way",
                        "a comment about the weather outside versus your side of the glass"]
+    # (the Moon Interlude is separate: see interlude())
     def _ambient_llm(self):
         h = int(time.time() // 3600)
         if self.ambient_hour != h: self.ambient_hour, self.ambient_n = h, 0
@@ -1067,7 +1075,7 @@ class Bot:
                 if CLIPS and self.ws: self.clip_out(now)                                 # clips cost no tokens: always catch her
                 if PROACTIVE: self.maybe_out_line(now)                                  # she's moving: look and say so, even to an empty room (it's the good stuff)
                 if self.room_empty(): continue                                          # empty room: no idle chatter, no games
-                self.maybe_notice(now)
+                self.maybe_notice(now); self.maybe_interlude(now)
                 if AMBIENT_MINUTES <= 0: continue
                 quiet = now - max(self.last_human, self.last_ambient) >= AMBIENT_MINUTES * 60
                 if GAMES: self.game_tick(now)
@@ -1269,6 +1277,24 @@ class Bot:
                        "night": "🌙 Night watch. I patrol, you rest; the soundscape is yours. Say 'tarot' if the dark asks you questions.",
                        "court": "☀️ The court is open. I rest by day and answer everything — ask me anything about ball pythons, or say 'menu'.",
                        "rip": "🎴 Pack rip night at my glass. Say RIP to hype it; I judge every pull."}[key])
+    def interlude(self, user=None, why="scheduled"):
+        """Moon Interlude: she writes a haiku about this moment (readings, mood, hour, what the cameras show if she looked recently); the
+        soundscape plays a generative koto piece and the overlay brushes the lines in. Zero cost beyond one haiku-model call."""
+        raw = llm_answer(user or "court", "haiku", recent=self.recent, model=CLI_MODEL_TALK if LLM_BACKEND == "cli" else None, cache=False, bg=(user is None),
+                         task="Write ONE haiku (5-7-5 syllables, three lines) as the queen, about this exact moment in your terrarium: the hour, the light, the temperatures, "
+                              "your mood, the court watching. Concrete images, no clichés, no title. Reply ONLY with the three lines separated by ' / '.")
+        if not raw: return None
+        lines = [l.strip(" .") for l in re.split(r"\s*/\s*|\n", raw) if l.strip()][:3]
+        if len(lines) < 3: return None
+        try: json.dump({"haiku": lines, "by": user or "court", "ts": int(time.time())}, open(f"{ROOT}/overlay/interlude.json", "w"))
+        except Exception as e: log("interlude.json error:", e)
+        self.last_interlude = time.time(); log(f"moon interlude ({why})")
+        return "☾ " + " / ".join(lines)
+    def maybe_interlude(self, now):
+        if now - getattr(self, "last_interlude", 0) < INTERLUDE_HOURS * 3600 or int(_llm["viewers"]) < 1 or self.game or current_show() not in ("oracle", "night"): return
+        if now - self.last_human < 240 or not bg_ok(): return                   # never over a live conversation
+        line = self.interlude(None, "scheduled")
+        if line: self.send(line)
     def maybe_notice(self, now):
         """One short feature notice every NOTICE_HOURS when at least one person is watching and chat has been quiet 5 min. Rotates, zero tokens."""
         if now - self.last_notice < NOTICE_HOURS * 3600 or int(_llm["viewers"]) < 1 or now - self.last_human < 300 or self.game: return
@@ -1371,6 +1397,10 @@ class Bot:
         elif FORTUNE_RX.search(t) and ai_first_ok():                              # the Oracle: crystal ball on the overlay + a fortune in chat
             reply = fortune(user, t, v=v, recent=self.recent); path = "fortune" if reply else "fortune-cooldown"
             if not reply and path == "fortune-cooldown": reply = random.choice(["The ball is clouded for a few minutes — the Oracle grants three fortunes an hour per courtier.", "The mist is resting. Give it a few minutes, then ask again."])
+        elif re.search(r"\b(haiku|poem|poetry|interlude)\b", low) and ai_first_ok():
+            path = "haiku"
+            if now - getattr(self, "last_interlude", 0) < 600: reply = "The moon interlude has just passed, courtier — the ink must dry. Ask again in a little while."
+            else: reply = self.interlude(user, f"requested by {user}") or "The ink ran dry. Ask again in a moment."
         elif WHOAMI.search(t):
             path = "memory"; ref = whoami_line(user, v)
             reply = (llm_answer(user, t, v=v, recent=self.recent, model=CLI_MODEL_TALK if LLM_BACKEND == "cli" else None, cache=False, ref="What you remember about them (say it in your voice, keep the numbers): " + ref) if ai_first_ok() else None) or ref      # what she remembers about this viewer

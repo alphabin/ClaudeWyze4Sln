@@ -198,6 +198,42 @@ function shuffleSting() {
   say('tarot sting');
 }
 window.shuffleSting = shuffleSting;
+// ---------- Moon Interlude: a generative Japanese piece (hirajōshi scale) under a haiku, ~70 s, triggered by overlay/interlude.json ----------
+let interludeTs = 0;
+function interludeWatch() { setInterval(async () => { try { const f = await (await fetch('interlude.json?' + Date.now(), { cache: 'no-store' })).json();
+  if (!f || !f.ts || f.ts === interludeTs || Date.now() / 1000 - f.ts > 90) return; interludeTs = f.ts; moonInterlude(); } catch {} }, 3000); }
+// koto: Karplus-Strong plucked string (a noise burst through a short feedback delay), warm and slightly detuned
+function koto(L, out, f, s, dur, peak) { const n = ctx.createBufferSource(); n.buffer = noiseBuffer(0.05, 'white'); const d = ctx.createDelay(0.05); d.delayTime.value = 1 / f;
+  const fb = ctx.createGain(); fb.gain.value = 0.985; const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3400; const g = ctx.createGain();
+  g.gain.setValueAtTime(peak, s); g.gain.exponentialRampToValueAtTime(0.0005, s + dur); n.connect(d); d.connect(lp); lp.connect(fb); fb.connect(d); d.connect(g); g.connect(out); n.start(s); n.stop(s + 0.05);
+  setTimeout(() => { try { fb.disconnect(); d.disconnect(); } catch {} }, (s - now() + dur + 0.5) * 1000); }
+// shakuhachi: a sine with breath (filtered noise), slow vibrato that grows, a soft attack
+function shakuhachi(L, out, f, s, dur, peak) { const o = ctx.createOscillator(), g = ctx.createGain(), vib = ctx.createOscillator(), vg = ctx.createGain(); o.frequency.value = f; vib.frequency.value = 4.2; vg.gain.setValueAtTime(0, s); vg.gain.linearRampToValueAtTime(f * 0.02, s + dur * 0.6); vib.connect(vg); vg.connect(o.frequency);
+  g.gain.setValueAtTime(0, s); g.gain.linearRampToValueAtTime(peak, s + 0.35); g.gain.setValueAtTime(peak, s + dur - 0.5); g.gain.linearRampToValueAtTime(0, s + dur); o.connect(g); g.connect(out); o.start(s); vib.start(s); o.stop(s + dur + 0.1); vib.stop(s + dur + 0.1);
+  const br = ctx.createBufferSource(); br.buffer = noiseBuffer(dur + 1, 'white'); const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f * 2; bp.Q.value = 6; const bg = ctx.createGain(); bg.gain.setValueAtTime(0, s); bg.gain.linearRampToValueAtTime(peak * 0.35, s + 0.3); bg.gain.linearRampToValueAtTime(0, s + dur); br.connect(bp); bp.connect(bg); bg.connect(out); br.start(s); br.stop(s + dur + 0.1); }
+function taiko(L, out, s, peak) { const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.setValueAtTime(110, s); o.frequency.exponentialRampToValueAtTime(48, s + 0.25); g.gain.setValueAtTime(peak, s); g.gain.exponentialRampToValueAtTime(0.0005, s + 0.6); o.connect(g); g.connect(out); o.start(s); o.stop(s + 0.7);
+  const n = ctx.createBufferSource(); n.buffer = noiseBuffer(0.3, 'white'); const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900; const ng = ctx.createGain(); ng.gain.setValueAtTime(peak * 0.5, s); ng.gain.exponentialRampToValueAtTime(0.0005, s + 0.12); n.connect(lp); lp.connect(ng); ng.connect(out); n.start(s); n.stop(s + 0.3); }
+function furin(L, out, s) { const f = rnd(2400, 3600); for (const m of [1, 2.76, 5.4]) tone(L, out, f * m, f * m * 0.999, s, rnd(1.5, 3), 0.05 / m, 'sine', 0.003); }
+function moonInterlude() {
+  const t = now(), L = layer('oracle'); L.gain.setValueAtTime(1, t);
+  const base = 146.8;                                                    // D — hirajōshi: 1, b2, 4, 5, b6  (D Eb G A Bb)
+  const scale = [1, 16 / 15, 4 / 3, 3 / 2, 8 / 5, 2, 32 / 15, 8 / 3, 3, 16 / 5].map(r => base * r);
+  const kL = place(L, -0.35, 0.6), kR = place(L, 0.35, 0.7), sh = place(L, 0.1, 1.1), dr = place(L, 0, 1.4), ch = place(L, 0.8, 1.6);
+  // slow heartbeat taiko every ~4 s, softer than the strings
+  for (let i = 0; i < 17; i++) taiko(L, dr, t + 1 + i * 4.1, i % 4 === 0 ? 0.35 : 0.2);
+  // koto: an unhurried phrase, repeated with variation, two hands slightly apart
+  let s = t + 2;
+  for (let bar = 0; bar < 8; bar++) { const steps = [0, 2, 3, 4, 3, 2, 5, 4].map(i => (i + (bar % 2 ? 1 : 0)) % scale.length);
+    for (let i = 0; i < steps.length; i++) { const f = scale[steps[i]] * 2, dwell = rnd(0.55, 0.85); koto(L, i % 2 ? kR : kL, f, s, 2.6, 0.22); if (Math.random() < 0.4) koto(L, kL, f / 2, s + 0.02, 3.2, 0.12); s += dwell; } s += rnd(0.8, 1.6); }
+  // shakuhachi: three long breaths over the top, entering late
+  const breaths = [[scale[3] * 2, 5], [scale[4] * 2, 4], [scale[2] * 2, 6.5]]; let b = t + 14;
+  for (const [f, d] of breaths) { shakuhachi(L, sh, f, b, d, 0.09); b += d + rnd(4, 7); }
+  shakuhachi(L, sh, scale[0] * 2, t + 52, 8, 0.08);
+  // furin wind chimes, sparse
+  for (let i = 0; i < 9; i++) furin(L, ch, t + rnd(3, 66));
+  say('moon interlude');
+}
+window.moonInterlude = moonInterlude;
 async function start() {
   ctx = new (window.AudioContext || window.webkitAudioContext)(); master = ctx.createGain(); master.gain.value = MASTER;
   // blend: everything passes through a soft high cut (insects lose their edge), a gentle shelf, a shared room
@@ -214,7 +250,7 @@ async function start() {
   if (Object.keys(rec).length) { say('using recordings ' + Object.keys(rec).join(',')); const tickR = () => { const ph = rec[phaseFor()] ? phaseFor() : Object.keys(rec)[0]; if (ph !== phase) { phase = ph; playRecording(ph); } }; tickR(); setInterval(tickR, 30000); }
   else { wind(); crickets(); frogs(); nightjar(); owl(); birds('dawnbirds', 10, 1, 5, dawnCurve); birds('daybirds', 5, 5, 20, drifter(500)); flyby(); cicadas(); rain(); applyPhase(phaseFor()); setInterval(() => applyPhase(phaseFor()), 30000); }
   setInterval(weather, 10 * 60e3);
-  oracleWatch(); tarotWatch();
+  oracleWatch(); tarotWatch(); interludeWatch();
   if (ctx.state !== 'running') { try { await ctx.resume(); } catch {} }
   say('running: ' + ctx.state);
 }

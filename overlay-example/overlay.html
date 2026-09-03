@@ -167,8 +167,17 @@
   #tcardtext .pg{position:absolute;right:12px;bottom:6px;font-family:'Inter',sans-serif;font-size:15px;letter-spacing:.2em;color:#8a6a2a}
   #tcardtext .wait{color:#8a6a2a;font-style:italic;font-family:'Inter',sans-serif;font-size:22px}
   #tcardtext .cursor{display:inline-block;width:9px;height:20px;background:#8a6a2a;margin-left:4px;vertical-align:-3px;animation:pulse 1s infinite}
-  #show{position:absolute;right:40px;top:146px;display:flex;align-items:center;gap:8px;padding:4px 12px;border:1px solid rgba(217,182,91,.45);border-radius:999px;background:rgba(10,8,20,.55);font-family:var(--display);font-size:13px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold-2);opacity:0;transition:opacity 1s}
+  #show{position:absolute;right:40px;top:214px;display:flex;align-items:center;gap:8px;padding:4px 12px;border:1px solid rgba(217,182,91,.45);border-radius:999px;background:rgba(10,8,20,.55);font-family:var(--display);font-size:13px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold-2);opacity:0;transition:opacity 1s}
   #show.on{opacity:1} #show i{width:7px;height:7px;border-radius:50%;background:var(--gold-2);box-shadow:0 0 8px var(--gold-2)}
+  #haiku{position:absolute;right:60px;top:250px;width:420px;padding:26px 30px 30px;background:#efe6cf url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence baseFrequency='.8' numOctaves='2'/><feColorMatrix values='0 0 0 0 .3 0 0 0 0 .22 0 0 0 0 .12 0 0 0 .12 0'/></filter><rect width='120' height='120' filter='url(%23n)'/></svg>");
+    border:1px solid #9a7a3a;box-shadow:0 20px 50px rgba(0,0,0,.6),inset 0 0 0 6px #efe6cf,inset 0 0 0 7px #b8933f;opacity:0;transform:translateY(20px);transition:opacity 1.6s ease,transform 1.6s ease;pointer-events:none}
+  #haiku.on{opacity:1;transform:translateY(0)}
+  #haiku .hk{font-family:'Cinzel',serif;font-size:11px;letter-spacing:.34em;color:#7a5a1a;text-align:center;margin-bottom:14px}
+  #haiku .line{font-family:'Cinzel',serif;font-size:30px;line-height:1.35;color:#231608;opacity:0;transform:translateX(-8px);transition:opacity 1.4s ease,transform 1.4s ease;text-align:center}
+  #haiku .line.on{opacity:1;transform:none}
+  #haiku .seal{position:absolute;right:18px;bottom:14px;width:34px;height:34px;border:2px solid #a8322a;border-radius:4px;color:#a8322a;font-family:'Cinzel',serif;font-weight:700;font-size:16px;display:flex;align-items:center;justify-content:center;transform:rotate(-6deg);opacity:.85}
+  #moon{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity 2s;background:radial-gradient(circle at 78% 18%,rgba(240,235,220,.28),transparent 22%),linear-gradient(180deg,rgba(6,8,24,.35),rgba(6,8,24,.5))}
+  #moon.on{opacity:1}
   #fog{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity 2.5s ease;mix-blend-mode:screen}
   #fog.on{opacity:.45}
   #dim{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity 2.5s ease;background:radial-gradient(ellipse at 50% 55%,rgba(40,10,60,.1),rgba(10,4,20,.5) 80%)}
@@ -222,7 +231,7 @@
 
 
 <div id="rule"></div>
-<div id="show"><i></i><span id="show-label"></span></div><div id="dim"></div><canvas id="fog" width="960" height="540"></canvas><div id="flash"></div><svg id="bolt" viewBox="0 0 1920 1080" preserveAspectRatio="none"><g id="boltg" fill="none" stroke-linecap="round" stroke-linejoin="round"></g></svg>
+<div id="moon"></div><div id="haiku"><div class="hk">☾ MOON INTERLUDE</div><div class="line" id="hk0"></div><div class="line" id="hk1"></div><div class="line" id="hk2"></div><div class="seal">C</div></div><div id="show"><i></i><span id="show-label"></span></div><div id="dim"></div><canvas id="fog" width="960" height="540"></canvas><div id="flash"></div><svg id="bolt" viewBox="0 0 1920 1080" preserveAspectRatio="none"><g id="boltg" fill="none" stroke-linecap="round" stroke-linejoin="round"></g></svg>
 <div id="tarot"><div class="tmarq">✦ THE CARDS ARE DRAWN ✦</div>
   <div class="slot"><div class="pos">PAST</div><div class="tcard" id="tc0"><div class="inner"><div class="back"></div><div class="face"></div></div></div></div>
   <div class="slot"><div class="pos">PRESENT</div><div class="tcard" id="tc1"><div class="inner"><div class="back"></div><div class="face"></div></div></div></div>
@@ -469,6 +478,16 @@
   function showBadge() { fetch('show.json?' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(f => { const el = document.getElementById('show'); if (!f || !f.label) { el.classList.remove('on'); return; }
     document.getElementById('show-label').textContent = 'Now · ' + f.label + ({ oracle: ' · say tarot', rip: ' · say RIP', night: '', court: '' }[f.show] || ''); el.classList.add('on'); }).catch(() => {}); }
   setInterval(showBadge, 30000); showBadge();
+  // ---- Moon Interlude: bot writes interlude.json {haiku:[l1,l2,l3], ts}; the scene dims to moonlight and the lines brush in ----
+  let interludeTs = 0;
+  function interludePoll() { fetch('interlude.json?' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(f => {
+    if (!f || !f.ts || f.ts === interludeTs || Date.now() / 1000 - f.ts > 90 || !Array.isArray(f.haiku)) return; interludeTs = f.ts;
+    const box = document.getElementById('haiku'), moon = document.getElementById('moon'); for (let i = 0; i < 3; i++) { const el = document.getElementById('hk' + i); el.classList.remove('on'); el.textContent = esc(f.haiku[i] || ''); }
+    moon.classList.add('on'); setTimeout(() => box.classList.add('on'), 2500);
+    [0, 1, 2].forEach(i => setTimeout(() => document.getElementById('hk' + i).classList.add('on'), 6000 + i * 7000));
+    setTimeout(() => { if (interludeTs === f.ts) { box.classList.remove('on'); moon.classList.remove('on'); } }, 68000);
+  }).catch(() => {}); }
+  setInterval(interludePoll, 3000); interludePoll();
   function esc(t) { return String(t).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
   setInterval(oracle, 3000); oracle();
   fetch('facts.json?' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(list => { SNAKE.facts = list; fi = Math.floor(Math.random() * list.length); nextFact(); }).catch(() => {});
