@@ -1,4 +1,8 @@
-# snakecam — hot/cool side to Twitch (+ YouTube) via OBS
+# ClaudeWyze4Sln — Wyze Cam Pan V4 (HL_PAN4) streaming, and a 24/7 snake-cam kit
+
+**Here for the Pan V4 / `IOTC_ER_UNLICENSE` problem?** Read [WRITEUP.md](WRITEUP.md): why the V4 never uses TUTK, the Agora ("lake") path Wyze's own web viewer takes, and a step-by-step reproduction with `lake/provision.py` + `players/lake.html` + a local relay so OBS, ffmpeg or Home Assistant can pull it as RTSP. The rest of this README is the full stream kit built around it (overlay, sensors, the chat bot).
+
+## snakecam — hot/cool side to Twitch (+ YouTube) via OBS
 
 Both cams come down from Wyze's cloud as WebRTC (Kinesis for the Pan V3, Agora/H.265 for the Pan V4).
 Each is decoded by its own invisible headless Chrome (launchd com.snakecam.hotcam / .coolcam) and re-published
