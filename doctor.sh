@@ -217,8 +217,6 @@ if [ "$AUTOL" = "$(id -un)" ]; then pass "auto-login" "$AUTOL"; else warn "auto-
 if pmset -g 2>/dev/null | grep -qE "^\s*sleep\s+0"; then pass "system sleep" "off"; else fail "system sleep" "enabled" "System Settings > Energy > Prevent automatic sleeping (or: sudo pmset -a sleep 0)"; fi
 pmset -g 2>/dev/null | grep -qE "^\s*autorestart\s+1" && pass "restart after power failure" "on" || warn "restart after power failure" "off" "System Settings > Energy > Start up automatically after a power failure (or: sudo pmset -a autorestart 1)"
 
-printf '\n%s%d PASS, %d WARN, %d FAIL%s\n' "$B" "$NP" "$NW" "$NF" "$N"
-exit $NF
 # ---- security: nothing project-related may listen on all interfaces; no secrets tracked by git ----
 if command -v lsof >/dev/null; then
   EXPOSED=$(lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | awk '$9 ~ /^\*:(4455|5050|5051|8554|8555|8888|8890|8190|5090|9223|9224|9225)$/ {print $1" "$9}' | sort -u | tr '\n' ' ')
@@ -230,3 +228,6 @@ if [ -d "$ROOT/.git" ]; then
   if [ -z "$T" ]; then pass "secrets not tracked" "ok"; else fail "secrets tracked by git" "$T" "git rm --cached <file>; they are in .gitignore"; fi
 fi
 
+
+printf '\n%s%d PASS, %d WARN, %d FAIL%s\n' "$B" "$NP" "$NW" "$NF" "$N"
+exit $NF
