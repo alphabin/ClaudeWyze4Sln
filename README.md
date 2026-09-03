@@ -2,9 +2,14 @@
 
 **Live demo:** [twitch.tv/princesscleolive](https://www.twitch.tv/princesscleolive) — Princess Cleo, a ball python in Southern California, streaming around the clock from two Wyze cameras. She answers chat as herself, looks at her own cameras before she tells you what she's doing, clips herself when she moves, reads tarot, and tells fortunes. Everything on that stream comes from this repository.
 
-**Start here:** [QUICKSTART.md](QUICKSTART.md) — `git clone`, `./install.sh`, and a blank Apple-silicon Mac is live on Twitch in about 20 minutes. `./doctor.sh` checks every layer afterwards.
+## Pick your path
 
-**Here for the Pan V4 / `IOTC_ER_UNLICENSE` problem?** Read [WRITEUP.md](WRITEUP.md): why the V4 never uses TUTK, the Agora ("lake") path Wyze's own web viewer takes, and a step-by-step reproduction with `lake/provision.py` + `players/lake.html` + a local relay so OBS, ffmpeg or Home Assistant can pull it as RTSP.
+| You want… | Go to | Time |
+|---|---|---|
+| **Just my Wyze Cam Pan V4 as a local stream** (RTSP / browser) for OBS, VLC or Home Assistant, nothing else | [v4-quickstream/](v4-quickstream/README.md) — one script: `./quickstream.sh start` | ~15 min |
+| **The whole thing**: two cameras, overlay, sensors, soundscape, the chat bot, 24/7 on Twitch, self-healing | [QUICKSTART.md](QUICKSTART.md) — `git clone`, `./install.sh`, then `./doctor.sh` | ~20 min |
+| **To understand the Pan V4 problem** (`IOTC_ER_UNLICENSE`) and how the Agora path works, or to port it elsewhere | [WRITEUP.md](WRITEUP.md) — findings, API details, step-by-step, troubleshooting | reading |
+| **To fix a running install** | `./doctor.sh` prints PASS / WARN / FAIL per layer with the exact fix; `./install.sh` is re-runnable and skips what's done | minutes |
 
 ## What you end up with
 
@@ -68,11 +73,26 @@ flowchart LR
 - OBS's built-in browser cannot decode H.265, hence the headless-Chrome relay.
 - Twitch Affiliate needs an average of 3 viewers; a 24/7 stream with empty nights lowers that average.
 
+## Security model (read this if you run the bot)
+
+- **Chat is the only untrusted input.** Everything a viewer types reaches exactly one place: a text-in, text-out model call with all tools disabled, one turn, run from an empty folder. The single tool-enabled call (reading two camera stills) never sees chat text, names or memory.
+- **Outputs are filtered**: replies with an email address are dropped, every URL not on the small allowlist is stripped, messages are capped, and the overlay HTML-escapes everything that came from chat.
+- **Budgets, not trust**: per-hour, per-day and per-viewer caps on model calls, clips and readings; a kill switch (`CLEOBOT_LLM_BACKEND=off`).
+- **Bind to localhost.** The bridge, provisioner, relay, sensor hub, OBS websocket and Chrome debug ports should not be reachable from your Wi-Fi; the installer sets this up, `doctor.sh` checks it.
+- **Keep your own private rules.** The bot loads `chatbot/private_guard.py` if it exists (gitignored): extra patterns, canaries and reply checks that don't need to be public. See the Chat bot section.
+- Never commit `.env`, `tokens/`, `token.json`, `court.json`, `seen.json`. The `.gitignore` covers them; `doctor.sh` warns if they're tracked.
+
 ## Credits and licence
 
 MIT. Tarot art is the 1909 Rider-Waite-Smith deck (public domain, scans from Wikimedia Commons). The Agora Web SDK is downloaded by `players/get-agora-sdk.sh` under Agora's terms, not redistributed. Built with Claude Code; the Wyze API details were captured from Wyze's own web viewer. If this helped you, star the repo and say hi in Cleo's chat. 🐍
 
 ---
+
+---
+
+# Reference: how every part works
+
+Everything below is the detailed reference for the full kit. You don't need it to get running; you need it when you want to change something.
 
 ## snakecam — hot/cool side to Twitch (+ YouTube) via OBS
 
@@ -266,5 +286,3 @@ Stop streaming:      launchctl unload ~/Library/LaunchAgents/com.snakecam.obs.pl
     open http://localhost:8890/coolcam/   # watch the cool cam via the relay
     tail -f ~/Library/Logs/snakecam-obs.log ~/Library/Logs/snakecam-coolcam.log ~/Library/Logs/snakecam-relay.log
 
-## Just the Pan V4 stream
-Only want the Pan V4 as a local RTSP/WebRTC stream (OBS, VLC, Home Assistant) and none of the rest? See [v4-quickstream/](v4-quickstream/README.md): one script, under 15 minutes.
