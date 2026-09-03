@@ -1278,21 +1278,29 @@ class Bot:
                        "night": "🌙 Night watch. I patrol, you rest; the soundscape is yours. Say 'tarot' if the dark asks you questions.",
                        "court": "☀️ The court is open. I rest by day and answer everything — ask me anything about ball pythons, or say 'menu'.",
                        "rip": "🎴 Pack rip night at my glass. Say RIP to hype it; I judge every pull."}[key])
+    THEMES = ["love", "loss and letting go", "time passing", "solitude", "being watched", "hunger and patience", "the body", "light", "impermanence", "stillness",
+              "a question with no answer", "the difference between resting and waiting", "what humans want", "warmth", "the moon", "the sun on glass", "a memory",
+              "kindness", "boredom", "the shape of a day", "fear", "beauty", "what the court came here for", "silence", "growing old", "home"]
     def interlude(self, user=None, why="scheduled"):
         """Moon Interlude: she writes a haiku about this moment (readings, mood, hour, what the cameras show if she looked recently); the
         soundscape plays a generative koto piece and the overlay brushes the lines in. Zero cost beyond one haiku-model call."""
+        theme = random.choice(self.THEMES)
         raw = llm_answer(user or "court", "haiku", recent=self.recent, model=CLI_MODEL_TALK if LLM_BACKEND == "cli" else None, cache=False, bg=(user is None),
-                         task="Write ONE haiku (5-7-5 syllables, three lines) as the queen, about this exact moment in your terrarium: the hour, the light, the temperatures, "
-                              "your mood, the court watching. Concrete images, no clichés, no title. Reply ONLY with the three lines separated by ' / '.")
+                         task=f"Write ONE haiku (5-7-5 syllables, three lines) as the queen. Theme this time: {theme}. It may be about anything at all — love, loss, "
+                              f"time, philosophy, existence, the seasons, humans watching a snake watch them, the small absurdities of being alive — from a snake's "
+                              f"strange, patient, slightly amused point of view; not necessarily about snakes or your terrarium (though the hour, light and heat may "
+                              f"colour it). Concrete images, no clichés, no title, no explanation. Reply ONLY with the three lines separated by ' / '.")
         if not raw: return None
         lines = [l.strip(" .") for l in re.split(r"\s*/\s*|\n", raw) if l.strip()][:3]
         if len(lines) < 3: return None
-        try: json.dump({"haiku": lines, "by": user or "court", "ts": int(time.time())}, open(f"{ROOT}/overlay/interlude.json", "w"))
+        import datetime; rise, sset = _sun_times(); n = datetime.datetime.now(); daylight = bool(rise and sset and rise <= n < sset)
+        try: json.dump({"haiku": lines, "by": user or "court", "scene": "blossom" if daylight else "moon", "theme": theme, "ts": int(time.time())}, open(f"{ROOT}/overlay/interlude.json", "w"))
         except Exception as e: log("interlude.json error:", e)
-        self.last_interlude = time.time(); log(f"moon interlude ({why})")
-        return "☾ " + " / ".join(lines)
+        self.last_interlude = time.time(); log(f"{'blossom' if daylight else 'moon'} interlude ({why}, {theme})")
+        return ("🌸 " if daylight else "☾ ") + " / ".join(lines)
     def maybe_interlude(self, now):
-        if now - getattr(self, "last_interlude", 0) < INTERLUDE_HOURS * 3600 or int(_llm["viewers"]) < 1 or self.game or current_show() not in ("oracle", "night"): return
+        gap = INTERLUDE_HOURS * 3600 * (1.5 if current_show() == "court" else 1)        # a little rarer by day
+        if now - getattr(self, "last_interlude", 0) < gap or int(_llm["viewers"]) < 1 or self.game: return
         if now - self.last_human < 240 or not bg_ok(): return                   # never over a live conversation
         line = self.interlude(None, "scheduled")
         if line: self.send(line)

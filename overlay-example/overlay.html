@@ -183,6 +183,19 @@
   #moon .ridge.near{opacity:.85;bottom:150px;animation:ridge 70s ease-in-out infinite alternate-reverse}
   @keyframes ridge{from{transform:translateX(-1.5%)}to{transform:translateX(1.5%)}}
   #moon .vig{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 45%,transparent 45%,rgba(0,0,10,.65))}
+  /* daytime variant: a cherry tree in warm light */
+  #moon.blossom{background:linear-gradient(180deg,rgba(255,236,214,.42),rgba(255,222,200,.30) 55%,rgba(120,80,60,.45))}
+  #moon.blossom .disc{right:150px;top:210px;width:120px;height:120px;background:radial-gradient(circle at 45% 40%,#fffdf5,#ffe9b8 55%,#f6d290);box-shadow:0 0 50px 16px rgba(255,235,190,.6),0 0 200px 80px rgba(255,220,170,.28)}
+  #moon.blossom .disc:after{display:none}
+  #moon.blossom .mist{background:linear-gradient(90deg,transparent,rgba(255,245,235,.4) 30%,rgba(255,245,235,.55) 50%,rgba(255,245,235,.35) 70%,transparent);opacity:.45}
+  #moon.blossom .ridge.far path{fill:#6e4a4a} #moon.blossom .ridge.near path{fill:#3a2424}
+  #moon.blossom .vig{background:radial-gradient(ellipse at 50% 45%,transparent 50%,rgba(40,20,10,.45))}
+  #moon svg.tree{position:absolute;left:-140px;top:150px;width:900px;height:620px;opacity:0;transition:opacity 3s}
+  #moon.blossom svg.tree{opacity:1}
+  #moon svg.tree .bough{fill:none;stroke:#2a1a12;stroke-linecap:round;stroke-linejoin:round}
+  #moon svg.tree .bloom{fill:#f7c6d0} #moon svg.tree .bloom.b{fill:#fbdde3} #moon svg.tree .bloom.c{fill:#ef9fb0}
+  #haiku.blossom{background:linear-gradient(180deg,rgba(60,30,30,.42),rgba(60,30,30,.28));border-color:rgba(255,230,215,.55)}
+  #haiku.blossom .hk{color:#ffe6d6} #haiku.blossom .line{color:#fff8f0} #haiku.blossom .kanji{color:rgba(255,220,220,.16)}
   #petals{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity 2s}
   #petals.on{opacity:1}
   #haiku{position:absolute;left:50%;top:300px;transform:translateX(-50%) translateY(24px);width:1180px;padding:44px 60px 54px;text-align:center;
@@ -248,6 +261,7 @@
 
 <div id="rule"></div>
 <div id="moon"><div class="disc"></div><div class="mist a"></div><div class="mist b"></div>
+  <svg class="tree" viewBox="0 0 900 620" aria-hidden="true"><g class="bough"><path stroke-width="26" d="M-20 40 C120 90 220 170 300 250 C360 315 420 360 520 400"/><path stroke-width="16" d="M300 250 C340 200 400 180 470 190"/><path stroke-width="12" d="M470 190 C520 170 560 175 600 200"/><path stroke-width="14" d="M520 400 C580 380 640 385 700 420 C740 445 780 470 820 520"/><path stroke-width="10" d="M600 200 C640 200 670 220 690 260"/><path stroke-width="9" d="M700 420 C720 380 740 360 790 350"/><path stroke-width="8" d="M220 180 C260 150 300 140 340 150"/></g><g id="blooms"></g></svg>
   <svg class="ridge far" viewBox="0 0 1920 420" preserveAspectRatio="none"><path fill="#0b0e2c" d="M0 300 C120 250 220 230 340 260 C460 290 520 200 660 210 C800 220 860 280 980 250 C1100 220 1180 150 1300 180 C1420 210 1480 260 1600 240 C1720 220 1800 190 1920 230 L1920 420 L0 420 Z"/></svg>
   <svg class="ridge near" viewBox="0 0 1920 420" preserveAspectRatio="none"><path fill="#05061a" d="M0 360 C150 330 260 300 400 330 C540 360 620 280 760 300 C900 320 940 380 1080 350 C1220 320 1320 250 1460 290 C1600 330 1700 300 1920 340 L1920 420 L0 420 Z"/></svg>
   <div class="vig"></div></div><canvas id="petals" width="1920" height="1080"></canvas>
@@ -503,16 +517,20 @@
   function interludePoll() { fetch('interlude.json?' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(f => {
     if (!f || !f.ts || f.ts === interludeTs || Date.now() / 1000 - f.ts > 90 || !Array.isArray(f.haiku)) return; interludeTs = f.ts;
     const box = document.getElementById('haiku'), moon = document.getElementById('moon'); for (let i = 0; i < 3; i++) { const el = document.getElementById('hk' + i); el.classList.remove('on'); el.textContent = esc(f.haiku[i] || ''); }
+    const day = f.scene === 'blossom'; moon.classList.toggle('blossom', day); box.classList.toggle('blossom', day); petalTint = day ? [247, 190, 205] : [246, 222, 214];
+    document.querySelector('#haiku .hk').textContent = day ? '🌸 BLOSSOM INTERLUDE · A HAIKU FROM THE COURT' : '☾ MOON INTERLUDE · A HAIKU FROM THE COURT'; document.querySelector('#haiku .kanji').textContent = day ? '花' : '月';
+    if (day && !document.getElementById('blooms').childElementCount) { const g = document.getElementById('blooms'); const pts = [[300,250],[340,215],[400,185],[470,190],[520,180],[560,178],[600,200],[640,205],[690,260],[520,400],[560,392],[640,388],[700,420],[740,445],[790,350],[760,360],[820,520],[220,180],[260,160],[300,148],[340,150],[180,140],[120,100]];
+      let html = ''; for (const [x, y] of pts) for (let k = 0; k < 9; k++) { const r = 7 + Math.random() * 9, cls = ['', 'b', 'c'][k % 3]; html += `<circle class="bloom ${cls}" cx="${(x + (Math.random() - .5) * 70).toFixed(0)}" cy="${(y + (Math.random() - .5) * 50).toFixed(0)}" r="${r.toFixed(1)}" opacity="${(0.75 + Math.random() * 0.25).toFixed(2)}"/>`; } g.innerHTML = html; }
     moon.classList.add('on'); petals(true); setTimeout(() => box.classList.add('on'), 3500);
     [0, 1, 2].forEach(i => setTimeout(() => document.getElementById('hk' + i).classList.add('on'), 7000 + i * 8000));
     setTimeout(() => { if (interludeTs === f.ts) { box.classList.remove('on'); moon.classList.remove('on'); petals(false); } }, 68000);
   }).catch(() => {}); }
   // falling petals: slow, swaying, lit by the moon; runs only during the interlude
-  const petC = document.getElementById('petals'), petX = petC.getContext('2d'); let petOn = false, petRaf = 0, PET = [];
+  const petC = document.getElementById('petals'), petX = petC.getContext('2d'); let petOn = false, petRaf = 0, PET = [], petalTint = [246, 222, 214];
   function petals(on) { petOn = on; petC.classList.toggle('on', on); if (on) { PET = Array.from({ length: 46 }, () => ({ x: Math.random() * 1920, y: -Math.random() * 1080, r: 5 + Math.random() * 7, vy: 0.35 + Math.random() * 0.6, ph: Math.random() * 6.28, sp: 0.004 + Math.random() * 0.006, rot: Math.random() * 6.28, a: 0.35 + Math.random() * 0.45 })); petFrame(); } else setTimeout(() => { if (!petOn) { cancelAnimationFrame(petRaf); petX.clearRect(0, 0, 1920, 1080); } }, 2100); }
   function petFrame() { if (!petOn) return; petX.clearRect(0, 0, 1920, 1080);
     for (const p of PET) { p.ph += p.sp; p.y += p.vy; p.x += Math.sin(p.ph) * 0.6 + 0.15; p.rot += 0.01; if (p.y > 1100) { p.y = -20; p.x = Math.random() * 1920; }
-      petX.save(); petX.translate(p.x, p.y); petX.rotate(p.rot); petX.scale(1, 0.55 + 0.45 * Math.abs(Math.sin(p.ph * 1.7))); petX.fillStyle = `rgba(246,222,214,${p.a})`; petX.beginPath(); petX.ellipse(0, 0, p.r, p.r * 0.62, 0, 0, 6.283); petX.fill(); petX.restore(); }
+      petX.save(); petX.translate(p.x, p.y); petX.rotate(p.rot); petX.scale(1, 0.55 + 0.45 * Math.abs(Math.sin(p.ph * 1.7))); petX.fillStyle = `rgba(${petalTint[0]},${petalTint[1]},${petalTint[2]},${p.a})`; petX.beginPath(); petX.ellipse(0, 0, p.r, p.r * 0.62, 0, 0, 6.283); petX.fill(); petX.restore(); }
     petRaf = requestAnimationFrame(petFrame); }
   setInterval(interludePoll, 3000); interludePoll();
   function esc(t) { return String(t).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
