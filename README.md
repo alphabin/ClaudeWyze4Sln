@@ -265,3 +265,6 @@ Stop streaming:      launchctl unload ~/Library/LaunchAgents/com.snakecam.obs.pl
     open http://localhost:5050      # bridge UI (5000 is macOS AirPlay)
     open http://localhost:8890/coolcam/   # watch the cool cam via the relay
     tail -f ~/Library/Logs/snakecam-obs.log ~/Library/Logs/snakecam-coolcam.log ~/Library/Logs/snakecam-relay.log
+
+## Just the Pan V4 stream
+Only want the Pan V4 as a local RTSP/WebRTC stream (OBS, VLC, Home Assistant) and none of the rest? See [v4-quickstream/](v4-quickstream/README.md): one script, under 15 minutes.

@@ -1,0 +1,45 @@
+# v4-quickstream: the two containers a Wyze Cam Pan V4 (HL_PAN4) needs to become a local stream.
+# Trimmed from ../bridge/docker-compose.yml: no RTSP/HLS ports from the bridge (this camera has no
+# TUTK service, so the bridge cannot stream it itself), no overlay, no chat bot.
+#
+#   wyze-bridge       logs in to Wyze, keeps the camera list + login cache in ./tokens,
+#                     serves ./www (the Agora player) at http://localhost:5050/static/quickstream/
+#   lake-provisioner  asks Wyze's cloud for the Agora ("lake") session the web viewer uses and writes
+#                     it to ./www/lake/<cam>.json; POST :5051/provision/<cam> hands out a fresh one
+#
+# Both ports bind to 127.0.0.1 only: the bridge runs without auth and nothing on your LAN needs it.
+services:
+  wyze-bridge:
+    container_name: v4qs-wyze-bridge
+    image: mrlt8/wyze-bridge:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5050:5000"   # web UI + static files (5000 itself is taken by macOS AirPlay)
+    environment:
+      WYZE_EMAIL:    ${WYZE_EMAIL}
+      WYZE_PASSWORD: ${WYZE_PASSWORD}
+      API_ID:        ${WYZE_API_ID}
+      API_KEY:       ${WYZE_API_KEY}
+      NET_MODE:  ANY
+      ON_DEMAND: "True"     # don't try the (non-existent) direct protocol unless an RTSP client asks
+      WB_AUTH:   "False"    # no auth: the port is loopback-only and the player fetches from it
+    volumes:
+      - ./tokens:/tokens                       # login + camera cache; keeps the bridge from re-logging in (Wyze rate-limits that)
+      - ./www:/app/static/quickstream:ro       # lake.html, agora-rtc-sdk.js, lake/<cam>.json  -> :5050/static/quickstream/
+
+  lake-provisioner:
+    container_name: v4qs-lake-provisioner
+    image: mrlt8/wyze-bridge:latest           # same image: it has python3 + requests + the bridge's wyzecam package
+    restart: unless-stopped
+    entrypoint: ["python3", "/lake/provision.py"]
+    ports:
+      - "127.0.0.1:5051:5051"   # on-demand session endpoint: the player POSTs /provision/<cam> on every start
+    environment:
+      LAKE_CAMS: ""             # comma-separated camera nicknames; empty = every camera on the account (non-lake ones just fail politely)
+      RENEW_EVERY: "2700"       # seconds; Agora tokens live 3600
+    volumes:
+      - ./tokens:/tokens:ro
+      - ./provision.py:/lake/provision.py:ro
+      - ./www/lake:/out
+    depends_on:
+      - wyze-bridge

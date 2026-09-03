@@ -1,0 +1,153 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>v4-quickstream lake player</title>
+<style>
+  html,body{margin:0;width:100%;height:100%;background:#000;overflow:hidden}
+  #stage{position:absolute;inset:0;background:#000}
+  #stage video{object-fit:cover !important}
+  #msg{position:absolute;left:0;right:0;bottom:8px;text-align:center;color:#888;font:14px -apple-system,sans-serif;
+       text-shadow:0 1px 3px #000;pointer-events:none}
+</style>
+<!-- Agora Web SDK NG 4.24.0 (same version Wyze's web viewer bundles), served by the bridge from www/agora-rtc-sdk.js (run get-agora-sdk.sh once) -->
+<script src="agora-rtc-sdk.js"></script>
+</head><body>
+<div id="stage"></div><div id="msg"></div>
+<script>
+// Wyze "lake" camera (Pan V4) -> Agora channel -> this page (headless Chrome) -> WHIP -> mediamtx -> RTSP/WebRTC.
+// Copied from ../players/lake.html; the snakecam-only motion reporter is removed and BRIDGE is defined.
+// Usage: lake.html?cam=<cam>&res=2k&codec=h265&whip=http://localhost:8890/<cam>/whip   (session JSON from provision.py at lake/<cam>.json)
+const q = new URLSearchParams(location.search);
+const BRIDGE = location.origin;   // this page is served by the bridge, whose /api/<cam>/power/restart is used for self-heal
+const CAM = q.get('cam'), RES = q.get('res') || '2k';          // 360p | SD | HD | 2k
+const WHIP = q.get('whip');   // relay mode: e.g. &whip=http://localhost:8890/coolcam/whip -> re-publish the decoded video into the local relay (mediamtx)
+const msg = document.getElementById('msg'), stage = document.getElementById('stage');
+const say = t => { msg.textContent = t; console.log('[lake]', t); };
+window.DBG = []; const dbg = (...a) => { DBG.push(a.join(' ')); if (DBG.length > 80) DBG.shift(); };
+let resTimer, client, sess, playing = false, checkTimer, restartTimer, stallTimer, lastFrames = -1, sessionIssued = 0;
+
+const b64ToBytes = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+
+async function loadSession(fresh) {
+  // A fresh create-connection is what makes the camera join the channel, so ask the provisioner for one
+  // on every (re)start; fall back to the last session file if the endpoint is unreachable.
+  if (fresh) { try { const r = await fetch(`http://127.0.0.1:5051/provision/${CAM}`, { method: 'POST' }); if (r.ok) { dbg('fresh session from provisioner'); return r.json(); } dbg('provisioner said', r.status); } catch (e) { dbg('provisioner unreachable', e.message); } }
+  const r = await fetch(`lake/${CAM}.json?` + Date.now(), { cache: 'no-store' });
+  if (!r.ok) throw new Error('no session file yet (' + r.status + ')');
+  return r.json();
+}
+
+function sendCmd(arr) {                                   // camera commands ride the Agora data stream as JSON text
+  if (!client) return;
+  const bytes = new TextEncoder().encode(JSON.stringify(arr));
+  client.sendStreamMessage(bytes).catch(e => dbg('sendStreamMessage failed', e.message));
+}
+const checkUser = () => sendCmd([{ cmd: 'run_action', action: 'sight-safe::check-user', params: { userId: sess.user_id } }]);
+const setRes = v => sendCmd([{ cmd: 'set_property', props: { 'camera::resolution': v } }]);
+
+async function start() {
+  clearTimeout(restartTimer); clearInterval(checkTimer); await teardown();
+  if (!CAM) return say('no ?cam= given');
+  try { sess = await loadSession(true); } catch (e) { return retry(e.message); }
+  sessionIssued = sess.issued;
+  say('joining…'); dbg('session', sess.channel, 'uid', sess.uid, 'device_uid', sess.device_uid, 'mode', sess.encryption_mode);
+
+  // Wyze offers h265 or h264. Older embedded browsers (OBS's CEF) claim H.265 support but can't
+  // always decode it, so default to h264; add &codec=h265 in a real Chrome for the sharper stream.
+  const codec = q.get('codec') === 'h265' ? 'h265' : 'h264';
+  dbg('codec', codec);
+  client = AgoraRTC.createClient({ mode: 'rtc', codec, audioCodec: 'pcmu' }); window.client = client;
+
+  if (sess.encryption_mode === 7 || sess.encryption_mode === 8) {
+    const mode = sess.encryption_mode === 7 ? 'aes-128-gcm2' : 'aes-256-gcm2';
+    // Wyze passes the decrypted key string and the decrypted salt as bytes; data-stream encryption off for HL_PAN4-class models.
+    try { client.setEncryptionConfig(mode, sess.encryption_key, b64ToBytes(sess.encryption_salt), false); }
+    catch (e) { return retry('encryption config failed: ' + e.message); }
+  }
+
+  client.on('user-joined', u => dbg('user-joined', u.uid));
+  client.on('user-published', async (u, mediaType) => {
+    dbg('user-published', u.uid, mediaType);
+    if (u.uid !== sess.device_uid) return;
+    try {
+      await client.subscribe(u, mediaType);
+      if (mediaType === 'video') {
+        u.videoTrack.play(stage, { fit: 'cover' });
+        playing = true; clearInterval(checkTimer); say('');
+        // the web viewer asks for 360p; keep asking for ours until the picture actually arrives at that size
+        const want = { '360p': 360, 'SD': 480, 'HD': 1080, '2k': 1440 }[RES] || 1080; clearInterval(resTimer); let asks = 0;
+        resTimer = setInterval(() => { const el = stage.querySelector('video'); const h = el ? el.videoHeight : 0; if (h >= want || asks > 40) { if (h) dbg('resolution', el.videoWidth + 'x' + h); clearInterval(resTimer); return; } setRes(RES); asks++; dbg('asked for', RES, 'have', h + 'p'); }, 4000);
+        if (WHIP) forward(u.videoTrack.getMediaStreamTrack());   // relay mode: re-publish into the local relay
+      }
+      if (mediaType === 'audio') { u.audioTrack.play(); }
+    } catch (e) { dbg('subscribe failed', e.message); }
+  });
+  client.on('user-unpublished', (u, t) => { if (u.uid === sess.device_uid && t === 'video') { playing = false; retry('camera stopped publishing'); } });
+  client.on('user-left', u => { if (u.uid === sess.device_uid) retry('camera left channel'); });
+  client.on('connection-state-change', (cur, prev, reason) => { dbg('conn', prev, '->', cur, reason || ''); if (cur === 'DISCONNECTED' && prev === 'CONNECTED') retry('disconnected'); });
+  client.on('token-privilege-will-expire', () => { dbg('token expiring; reloading session'); restartTimer = setTimeout(start, 1000); });
+  client.on('exception', e => dbg('exception', e.code, e.msg));
+
+  try { await client.join(sess.app_id, sess.channel, sess.rtc_token, sess.uid); }
+  catch (e) { return retry('join failed: ' + e.message); }
+  say('joined, waking camera…'); dbg('joined');
+
+  // The camera only joins/publishes after it receives check-user; repeat until it does.
+  checkUser(); checkTimer = setInterval(() => { if (!playing) checkUser(); }, 3000);
+  setTimeout(() => { if (!playing) retry('camera did not join within 30s'); }, 30000);
+
+  // stall watchdog: decoded frames must keep increasing
+  clearInterval(stallTimer); lastFrames = -1;
+  stallTimer = setInterval(() => {
+    const v = stage.querySelector('video'); if (!v || !playing) return;
+    const f = v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality().totalVideoFrames : -1;
+    if (f !== -1 && f === lastFrames) (stalled() || retry('video stalled'));
+    lastFrames = f;
+  }, 20000);
+
+  // the provisioner rewrites the session file before the token expires; follow it
+  setInterval(async () => { try { const s = await loadSession(); if (s.issued !== sessionIssued && !playing) start(); } catch {} }, 60000);
+}
+// ---- relay mode: push the decoded track into mediamtx over WHIP (re-encoded as H.264 by this browser) ----
+let fpc = null, fwdUrl = null, fwdTrack = null, fwdCheck = null, fwdSize = null, fwdLastFrames = -1;
+async function forward(track) {
+  await stopForward(); fwdTrack = track;
+  try {
+    fpc = new RTCPeerConnection({ iceServers: [] }); window.fpc = fpc;
+    const sender = fpc.addTrack(track);
+    try { const caps = RTCRtpSender.getCapabilities('video');
+      const h264 = caps.codecs.filter(c => /H264/i.test(c.mimeType)), rest = caps.codecs.filter(c => !/H264/i.test(c.mimeType));
+      if (h264.length && fpc.getTransceivers()[0].setCodecPreferences) fpc.getTransceivers()[0].setCodecPreferences([...h264, ...rest]); } catch (e) { dbg('codec pref', e.message); }
+    fpc.getTransceivers()[0].direction = 'sendonly';
+    const params = sender.getParameters(); const tall = track.getSettings().height || (stage.querySelector('video') || {}).videoHeight || ({ '2k': 2160, 'HD': 1080, 'SD': 480, '360p': 360 }[RES] || 1080);   // never let a 4K frame reach the encoder unscaled
+    params.encodings = [{ maxBitrate: 6_000_000, maxFramerate: 30, scaleResolutionDownBy: tall > 1080 ? tall / 1080 : 1 }];   // relay at 1080p
+    params.degradationPreference = 'maintain-resolution';   // under load drop frames, never shrink the picture (it never grows back)
+    // the camera may switch size after we start: keep the relay at 1080p and the bitrate up
+    clearInterval(fwdSize); fwdSize = setInterval(async () => { if (!fpc || sender.track !== track) return; const th = track.getSettings().height || 0, p = sender.getParameters(); if (!p.encodings || !p.encodings.length) return;
+      const want = th > 1080 ? th / 1080 : 1; if (Math.abs((p.encodings[0].scaleResolutionDownBy || 1) - want) > 0.01) { p.encodings[0].scaleResolutionDownBy = want; try { await sender.setParameters(p); dbg('relay scale', want.toFixed(2), 'for', th + 'p'); } catch (e) { dbg('scale', e.message); } } }, 3000);
+    try { await sender.setParameters(params); } catch {}
+    fpc.onconnectionstatechange = () => { dbg('whip', fpc.connectionState); if (['failed', 'closed'].includes(fpc.connectionState)) setTimeout(() => forward(track), 3000); };
+    const offer = await fpc.createOffer(); await fpc.setLocalDescription(offer);
+    await new Promise(r => { if (fpc.iceGatheringState === 'complete') return r(); fpc.onicegatheringstatechange = () => fpc.iceGatheringState === 'complete' && r(); setTimeout(r, 1500); });
+    const res = await fetch(WHIP, { method: 'POST', headers: { 'Content-Type': 'application/sdp' }, body: fpc.localDescription.sdp });
+    if (res.status !== 201) throw new Error('WHIP ' + res.status);
+    fwdUrl = new URL(res.headers.get('location'), WHIP).toString();
+    await fpc.setRemoteDescription({ type: 'answer', sdp: await res.text() });
+    dbg('whip published', WHIP);
+    // self-check: encoded frames must keep increasing, otherwise re-publish
+    clearInterval(fwdCheck); fwdLastFrames = -1;
+    fwdCheck = setInterval(async () => { if (!fpc) return; let f = -1; try { (await fpc.getStats()).forEach(s => { if (s.type === 'outbound-rtp' && s.kind === 'video') f = s.framesEncoded; }); } catch {}
+      if (f !== -1 && f === fwdLastFrames) { dbg('whip stalled; re-publishing'); forward(track); } fwdLastFrames = f; }, 20000);
+  } catch (e) { dbg('whip failed', e.message); setTimeout(() => forward(track), 5000); }
+}
+async function stopForward() { clearInterval(fwdCheck); try { fwdUrl && await fetch(fwdUrl, { method: 'DELETE' }); } catch {} try { fpc && fpc.close(); } catch {} fpc = null; fwdUrl = null; }
+async function teardown() { playing = false; await stopForward(); try { client && await client.leave(); } catch {} client = null; stage.innerHTML = ''; }
+
+// ---- self-heal: a camera that answers signalling but never sends decodable video (stale media session) gets rebooted through the bridge ----
+let stalls = 0, lastReboot = 0;
+function stalled() { stalls++; dbg('stall', stalls);
+  if (stalls >= 3 && Date.now() - lastReboot > 15 * 60e3) { lastReboot = Date.now(); stalls = 0; say('rebooting camera…');
+    fetch(`${BRIDGE}/api/${CAM}/power/restart`, { cache: 'no-store' }).then(r => r.json()).then(j => dbg('camera reboot', JSON.stringify(j).slice(0, 80))).catch(e => dbg('reboot failed', e.message));
+    clearTimeout(restartTimer); restartTimer = setTimeout(start, 90000); return true; }   // give it a minute and a half to come back
+  return false; }
+function retry(why) { say(why + ' — retrying'); dbg('retry:', why); clearTimeout(restartTimer); restartTimer = setTimeout(start, 6000); }
+start();
+</script></body></html>

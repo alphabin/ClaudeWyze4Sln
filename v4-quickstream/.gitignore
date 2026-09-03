@@ -1,0 +1,7 @@
+# runtime state created by quickstream.sh
+.env
+tokens/
+www/lake/
+www/agora-rtc-sdk.js
+logs/
+run/
