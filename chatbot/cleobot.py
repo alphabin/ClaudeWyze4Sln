@@ -661,6 +661,7 @@ def oracle_ok():
     if _oracle["hour"] != h: _oracle.update(hour=h, n=0)
     if _oracle["n"] >= ORACLE_PER_HOUR: return False
     _oracle["n"] += 1; return True
+CLI_ENV = dict(os.environ, DISABLE_AUTOUPDATER="1", CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="1", DISABLE_TELEMETRY="1", DISABLE_ERROR_REPORTING="1")   # no update checks or telemetry inside a chat reply
 _cli_lock = threading.BoundedSemaphore(2)          # two model calls at once
 _waiting = {"n": 0}                                   # viewer replies waiting for a slot; background chatter yields to them
 def bg_ok(): return _waiting["n"] == 0             # ambient lines, games, looks, notices only run when no viewer is waiting
@@ -796,7 +797,7 @@ def describe_cams():
     if not _cli_lock.acquire(timeout=30): return None
     try:
         r = subprocess.run([CLI_BIN, "-p", prompt, "--model", CLI_MODEL, "--max-turns", "4", "--tools", "Read", "--output-format", "text",
-                            "--system-prompt", "You describe images factually. You only read the files named in the prompt."], capture_output=True, text=True, timeout=75, cwd=f"{HERE}/cli-workdir")
+                            "--system-prompt", "You describe images factually. You only read the files named in the prompt."], capture_output=True, text=True, timeout=75, cwd=f"{HERE}/cli-workdir", env=CLI_ENV)
         out = " ".join(r.stdout.split())[:400] if r.returncode == 0 else None
     except Exception as e: log("describe_cams error:", type(e).__name__); out = None
     finally: _cli_lock.release()
@@ -925,9 +926,9 @@ def llm_answer(user, text, v=None, recent=(), model=None, task=None, cache=True,
                 # cwd = an empty folder on purpose: the claude tool loads project notes/memory from its working folder
                 args = [CLI_BIN, "-p", msg, "--model", model, "--max-turns", "1", "--tools", "", "--output-format", "text",   # tools are NEVER enabled for calls that carry chat text
                         "--system-prompt", _system_prompt()]
-                try: r = subprocess.run(args, capture_output=True, text=True, timeout=40, cwd=f"{HERE}/cli-workdir")
+                try: r = subprocess.run(args, capture_output=True, text=True, timeout=40, cwd=f"{HERE}/cli-workdir", env=CLI_ENV)
                 except subprocess.TimeoutExpired:                                     # the CLI occasionally hangs on one call; one retry usually lands in seconds
-                    log("claude cli hung 40 s — retrying once"); r = subprocess.run(args, capture_output=True, text=True, timeout=40, cwd=f"{HERE}/cli-workdir")
+                    log("claude cli hung 40 s — retrying once"); r = subprocess.run(args, capture_output=True, text=True, timeout=40, cwd=f"{HERE}/cli-workdir", env=CLI_ENV)
                 if r.returncode != 0: log("claude cli error:", (r.stderr or r.stdout)[:200]); return None
                 out = r.stdout.strip()
             finally: _cli_lock.release()
