@@ -469,7 +469,7 @@
       const text = String(f.a || ''); let i = 0; clearInterval(oracleTimer);
       setTimeout(() => { lightning(); card.classList.add('out'); }, 1800);                        // a bolt strikes the machine, the card slides out
       setTimeout(() => { oracleTimer = setInterval(() => { i++; a.innerHTML = esc(text.slice(0, i)) + (i < text.length ? '<span class="cursor"></span>' : ''); if (i >= text.length) clearInterval(oracleTimer); }, 38); }, 2200);   // the mist swirls first
-      setTimeout(() => { if (oracleTs === f.ts) o.classList.remove('on'); }, 2200 + text.length * 38 + 22000);
+      setTimeout(() => { if (oracleTs === f.ts) o.classList.remove('on'); }, 2200 + text.length * 38 + 12000);
     }).catch(() => {});
   }
   // a jagged bolt from the sky to the booth, with two forks, drawn fresh every strike
@@ -510,7 +510,7 @@
         const showPage = () => { if (tarotTs !== f.ts) return; const text = pages[pi]; let i = 0; txt.innerHTML = ''; clearInterval(tarotTimer);
           for (let c = 0; c < 3; c++) document.getElementById('tc' + c).classList.toggle('lit', new RegExp(['past', 'present', 'future'][c], 'i').test(text));   // light the card being read
           tarotTimer = setInterval(() => { i++; txt.innerHTML = esc(text.slice(0, i)) + (i < text.length ? '<span class="cursor"></span>' : '') + (pages.length > 1 ? `<div class="pg">${pi + 1} / ${pages.length}</div>` : '');
-            if (i >= text.length) { clearInterval(tarotTimer); pi++; if (pi < pages.length) setTimeout(showPage, 15000); else setTimeout(() => { if (tarotTs === f.ts) box.classList.remove('on'); }, 45000); } }, 28); };
+            if (i >= text.length) { clearInterval(tarotTimer); pi++; if (pi < pages.length) setTimeout(showPage, 9000); else setTimeout(() => { if (tarotTs === f.ts) box.classList.remove('on'); }, 14000); } }, 28); };
         showPage();
       }
     }).catch(() => {});
@@ -544,8 +544,8 @@
     if (day && !document.getElementById('blooms').childElementCount) { const g = document.getElementById('blooms'); const pts = [[300,250],[340,215],[400,185],[470,190],[520,180],[560,178],[600,200],[640,205],[690,260],[520,400],[560,392],[640,388],[700,420],[740,445],[790,350],[760,360],[820,520],[220,180],[260,160],[300,148],[340,150],[180,140],[120,100]];
       let html = ''; for (const [x, y] of pts) for (let k = 0; k < 9; k++) { const r = 7 + Math.random() * 9, cls = ['', 'b', 'c'][k % 3]; html += `<circle class="bloom ${cls}" cx="${(x + (Math.random() - .5) * 70).toFixed(0)}" cy="${(y + (Math.random() - .5) * 50).toFixed(0)}" r="${r.toFixed(1)}" opacity="${(0.75 + Math.random() * 0.25).toFixed(2)}"/>`; } g.innerHTML = html; }
     moon.classList.add('on'); petals(true); setTimeout(() => box.classList.add('on'), 3500);
-    [0, 1, 2].forEach(i => setTimeout(() => document.getElementById('hk' + i).classList.add('on'), 7000 + i * 8000));
-    setTimeout(() => { if (interludeTs === f.ts) { box.classList.remove('on'); moon.classList.remove('on'); petals(false); } }, 68000);
+    [0, 1, 2].forEach(i => setTimeout(() => document.getElementById('hk' + i).classList.add('on'), 5000 + i * 6000));
+    setTimeout(() => { if (interludeTs === f.ts) { box.classList.remove('on'); moon.classList.remove('on'); petals(false); } }, 44000);
   }).catch(() => {}); }
   // falling petals: slow, swaying, lit by the moon; runs only during the interlude
   const petC = document.getElementById('petals'), petX = petC.getContext('2d'); let petOn = false, petRaf = 0, PET = [], petalTint = [246, 222, 214];
@@ -569,7 +569,7 @@
     if (offerTurn) { lab.textContent = 'The court offers'; lab.classList.add('offer'); el.innerHTML = OFFERS[offerI++ % OFFERS.length]; }
     else { lab.textContent = 'Did you know'; lab.classList.remove('offer'); nextFact(); } }
   function menuTick() { const busy = ['tarot', 'oracle', 'haiku'].some(id => document.getElementById(id).classList.contains('on')); if (busy) return;
-    const m = document.getElementById('menu'); m.classList.add('on'); setTimeout(() => m.classList.remove('on'), 22000); }
+    const m = document.getElementById('menu'); m.classList.add('on'); setTimeout(() => m.classList.remove('on'), 14000); }
   setTimeout(() => { menuTick(); setInterval(menuTick, 40 * 60 * 1000); }, 90 * 1000);
   function esc(t) { return String(t).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
   setInterval(oracle, 3000); oracle();

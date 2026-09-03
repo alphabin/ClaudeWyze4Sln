@@ -230,15 +230,15 @@ function moonInterlude(f) {
   // the phrase: a random walk of 6-9 steps with a shape (arch / descent / call-and-answer), repeated 6-8 times with variation
   const len = 6 + Math.floor(R() * 4), shape = pickR(['arch', 'descent', 'callanswer', 'walk']); let idx = Math.floor(R() * 4), steps = [];
   for (let k = 0; k < len; k++) { const dir = shape === 'arch' ? (k < len / 2 ? 1 : -1) : shape === 'descent' ? -1 : shape === 'callanswer' ? (k % 3 === 2 ? -2 : 1) : (R() < 0.5 ? -1 : 1); idx = Math.max(0, Math.min(sc.length - 1, idx + dir * (R() < 0.2 ? 2 : 1))); steps.push(idx); }
-  if (drumV) for (let i = 0; i < 16; i++) taiko(L, dr, t + 1 + i * (dark ? 4.6 : 3.8), i % 4 === 0 ? drumV : drumV * 0.55);
+  if (drumV) for (let i = 0; i < 10; i++) taiko(L, dr, t + 1 + i * (dark ? 4.6 : 3.8), i % 4 === 0 ? drumV : drumV * 0.55);
   let s2 = t + 2;
-  for (let bar = 0; bar < 7; bar++) { const vary = bar % 2 ? 1 : 0;
+  for (let bar = 0; bar < 4; bar++) { const vary = bar % 2 ? 1 : 0;
     for (let i = 0; i < steps.length; i++) { const f0 = sc[Math.min(sc.length - 1, steps[i] + vary)]; koto(L, i % 2 ? kR : kL, f0, s2, 2.6, kotoV); if (R() < 0.35) koto(L, kL, f0 / 2, s2 + 0.02, 3.2, kotoV * 0.5); s2 += tempo * (0.8 + R() * 0.5); }
     s2 += (bright ? 0.6 : 1.2) + R() * 1.2; }
   // flute: two to four long breaths, entering after the first phrase, notes from the same scale
-  let b = t + (lead === 'flute' ? 6 : 14), nb = 2 + Math.floor(R() * 3);
+  let b = t + (lead === 'flute' ? 5 : 12), nb = 1 + Math.floor(R() * 2);
   for (let k = 0; k < nb; k++) { const f0 = sc[3 + Math.floor(R() * (sc.length - 3))] * (day ? 1 : 1); const d = 4 + R() * 4; shakuhachi(L, sh, f0, b, d, fluteV); b += d + 3 + R() * 5; }
-  for (let i = 0; i < chimeN; i++) furin(L, ch, t + 2 + R() * 62);
+  for (let i = 0; i < chimeN; i++) furin(L, ch, t + 2 + R() * 40);
   say('interlude ' + (day ? 'blossom' : 'moon') + ' ' + modeName + ' ' + lead + ' ' + shape);
 }
 window.moonInterlude = moonInterlude;
