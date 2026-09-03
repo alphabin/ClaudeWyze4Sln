@@ -1379,6 +1379,13 @@ class Bot:
             reply = random.choice(GIVEAWAY_RULES); path = "giveaway-rule"
         elif SALE_RX.search(t) and POKE.search(t):                            # buying/selling -> just for fun
             reply = random.choice(NOT_FOR_SALE) + (NO_PROMISE if re.search(r"\b(worth|value|which card|what card)\b", low) else ""); path = "not-for-sale"
+        elif TAROT_RX.search(t) and ai_first_ok():                                # a three-card tarot reading: cards on the overlay at once, Claude reads them
+            parts = tarot(user, t, v=v, recent=self.recent); path = "tarot" if parts else "tarot-cooldown"
+            if parts:
+                reply = parts[0]
+                for extra in parts[1:]: threading.Timer(2.5 * (parts.index(extra)), lambda x=extra: self.send(f"@{user} {x}")).start()   # the full reading, in order
+                if CLIPS: threading.Timer(34, self.keep_reading, args=(user,)).start()   # by then the cards and the reading are on screen: clip it and hand it over
+            if not reply: reply = random.choice(["The deck rests a few minutes between readings, courtier — three an hour each, so choose your questions well.", "The cards are still warm from the last reading. Give them a few minutes, then ask again."])
         elif POKE.search(t):                                                  # Pokémon hype, template-first
             path = "pokemon"
             if ai_first_ok() and not repeated:
@@ -1387,13 +1394,6 @@ class Bot:
                 if reply: path = "LLM-poke"
             if not reply: reply = (random.choice(POKE_PULL) if re.search(r"\bpull", low) and QUESTION.search(t) else random.choice(POKE_LINES)) + RIP_INVITE
             if re.search(r"\b(win|winner|giveaway|mail|prize)\w*", low): reply += " " + random.choice(GIVEAWAY_RULES)
-        elif TAROT_RX.search(t) and ai_first_ok():                                # a three-card tarot reading: cards on the overlay at once, Claude reads them
-            parts = tarot(user, t, v=v, recent=self.recent); path = "tarot" if parts else "tarot-cooldown"
-            if parts:
-                reply = parts[0]
-                for extra in parts[1:]: threading.Timer(2.5 * (parts.index(extra)), lambda x=extra: self.send(f"@{user} {x}")).start()   # the full reading, in order
-                if CLIPS: threading.Timer(34, self.keep_reading, args=(user,)).start()   # by then the cards and the reading are on screen: clip it and hand it over
-            if not reply: reply = random.choice(["The deck rests a few minutes between readings, courtier — three an hour each, so choose your questions well.", "The cards are still warm from the last reading. Give them a few minutes, then ask again."])
         elif FORTUNE_RX.search(t) and ai_first_ok():                              # the Oracle: crystal ball on the overlay + a fortune in chat
             reply = fortune(user, t, v=v, recent=self.recent); path = "fortune" if reply else "fortune-cooldown"
             if not reply and path == "fortune-cooldown": reply = random.choice(["The ball is clouded for a few minutes — the Oracle grants three fortunes an hour per courtier.", "The mist is resting. Give it a few minutes, then ask again."])

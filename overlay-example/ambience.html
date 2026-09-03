@@ -161,16 +161,16 @@ function oracleWatch() { setInterval(async () => { try { const f = await (await 
 function sting() {
   window._oracleAt = now(); const t = now(), L = layer('oracle'); L.gain.gain.setValueAtTime(1, t);
   // 1. the crack: a short bright noise burst, then the rumble rolling away
-  const crack = ctx.createBufferSource(); crack.buffer = noiseBuffer(1, 'white'); const cg = ctx.createGain(); cg.gain.setValueAtTime(0, t); cg.gain.linearRampToValueAtTime(0.9, t + 0.01); cg.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+  const crack = ctx.createBufferSource(); crack.buffer = noiseBuffer(1, 'white'); const cg = ctx.createGain(); cg.gain.setValueAtTime(0, t); cg.gain.linearRampToValueAtTime(0.3, t + 0.01); cg.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
   const chp = ctx.createBiquadFilter(); chp.type = 'highpass'; chp.frequency.value = 1200; crack.connect(chp); chp.connect(cg); cg.connect(L.gain); crack.start(t); crack.stop(t + 0.5);
   const rum = ctx.createBufferSource(); rum.buffer = noiseBuffer(6); const rl = ctx.createBiquadFilter(); rl.type = 'lowpass'; rl.frequency.setValueAtTime(220, t); rl.frequency.exponentialRampToValueAtTime(50, t + 5);
-  const rg = ctx.createGain(); rg.gain.setValueAtTime(0, t + 0.05); rg.gain.linearRampToValueAtTime(0.6, t + 0.25); rg.gain.exponentialRampToValueAtTime(0.0005, t + 5.5); rum.connect(rl); rl.connect(rg); rg.connect(L.gain); rum.start(t); rum.stop(t + 6);
+  const rg = ctx.createGain(); rg.gain.setValueAtTime(0, t + 0.05); rg.gain.linearRampToValueAtTime(0.25, t + 0.25); rg.gain.exponentialRampToValueAtTime(0.0005, t + 5.5); rum.connect(rl); rl.connect(rg); rg.connect(L.gain); rum.start(t); rum.stop(t + 6);
   // 2. the shimmer: a cascade of detuned bell tones on a pentatonic scale, panned across the court
   const scale = [523, 587, 659, 784, 880, 1046, 1174, 1318]; for (let i = 0; i < 14; i++) { const s = t + 0.4 + i * 0.11 + rnd(0, 0.05), f = scale[(i * 3 + Math.floor(rnd(0, 3))) % scale.length] * (i > 8 ? 2 : 1);
-    const out = place(L, rnd(-0.9, 0.9), 0.6); tone(L, out, f * 1.003, f, s, rnd(1.2, 2.4), 0.14, 'sine', 0.01); tone(L, out, f * 2.01, f * 2, s, rnd(0.6, 1.2), 0.03, 'triangle', 0.005); }
+    const out = place(L, rnd(-0.9, 0.9), 0.6); tone(L, out, f * 1.003, f, s, rnd(1.2, 2.4), 0.05, 'sine', 0.01); tone(L, out, f * 2.01, f * 2, s, rnd(0.6, 1.2), 0.012, 'triangle', 0.005); }
   // 3. the temple drone: two low voices a fifth apart, swelling and fading under the card
   for (const f of [65.4, 98]) { const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'sawtooth'; o.frequency.value = f; const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 260;
-    g.gain.setValueAtTime(0, t + 0.3); g.gain.linearRampToValueAtTime(0.07, t + 2.5); g.gain.linearRampToValueAtTime(0, t + 9); o.connect(lp); lp.connect(g); g.connect(L.gain); o.start(t + 0.3); o.stop(t + 9.2); }
+    g.gain.setValueAtTime(0, t + 0.3); g.gain.linearRampToValueAtTime(0.03, t + 2.5); g.gain.linearRampToValueAtTime(0, t + 9); o.connect(lp); lp.connect(g); g.connect(L.gain); o.start(t + 0.3); o.stop(t + 9.2); }
   say('oracle sting');
 }
 window.sting = sting;
@@ -181,20 +181,20 @@ function tarotWatch() { setInterval(async () => { try { const f = await (await f
 function fiddle(L, out, f, s, dur, peak) { const o = ctx.createOscillator(), g = ctx.createGain(), lp = ctx.createBiquadFilter(), vib = ctx.createOscillator(), vg = ctx.createGain();
   o.type = 'sawtooth'; o.frequency.setValueAtTime(f, s); lp.type = 'lowpass'; lp.frequency.value = 1800; lp.Q.value = 1.2; vib.frequency.value = 5.5; vg.gain.value = f * 0.012; vib.connect(vg); vg.connect(o.frequency);
   g.gain.setValueAtTime(0, s); g.gain.linearRampToValueAtTime(peak, s + 0.12); g.gain.setValueAtTime(peak, s + dur - 0.15); g.gain.linearRampToValueAtTime(0, s + dur); o.connect(lp); lp.connect(g); g.connect(out); o.start(s); vib.start(s); o.stop(s + dur + 0.05); vib.stop(s + dur + 0.05); }
-function zill(L, out, s) { for (const f of [2960, 4180, 5600]) tone(L, out, f, f * 0.998, s, 1.6, 0.16, 'sine', 0.002); tone(L, out, 1480, 1470, s, 1.2, 0.06, 'sine', 0.002); }   // finger cymbals: three inharmonic partials
+function zill(L, out, s) { for (const f of [2960, 4180, 5600]) tone(L, out, f, f * 0.998, s, 1.6, 0.05, 'sine', 0.002); tone(L, out, 1480, 1470, s, 1.2, 0.02, 'sine', 0.002); }   // finger cymbals: three inharmonic partials
 function shuffleSting() {
   window._oracleAt = now(); const t = now(), L = layer('oracle'); L.gain.gain.setValueAtTime(1, t);
   for (let i = 0; i < 14; i++) { const s = t + 0.1 + i * 0.055 + rnd(0, 0.01), src = ctx.createBufferSource(); src.buffer = noiseBuffer(0.2, 'white'); const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = rnd(2200, 3800); bp.Q.value = 2;
-    const g = ctx.createGain(); g.gain.setValueAtTime(0, s); g.gain.linearRampToValueAtTime(0.28, s + 0.004); g.gain.exponentialRampToValueAtTime(0.0005, s + 0.05); const out = place(L, rnd(-0.3, 0.3), 0.45); src.connect(bp); bp.connect(g); g.connect(out); src.start(s); src.stop(s + 0.08); }   // the riffle
-  setTimeout(() => { const t2 = now(), crack = ctx.createBufferSource(); crack.buffer = noiseBuffer(1, 'white'); const cg = ctx.createGain(); cg.gain.setValueAtTime(0, t2); cg.gain.linearRampToValueAtTime(0.7, t2 + 0.01); cg.gain.exponentialRampToValueAtTime(0.001, t2 + 0.3);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0, s); g.gain.linearRampToValueAtTime(0.10, s + 0.004); g.gain.exponentialRampToValueAtTime(0.0005, s + 0.05); const out = place(L, rnd(-0.3, 0.3), 0.45); src.connect(bp); bp.connect(g); g.connect(out); src.start(s); src.stop(s + 0.08); }   // the riffle
+  setTimeout(() => { const t2 = now(), crack = ctx.createBufferSource(); crack.buffer = noiseBuffer(1, 'white'); const cg = ctx.createGain(); cg.gain.setValueAtTime(0, t2); cg.gain.linearRampToValueAtTime(0.22, t2 + 0.01); cg.gain.exponentialRampToValueAtTime(0.001, t2 + 0.3);
     const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1200; crack.connect(hp); hp.connect(cg); cg.connect(L.gain); crack.start(t2); crack.stop(t2 + 0.4); }, 900);   // the bolt
   [1.6, 2.9, 4.2].forEach((d, i) => zill(L, place(L, -0.5 + i * 0.5, 0.5), t + d));                                      // a finger-cymbal chime as each card turns
   // the caravan phrase: D harmonic minor, slow, one violin far left and its echo far right
   const notes = [[293.7, 0.6], [349.2, 0.5], [415.3, 0.7], [440, 0.4], [415.3, 0.5], [349.2, 0.6], [293.7, 1.4]]; let s = t + 5.2;
   const vl = place(L, -0.7, 0.9), vr = place(L, 0.7, 1.3);
-  for (const [f, d] of notes) { fiddle(L, vl, f, s, d, 0.16); fiddle(L, vr, f / 2, s + 0.03, d, 0.09); s += d * 0.95; }
+  for (const [f, d] of notes) { fiddle(L, vl, f, s, d, 0.06); fiddle(L, vr, f / 2, s + 0.03, d, 0.035); s += d * 0.95; }
   for (const f of [73.4, 110]) { const o = ctx.createOscillator(), g = ctx.createGain(), lp = ctx.createBiquadFilter(); o.type = 'sawtooth'; o.frequency.value = f; lp.type = 'lowpass'; lp.frequency.value = 220;
-    g.gain.setValueAtTime(0, t + 1); g.gain.linearRampToValueAtTime(0.09, t + 4); g.gain.linearRampToValueAtTime(0, t + 12); o.connect(lp); lp.connect(g); g.connect(L.gain); o.start(t + 1); o.stop(t + 12.2); }   // a low drone under it all
+    g.gain.setValueAtTime(0, t + 1); g.gain.linearRampToValueAtTime(0.035, t + 4); g.gain.linearRampToValueAtTime(0, t + 12); o.connect(lp); lp.connect(g); g.connect(L.gain); o.start(t + 1); o.stop(t + 12.2); }   // a low drone under it all
   say('tarot sting');
 }
 window.shuffleSting = shuffleSting;
@@ -220,15 +220,15 @@ function moonInterlude() {
   const scale = [1, 16 / 15, 4 / 3, 3 / 2, 8 / 5, 2, 32 / 15, 8 / 3, 3, 16 / 5].map(r => base * r);
   const kL = place(L, -0.35, 0.6), kR = place(L, 0.35, 0.7), sh = place(L, 0.1, 1.1), dr = place(L, 0, 1.4), ch = place(L, 0.8, 1.6);
   // slow heartbeat taiko every ~4 s, softer than the strings
-  for (let i = 0; i < 17; i++) taiko(L, dr, t + 1 + i * 4.1, i % 4 === 0 ? 0.35 : 0.2);
+  for (let i = 0; i < 17; i++) taiko(L, dr, t + 1 + i * 4.1, i % 4 === 0 ? 0.14 : 0.08);
   // koto: an unhurried phrase, repeated with variation, two hands slightly apart
   let s = t + 2;
   for (let bar = 0; bar < 8; bar++) { const steps = [0, 2, 3, 4, 3, 2, 5, 4].map(i => (i + (bar % 2 ? 1 : 0)) % scale.length);
-    for (let i = 0; i < steps.length; i++) { const f = scale[steps[i]] * 2, dwell = rnd(0.55, 0.85); koto(L, i % 2 ? kR : kL, f, s, 2.6, 0.22); if (Math.random() < 0.4) koto(L, kL, f / 2, s + 0.02, 3.2, 0.12); s += dwell; } s += rnd(0.8, 1.6); }
+    for (let i = 0; i < steps.length; i++) { const f = scale[steps[i]] * 2, dwell = rnd(0.55, 0.85); koto(L, i % 2 ? kR : kL, f, s, 2.6, 0.10); if (Math.random() < 0.4) koto(L, kL, f / 2, s + 0.02, 3.2, 0.05); s += dwell; } s += rnd(0.8, 1.6); }
   // shakuhachi: three long breaths over the top, entering late
   const breaths = [[scale[3] * 2, 5], [scale[4] * 2, 4], [scale[2] * 2, 6.5]]; let b = t + 14;
-  for (const [f, d] of breaths) { shakuhachi(L, sh, f, b, d, 0.09); b += d + rnd(4, 7); }
-  shakuhachi(L, sh, scale[0] * 2, t + 52, 8, 0.08);
+  for (const [f, d] of breaths) { shakuhachi(L, sh, f, b, d, 0.045); b += d + rnd(4, 7); }
+  shakuhachi(L, sh, scale[0] * 2, t + 52, 8, 0.04);
   // furin wind chimes, sparse
   for (let i = 0; i < 9; i++) furin(L, ch, t + rnd(3, 66));
   say('moon interlude');
@@ -237,7 +237,7 @@ window.moonInterlude = moonInterlude;
 // ---------- the music bed: a very quiet, endless, original piece in the spirit of Japanese film scores — long breath tones, a drone that
 // breathes, one plucked note every so often, a distant drum, a bowed low string swell. Mostly silence. It never repeats and never leads;
 // it sits under the habitat sounds (MUSIC gain, default 0.35 of the soundscape) and fades almost away in daylight. ?music=0 turns it off.
-const MUSIC = parseFloat(q.get('music') || '0.35');
+const MUSIC = parseFloat(q.get('music') || '0.22');
 function musicBed() {
   if (MUSIC <= 0) return;
   const L = layer('music'); L.gain.gain.value = 0;
@@ -246,23 +246,23 @@ function musicBed() {
   const swell = drifter(700), sparse = drifter(400);
   // 1. the drone: three detuned voices through a slow-moving lowpass, plus a sub octave; it breathes over ~40 s
   const out = place(L, 0, 1.3); const dg = ctx.createGain(); dg.gain.value = 0; const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 420; lp.Q.value = 0.8; dg.connect(lp); lp.connect(out);
-  for (const [r, det] of [[1, 0], [1, 0.6], [1.5, -0.4], [0.5, 0]]) { const o = ctx.createOscillator(); o.type = r === 0.5 ? 'sine' : 'sawtooth'; o.frequency.value = base * r; o.detune.value = det * 6; const g = ctx.createGain(); g.gain.value = r === 0.5 ? 0.5 : 0.12; o.connect(g); g.connect(dg); o.start(); L.nodes.push(o); }
-  setInterval(() => { const t = now(); dg.gain.setTargetAtTime(0.10 + 0.14 * swell(), t, 6); lp.frequency.setTargetAtTime(280 + 360 * swell(), t, 8); }, 2000);
+  for (const [r, det] of [[1, 0], [1, 0.6], [1.5, -0.4], [0.5, 0]]) { const o = ctx.createOscillator(); o.type = r === 0.5 ? 'sine' : 'triangle'; o.frequency.value = base * r; o.detune.value = det * 6; const g = ctx.createGain(); g.gain.value = r === 0.5 ? 0.4 : 0.14; o.connect(g); g.connect(dg); o.start(); L.nodes.push(o); }
+  setInterval(() => { const t = now(); dg.gain.setTargetAtTime(0.06 + 0.08 * swell(), t, 6); lp.frequency.setTargetAtTime(200 + 220 * swell(), t, 8); }, 2000);
   // 2. a shakuhachi phrase now and then: 2-4 long notes, stepwise, with a bend into the first note; long rests between phrases
   const flute = place(L, rnd(-0.4, 0.4), 1.6);
   every(L, () => { const sc = scale(); let i = Math.floor(rnd(0, sc.length)), t = now() + rnd(0, 2), n = 2 + Math.floor(rnd(0, 3));
     for (let k = 0; k < n; k++) { const f = sc[i] * 2, d = rnd(3.5, 7); const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.setValueAtTime(f * 0.94, t); o.frequency.exponentialRampToValueAtTime(f, t + 0.5);
       const vib = ctx.createOscillator(), vg = ctx.createGain(); vib.frequency.value = 4.5; vg.gain.setValueAtTime(0, t); vg.gain.linearRampToValueAtTime(f * 0.015, t + d * 0.5); vib.connect(vg); vg.connect(o.frequency);
-      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.055, t + 0.6); g.gain.setValueAtTime(0.055, t + d - 0.8); g.gain.linearRampToValueAtTime(0, t + d); o.connect(g); g.connect(flute); o.start(t); vib.start(t); o.stop(t + d + 0.1); vib.stop(t + d + 0.1);
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.03, t + 0.9); g.gain.setValueAtTime(0.03, t + d - 0.8); g.gain.linearRampToValueAtTime(0, t + d); o.connect(g); g.connect(flute); o.start(t); vib.start(t); o.stop(t + d + 0.1); vib.stop(t + d + 0.1);
       const br = ctx.createBufferSource(); br.buffer = noiseBuffer(d + 1, 'white'); const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f * 2; bp.Q.value = 7; const bg = ctx.createGain(); bg.gain.setValueAtTime(0, t); bg.gain.linearRampToValueAtTime(0.02, t + 0.5); bg.gain.linearRampToValueAtTime(0, t + d); br.connect(bp); bp.connect(bg); bg.connect(flute); br.start(t); br.stop(t + d + 0.1);
       t += d + rnd(0.6, 1.8); i = Math.max(0, Math.min(sc.length - 1, i + (Math.random() < 0.5 ? -1 : 1))); } }, 45, 140, () => sparse() > 0.35);
   // 3. one plucked note (koto/biwa) every so often, sometimes a pair a fifth apart
   const str = place(L, rnd(-0.6, 0.6), 1.0);
-  every(L, () => { const sc = scale(), f = sc[Math.floor(rnd(0, sc.length))] * (Math.random() < 0.5 ? 2 : 4); koto(L, str, f, now(), 3.5, 0.09); if (Math.random() < 0.3) koto(L, str, f * 1.5, now() + rnd(0.3, 0.9), 3, 0.06); }, 9, 28);
+  every(L, () => { const sc = scale(), f = sc[Math.floor(rnd(0, sc.length))] * (Math.random() < 0.5 ? 2 : 4); koto(L, str, f, now(), 3.5, 0.045); if (Math.random() < 0.3) koto(L, str, f * 1.5, now() + rnd(0.3, 0.9), 3, 0.03); }, 14, 40);
   // 4. a distant drum, rarely, and a bowed low swell under it
   const drum = place(L, rnd(-0.3, 0.3), 2.2);
-  every(L, () => { const t = now(); taiko(L, drum, t, 0.16); if (Math.random() < 0.5) taiko(L, drum, t + rnd(0.5, 0.9), 0.1);
-    const o = ctx.createOscillator(), g = ctx.createGain(), lp2 = ctx.createBiquadFilter(); o.type = 'sawtooth'; o.frequency.value = base / 2; lp2.type = 'lowpass'; lp2.frequency.value = 180; g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.09, t + 5); g.gain.linearRampToValueAtTime(0, t + 14); o.connect(lp2); lp2.connect(g); g.connect(drum); o.start(t); o.stop(t + 14.5); }, 70, 220, () => sparse() > 0.5);
+  every(L, () => { const t = now(); taiko(L, drum, t, 0.06); if (Math.random() < 0.5) taiko(L, drum, t + rnd(0.5, 0.9), 0.04);
+    const o = ctx.createOscillator(), g = ctx.createGain(), lp2 = ctx.createBiquadFilter(); o.type = 'sawtooth'; o.frequency.value = base / 2; lp2.type = 'lowpass'; lp2.frequency.value = 180; g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.025, t + 5); g.gain.linearRampToValueAtTime(0, t + 14); o.connect(lp2); lp2.connect(g); g.connect(drum); o.start(t); o.stop(t + 14.5); }, 180, 420, () => sparse() > 0.6);
   // 5. a wind-chime-like harmonic, very rare
   every(L, () => furin(L, place(L, rnd(-0.9, 0.9), 2), now()), 40, 160);
   // mode drifts every ~10 min; overall level by phase (night fullest, day almost gone), and it ducks while the Oracle/tarot/interlude plays
