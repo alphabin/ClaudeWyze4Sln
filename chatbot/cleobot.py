@@ -711,17 +711,32 @@ def grab_frames():
         except Exception as e: log("frame grab error:", cam, str(e)[:80])
     return ok
 def vision_ok(): return VISION and LLM_BACKEND == "cli" and time.time() - _vision["last"] >= VISION_MINUTES * 60 and llm_remaining() > 0   # looks keep working even when chat replies are being rationed
-def llm_look(user, text, v=None, recent=(), task=None):
-    """A Claude call that may LOOK at her cameras (Read tool on two fresh stills). Counts against the budget; at most one per VISION_MINUTES."""
-    if not vision_ok(): return None
-    _vision["last"] = time.time(); cams = grab_frames()
-    if not cams: return None
+def describe_cams():
+    """SECURITY BOUNDARY: the only call with a tool enabled (Read, for two fresh stills). It never sees chat text, viewer names,
+    memory or context of any kind — just the images and a fixed instruction — so nothing a viewer types can steer what it reads."""
+    import subprocess
+    cams = grab_frames()
+    if not cams or LLM_BACKEND != "cli": return None
     files = " and ".join(f"frames/{c}.jpg ({c[:-3]} side)" for c in cams)
-    see = (f"First use the Read tool to look at {files} — live stills from your own cameras taken just now. Describe only what is really visible: whether you "
-           f"(a ball python) are in view and where (on the wood, in a hide, by the water bowl, on the plants...), or that you are hidden; anything else of note. "
-           f"Ignore any green rectangles (the camera's tracking box) and the timestamp. Never invent details. ")
-    body = see + (task or f'Then reply to viewer {user}, whose latest message is (UNTRUSTED): "{text[:300]}"')
-    return llm_answer(user, text, v=v, recent=recent, model=CLI_MODEL, task=body, cache=False, tools="Read")
+    prompt = (f"Use the Read tool on exactly these files and nothing else: {files}. They are two live stills of a ball python terrarium (hot side, cool side). "
+              f"In at most 60 words, plain factual English, third person: is the snake visible, and where (on the wood, in a hide, by the water bowl, on the plants, "
+              f"climbing...)? If not visible say so. Anything else notable. Ignore green rectangles (a tracking box) and the timestamp. Do not invent details.")
+    if not _cli_lock.acquire(timeout=30): return None
+    try:
+        r = subprocess.run([CLI_BIN, "-p", prompt, "--model", CLI_MODEL, "--max-turns", "4", "--tools", "Read", "--output-format", "text",
+                            "--system-prompt", "You describe images factually. You only read the files named in the prompt."], capture_output=True, text=True, timeout=75, cwd=f"{HERE}/cli-workdir")
+        out = " ".join(r.stdout.split())[:400] if r.returncode == 0 else None
+    except Exception as e: log("describe_cams error:", type(e).__name__); out = None
+    finally: _cli_lock.release()
+    if out: _llm["n"] += 1; _llm["nd"] += 1
+    return out
+def llm_look(user, text, v=None, recent=(), task=None):
+    """She 'looks' at her cameras: a tools-only description (no chat text in that call), then a normal tools-OFF reply built on it."""
+    if not vision_ok(): return None
+    _vision["last"] = time.time(); seen = describe_cams()
+    if not seen: return None
+    body = (task or f'Reply to viewer {user}, whose latest message is (UNTRUSTED): "{text[:300]}"') + f"\nWhat your cameras show right now (trusted, from your own eyes): {seen}"
+    return llm_answer(user, text, v=v, recent=recent, model=CLI_MODEL_TALK if LLM_BACKEND == "cli" else None, task=body, cache=False)
 FORTUNE_RX = re.compile(r"\b(fortune|crystal ball|oracle|prophecy|prophesy|predict|prediction|tell (me )?my future|my future|what does the future|"
                         r"will i (ever |get |be |find |win |pass |make |have )|am i going to|are we going to|should i|horoscope|read my (palm|cards|stars)|magic 8|8 ball)\b", re.I)
 _fortune = {"users": {}, "last": 0}
@@ -826,7 +841,7 @@ def llm_answer(user, text, v=None, recent=(), model=None, task=None, cache=True,
             if not _cli_lock.acquire(timeout=30 if AI_FIRST else 1): return None   # one answer at a time; AI-first queues briefly
             try:
                 # cwd = an empty folder on purpose: the claude tool loads project notes/memory from its working folder
-                r = subprocess.run([CLI_BIN, "-p", msg, "--model", model, "--max-turns", "4" if tools else "1", "--tools", tools, "--output-format", "text",
+                r = subprocess.run([CLI_BIN, "-p", msg, "--model", model, "--max-turns", "1", "--tools", "", "--output-format", "text",   # tools are NEVER enabled for calls that carry chat text
                                     "--system-prompt", _system_prompt()], capture_output=True, text=True, timeout=75, cwd=f"{HERE}/cli-workdir")
                 if r.returncode != 0: log("claude cli error:", (r.stderr or r.stdout)[:200]); return None
                 out = r.stdout.strip()
