@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <!-- Invisible decoder for the HOT cam (Pan V3, Kinesis WebRTC). Same idea as com.snakecam.coolcam:
+       a headless Chrome runs the player and re-publishes into the relay; OBS reads rtsp://127.0.0.1:8555/hotcam.
+       Doing WebRTC here (Chrome 152) instead of inside OBS (CEF 127) is far more reliable. -->
+  <key>Label</key><string>com.snakecam.hotcam</string>
+  <key>ProgramArguments</key><array>
+    <string>/Applications/Google Chrome.app/Contents/MacOS/Google Chrome</string>
+    <string>--headless=new</string>
+    <string>--user-data-dir=__HOME__/Library/Application Support/snakecam-hotcam</string>
+    <string>--no-first-run</string>
+    <string>--no-default-browser-check</string>
+    <string>--autoplay-policy=no-user-gesture-required</string>
+    <string>--disable-background-timer-throttling</string>
+    <string>--disable-renderer-backgrounding</string>
+    <string>--window-size=1920,1080</string>
+    <string>--remote-debugging-port=9225</string>
+    <string>--remote-allow-origins=http://localhost:9225</string>
+    <string>http://localhost:5050/static/snakecam/cam.html?cam=YOUR-HOT-CAM&amp;whip=http://localhost:8890/hotcam/whip</string>
+  </array>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>15</integer>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/snakecam-hotcam.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/snakecam-hotcam.log</string>
+</dict></plist>

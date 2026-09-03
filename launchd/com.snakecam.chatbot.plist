@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <!-- CleoBot: educational Twitch chat bot (chatbot/cleobot.py). Needs TWITCH_* in .env and a
+       chatbot/token.json from chatbot/auth.py; the Start script only loads this when both exist. -->
+  <key>Label</key><string>com.snakecam.chatbot</string>
+  <key>ProgramArguments</key><array>
+    <string>__PROJECT__/chatbot/.venv/bin/python</string>
+    <string>-u</string>
+    <string>__PROJECT__/chatbot/cleobot.py</string>
+  </array>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>20</integer>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/snakecam-chatbot.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/snakecam-chatbot.log</string>
+</dict></plist>

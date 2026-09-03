@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.snakecam.obs</string>
+  <key>ProgramArguments</key><array>
+    <string>/Applications/OBS.app/Contents/MacOS/OBS</string>
+    <string>--collection</string><string>SnakeCam</string>
+    <string>--profile</string><string>SnakeCam</string>
+    <string>--startstreaming</string>
+    <string>--disable-shutdown-check</string>   <!-- no "safe mode?" dialog after a crash -->
+    <string>--minimize-to-tray</string>
+    <string>--remote-debugging-port=9223</string>   <!-- lets us inspect the browser sources from this Mac only -->
+    <string>--remote-allow-origins=http://localhost:9223</string>
+  </array>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>20</integer>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/snakecam-obs.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/snakecam-obs.log</string>
+</dict></plist>

@@ -1,0 +1,153 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>snakecam player</title>
+<style>
+  html,body{margin:0;width:100%;height:100%;background:#000;overflow:hidden}
+  video{width:100%;height:100%;object-fit:cover;background:#000}
+  #msg{position:absolute;left:0;right:0;bottom:8px;text-align:center;color:#888;font:14px -apple-system,sans-serif;
+       text-shadow:0 1px 3px #000;pointer-events:none}
+</style></head><body>
+<video id="v" autoplay muted playsinline></video><div id="msg"></div>
+<script>
+// Wyze camera -> WebRTC (via Wyze's Kinesis signaling) -> this page -> OBS Browser Source.
+// Usage: cam.html?cam=snake-cam-hot   (bridge assumed at localhost:5050; override with &bridge=host:port)
+const q = new URLSearchParams(location.search);
+const CAM = q.get('cam'), BRIDGE = 'http://' + (q.get('bridge') || 'localhost:5050');
+const WHIP = q.get('whip');   // relay mode: &whip=http://localhost:8890/hotcam/whip -> re-publish the video into the local relay (mediamtx)
+const PROFILE = q.get('profile') || 'lowest';   // camera stream profile via the data channel: lowest | highest | keep | <name from the camera's list>
+const v = document.getElementById('v'), msg = document.getElementById('msg');
+const say = t => { msg.textContent = t; console.log('[cam]', t); };
+let pc, ws, restartTimer, stallTimer, lastFrames = -1;
+window.DBG = [];  const dbg = (...a) => { DBG.push(a.map(x => typeof x === 'string' ? x : JSON.stringify(x)).join(' ')); if (DBG.length > 60) DBG.shift(); };
+
+const b64 = o => btoa(unescape(encodeURIComponent(JSON.stringify(o))));
+const unb64 = s => JSON.parse(decodeURIComponent(escape(atob(s))));
+
+async function start() {
+  clearTimeout(restartTimer); teardown();
+  if (!CAM) return say('no ?cam= given');
+  say('fetching signaling…');
+  let sig;
+  try { sig = await (await fetch(`${BRIDGE}/signaling/${CAM}?kvs`, {cache: 'no-store'})).json(); }
+  catch (e) { return retry('bridge unreachable'); }
+  if (sig.result !== 'ok') return retry('signaling: ' + (sig.result || 'error'));
+
+  pc = new RTCPeerConnection({ iceServers: sig.servers }); window.pc = pc;   // exposed for diagnostics
+  // Wyze's web viewer opens this data channel before negotiating; the camera answers a
+  // "resolutions" query with its profiles and accepts a "switch" (that is the app's SD/HD toggle).
+  const dc = pc.createDataChannel('My Data'); window.dc = dc;
+  dc.onopen = () => dc.send(JSON.stringify({ interface: 'resolutions', function: 'query', version: 1, resource_id: dc.id }));
+  dc.onmessage = ev => { let m; try { m = JSON.parse(ev.data); } catch { dbg('dc raw', String(ev.data).slice(0, 120)); return; }
+    dbg('dc', JSON.stringify(m).slice(0, 300));
+    const list = m.payload && (m.payload.profiles || m.payload.resolutions || m.payload.list);
+    if (Array.isArray(list) && list.length && PROFILE !== 'keep') {
+      const names = list.map(x => typeof x === 'string' ? x : (x.name || x.profile || x.id));
+      const pick = PROFILE === 'lowest' ? names[names.length - 1] : PROFILE === 'highest' ? names[0] : (names.find(n => String(n).toLowerCase() === PROFILE.toLowerCase()) || names[names.length - 1]);
+      const rid = m.resource_id != null ? m.resource_id : dc.id;
+      setTimeout(() => { try { dc.send(JSON.stringify({ function: 'switch', version: 1, payload: { profile: pick }, interface: 'resolution', resource_id: rid })); dbg('dc switch ->', pick); } catch (e) { dbg('dc switch failed', e.message); } }, 500); } };
+  // Wyze cameras answer 'sendrecv' (two-way audio in the app); a browser rejects that
+  // against a recvonly offer ("Incompatible send direction"). Offer sendrecv, send nothing.
+  pc.addTransceiver('video', { direction: 'sendrecv' });
+  pc.addTransceiver('audio', { direction: 'sendrecv' });
+  pc.ontrack = e => { if (e.track.kind === 'video') { v.srcObject = e.streams[0]; say(''); if (WHIP) forward(e.track); } };
+  pc.onicecandidate = e => { if (e.candidate && ws && ws.readyState === 1) send('ICE_CANDIDATE', e.candidate); };
+  pc.onconnectionstatechange = () => {
+    say(pc.connectionState === 'connected' ? '' : pc.connectionState);
+    if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) retry('connection ' + pc.connectionState);
+  };
+
+  ws = new WebSocket(sig.signalingUrl);
+  ws.onopen = async () => {
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    send('SDP_OFFER', offer); say('offer sent, waiting for camera…');
+  };
+  ws.onmessage = async ev => {
+    if (!ev.data) return;                                   // KVS keepalives are empty frames
+    let m; try { m = JSON.parse(ev.data); } catch (e) { dbg('bad json', String(ev.data).slice(0, 80)); return; }
+    let p = null; try { p = m.messagePayload ? unb64(m.messagePayload) : null; } catch (e) { dbg('payload decode failed', m.messageType, e.message); return; }
+    dbg('recv', m.messageType, p ? Object.keys(p) : null);
+    try {
+      if (m.messageType === 'SDP_ANSWER' && p) { await pc.setRemoteDescription(p); dbg('remote description set'); }
+      else if (m.messageType === 'ICE_CANDIDATE' && p) await pc.addIceCandidate(p);
+    } catch (e) { dbg('apply failed', m.messageType, e.message); }
+  };
+  ws.onerror = () => retry('signaling socket error');
+  ws.onclose = () => { if (pc && pc.connectionState !== 'connected') retry('signaling socket closed'); };
+
+  // a camera that answers but then freezes: watch decoded frame count
+  clearInterval(stallTimer); lastFrames = -1;
+  stallTimer = setInterval(() => {
+    const f = v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality().totalVideoFrames : -1;
+    if (f !== -1 && f === lastFrames && pc && pc.connectionState === 'connected') { if (!stalled()) retry('video stalled'); } else if (f > 0 && f !== lastFrames) stalls = 0;
+    lastFrames = f;
+  }, 20000);
+}
+function send(type, payload) { dbg('send', type); ws.send(JSON.stringify({ action: type, messagePayload: b64(payload) })); }
+function teardown() { stopForward(); try { ws && ws.close(); } catch {} try { pc && pc.close(); } catch {} ws = pc = null; }
+// ---- relay mode: push the decoded track into mediamtx over WHIP (re-encoded as H.264 by this browser) ----
+let fpc = null, fwdUrl = null, fwdTrack = null, fwdCheck = null, fwdLastFrames = -1;
+async function forward(track) {
+  await stopForward(); fwdTrack = track;
+  try {
+    fpc = new RTCPeerConnection({ iceServers: [] }); window.fpc = fpc;
+    const sender = fpc.addTrack(track);
+    try { const caps = RTCRtpSender.getCapabilities('video');
+      const h264 = caps.codecs.filter(c => /H264/i.test(c.mimeType)), rest = caps.codecs.filter(c => !/H264/i.test(c.mimeType));
+      if (h264.length && fpc.getTransceivers()[0].setCodecPreferences) fpc.getTransceivers()[0].setCodecPreferences([...h264, ...rest]); } catch (e) { dbg('codec pref', e.message); }
+    fpc.getTransceivers()[0].direction = 'sendonly';
+    const params = sender.getParameters(); const tall = track.getSettings().height || (document.querySelector('video') || {}).videoHeight || 1080;
+    params.encodings = [{ maxBitrate: 6_000_000, maxFramerate: 30, scaleResolutionDownBy: tall > 1080 ? tall / 1080 : 1 }];   // relay at 1080p
+    params.degradationPreference = 'maintain-resolution';   // under load drop frames, never shrink the picture
+    try { await sender.setParameters(params); } catch {}
+    fpc.onconnectionstatechange = () => { dbg('whip', fpc.connectionState); if (['failed', 'closed'].includes(fpc.connectionState)) setTimeout(() => forward(track), 3000); };
+    const offer = await fpc.createOffer(); await fpc.setLocalDescription(offer);
+    await new Promise(r => { if (fpc.iceGatheringState === 'complete') return r(); fpc.onicegatheringstatechange = () => fpc.iceGatheringState === 'complete' && r(); setTimeout(r, 1500); });
+    const res = await fetch(WHIP, { method: 'POST', headers: { 'Content-Type': 'application/sdp' }, body: fpc.localDescription.sdp });
+    if (res.status !== 201) throw new Error('WHIP ' + res.status);
+    fwdUrl = new URL(res.headers.get('location'), WHIP).toString();
+    await fpc.setRemoteDescription({ type: 'answer', sdp: await res.text() });
+    dbg('whip published', WHIP);
+    // self-check: encoded frames must keep increasing, otherwise re-publish
+    clearInterval(fwdCheck); fwdLastFrames = -1;
+    fwdCheck = setInterval(async () => { if (!fpc) return; let f = -1; try { (await fpc.getStats()).forEach(s => { if (s.type === 'outbound-rtp' && s.kind === 'video') f = s.framesEncoded; }); } catch {}
+      if (f !== -1 && f === fwdLastFrames) { dbg('whip stalled; re-publishing'); forward(track); } fwdLastFrames = f; }, 20000);
+  } catch (e) { dbg('whip failed', e.message); setTimeout(() => forward(track), 5000); }
+}
+async function stopForward() { clearInterval(fwdCheck); try { fwdUrl && await fetch(fwdUrl, { method: 'DELETE' }); } catch {} try { fpc && fpc.close(); } catch {} fpc = null; fwdUrl = null; }
+
+
+// ---- self-heal: a camera that answers signalling but never sends decodable video (stale media session) gets rebooted through the bridge ----
+let stalls = 0, lastReboot = 0;
+function stalled() { stalls++; dbg('stall', stalls);
+  if (stalls >= 3 && Date.now() - lastReboot > 15 * 60e3) { lastReboot = Date.now(); stalls = 0; say('rebooting camera…');
+    fetch(`${BRIDGE}/api/${CAM}/power/restart`, { cache: 'no-store' }).then(r => r.json()).then(j => dbg('camera reboot', JSON.stringify(j).slice(0, 80))).catch(e => dbg('reboot failed', e.message));
+    clearTimeout(restartTimer); restartTimer = setTimeout(start, 90000); return true; }   // give it a minute and a half to come back
+  return false; }
+function retry(why) { say(why + ' — retrying'); clearTimeout(restartTimer); restartTimer = setTimeout(start, 5000); }
+start();
+const CAMKEY = (new URLSearchParams(location.search).get('cam') || '').includes('hot') ? 'hot' : 'cool';
+// ---- motion report v3: a slowly-updated background model per block; movement is a localized, persistent
+// difference from that background. Global changes (pan/tilt, exposure or infrared switching) alter nearly
+// every block at once, so they reset the background and are ignored. Something that passes the glass for a
+// second fades out of the hub's streak; a snake that keeps crawling stays different from the background.
+(() => {
+  const HUB = 'http://127.0.0.1:5090/motion', W = 64, H = 36, BW = 8, BH = 6, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d', { willReadFrequently: true }); let bg = null; const t0 = Date.now(), ALPHA = 0.04;   // background follows the scene with a ~12 s time constant at 2 samples/s
+  setInterval(() => {
+    const v = document.querySelector('video'); if (!v || v.readyState < 2 || !v.videoWidth || Date.now() - t0 < 8000) return;
+    try { g.drawImage(v, 0, 0, W, H); } catch { return; }
+    const d = g.getImageData(0, 0, W, H).data, cur = new Float32Array(W * H); let mean = 0;
+    for (let i = 0, j = 0; i < d.length; i += 4, j++) { cur[j] = (d[i] * 3 + d[i+1] * 6 + d[i+2]) / 10; mean += cur[j]; }
+    mean /= cur.length; for (let j = 0; j < cur.length; j++) cur[j] -= mean;                       // remove global brightness
+    if (!bg) { bg = cur; return; }
+    const bx = W / BW, by = H / BH, blocks = []; let changed = 0;
+    for (let y = 0; y < BH; y++) for (let x = 0; x < BW; x++) { let s = 0, n = 0;
+      for (let yy = y * by; yy < (y + 1) * by; yy++) for (let xx = x * bx; xx < (x + 1) * bx; xx++) { const j = yy * W + xx; s += Math.abs(cur[j] - bg[j]); n++; }
+      const b = s / n; blocks.push(b); if (b > 10) changed++; }
+    const global = changed / blocks.length > 0.5;
+    if (global) bg = cur; else for (let j = 0; j < cur.length; j++) bg[j] += ALPHA * (cur[j] - bg[j]);
+    blocks.sort((a, b) => b - a); const local = (blocks[0] + blocks[1] + blocks[2]) / 3;
+    fetch(HUB, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cam: CAMKEY, score: global ? 0 : +local.toFixed(2), global }), keepalive: true }).catch(() => {});
+  }, 500);
+})();
+</script></body></html>

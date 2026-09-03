@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <!-- Local video relay (mediamtx): WHIP in on :8890, RTSP out on :8555. See relay/mediamtx.yml -->
+  <key>Label</key><string>com.snakecam.relay</string>
+  <key>ProgramArguments</key><array>
+    <string>/opt/homebrew/bin/mediamtx</string>
+    <string>__PROJECT__/relay/mediamtx.yml</string>
+  </array>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/snakecam-relay.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/snakecam-relay.log</string>
+</dict></plist>

@@ -1,0 +1,794 @@
+[
+{
+"id": "major-0",
+"name": "The Fool",
+"arcana": "major",
+"numeral": "0",
+"up": "new beginnings, leap of faith, innocence",
+"rev": "recklessness, hesitation, a risk not taken"
+},
+{
+"id": "major-1",
+"name": "The Magician",
+"arcana": "major",
+"numeral": "I",
+"up": "skill, willpower, making it happen",
+"rev": "trickery, untapped talent, scattered focus"
+},
+{
+"id": "major-2",
+"name": "The High Priestess",
+"arcana": "major",
+"numeral": "II",
+"up": "intuition, mystery, hidden knowledge",
+"rev": "secrets kept, ignoring your gut"
+},
+{
+"id": "major-3",
+"name": "The Empress",
+"arcana": "major",
+"numeral": "III",
+"up": "abundance, nurturing, growth",
+"rev": "neglect, dependence, creative block"
+},
+{
+"id": "major-4",
+"name": "The Emperor",
+"arcana": "major",
+"numeral": "IV",
+"up": "structure, authority, discipline",
+"rev": "rigidity, control issues, a tyrant"
+},
+{
+"id": "major-5",
+"name": "The Hierophant",
+"arcana": "major",
+"numeral": "V",
+"up": "tradition, guidance, learning",
+"rev": "rebellion, questioning the rules"
+},
+{
+"id": "major-6",
+"name": "The Lovers",
+"arcana": "major",
+"numeral": "VI",
+"up": "union, a heartfelt choice, harmony",
+"rev": "disharmony, a mismatch, a choice avoided"
+},
+{
+"id": "major-7",
+"name": "The Chariot",
+"arcana": "major",
+"numeral": "VII",
+"up": "victory through willpower, momentum",
+"rev": "loss of control, aggression, going nowhere"
+},
+{
+"id": "major-8",
+"name": "Strength",
+"arcana": "major",
+"numeral": "VIII",
+"up": "courage, patience, quiet power",
+"rev": "self-doubt, weakness, forcing it"
+},
+{
+"id": "major-9",
+"name": "The Hermit",
+"arcana": "major",
+"numeral": "IX",
+"up": "soul-searching, solitude, wisdom",
+"rev": "isolation, loneliness, refusing counsel"
+},
+{
+"id": "major-10",
+"name": "Wheel of Fortune",
+"arcana": "major",
+"numeral": "X",
+"up": "a turn of luck, cycles, destiny",
+"rev": "bad luck, resistance to change"
+},
+{
+"id": "major-11",
+"name": "Justice",
+"arcana": "major",
+"numeral": "XI",
+"up": "fairness, truth, cause and effect",
+"rev": "unfairness, dishonesty, dodging accountability"
+},
+{
+"id": "major-12",
+"name": "The Hanged Man",
+"arcana": "major",
+"numeral": "XII",
+"up": "pause, surrender, a new angle",
+"rev": "stalling, needless sacrifice"
+},
+{
+"id": "major-13",
+"name": "Death",
+"arcana": "major",
+"numeral": "XIII",
+"up": "an ending, transformation, letting go",
+"rev": "clinging on, fear of change"
+},
+{
+"id": "major-14",
+"name": "Temperance",
+"arcana": "major",
+"numeral": "XIV",
+"up": "balance, moderation, patience",
+"rev": "excess, imbalance, impatience"
+},
+{
+"id": "major-15",
+"name": "The Devil",
+"arcana": "major",
+"numeral": "XV",
+"up": "temptation, attachment, bondage",
+"rev": "breaking free, reclaiming power"
+},
+{
+"id": "major-16",
+"name": "The Tower",
+"arcana": "major",
+"numeral": "XVI",
+"up": "sudden upheaval, revelation, collapse",
+"rev": "disaster narrowly avoided, fear of change"
+},
+{
+"id": "major-17",
+"name": "The Star",
+"arcana": "major",
+"numeral": "XVII",
+"up": "hope, renewal, faith",
+"rev": "despair, lost faith, discouragement"
+},
+{
+"id": "major-18",
+"name": "The Moon",
+"arcana": "major",
+"numeral": "XVIII",
+"up": "illusion, anxiety, the unconscious",
+"rev": "fear released, clarity returning"
+},
+{
+"id": "major-19",
+"name": "The Sun",
+"arcana": "major",
+"numeral": "XIX",
+"up": "joy, success, vitality",
+"rev": "clouded joy, overconfidence, a delay"
+},
+{
+"id": "major-20",
+"name": "Judgement",
+"arcana": "major",
+"numeral": "XX",
+"up": "reckoning, awakening, a calling",
+"rev": "self-doubt, refusing the call"
+},
+{
+"id": "major-21",
+"name": "The World",
+"arcana": "major",
+"numeral": "XXI",
+"up": "completion, wholeness, travel",
+"rev": "unfinished business, lacking closure"
+},
+{
+"id": "wands-1",
+"name": "Ace of Wands",
+"arcana": "minor",
+"suit": "Wands",
+"glyph": "🔥",
+"rank": "Ace",
+"numeral": "I",
+"up": "a spark, inspiration, a new venture",
+"rev": "blocked or excessive: a spark turned inward (passion out of balance)"
+},
+{
+"id": "wands-2",
+"name": "Two of Wands",
+"arcana": "minor",
+"suit": "Wands",
+"glyph": "🔥",
+"rank": "Two",
+"numeral": "II",
+"up": "planning, first steps, looking ahead",
+"rev": "blocked or excessive: planning turned inward (passion out of balance)"
+},
+{
+"id": "wands-3",
+"name": "Three of Wands",
+"arcana": "minor",
+"suit": "Wands",
+"glyph": "🔥",
+"rank": "Three",
+"numeral": "III",
+"up": "expansion, progress, foresight",
+"rev": "blocked or excessive: expansion turned inward (passion out of balance)"
+},
+{
+"id": "wands-4",
+"name": "Four of Wands",
+"arcana": "minor",
+"suit": "Wands",
+"glyph": "🔥",
+"rank": "Four",
+"numeral": "IV",
+"up": "celebration, home, stability",
+"rev": "blocked or excessive: celebration turned inward (passion out of balance)"
+},
+{
+"id": "wands-5",
+"name": "Five of Wands",
+"arcana": "minor",
+"suit": "Wands",
+"glyph": "🔥",
+"rank": "Five",
+"numeral": "V",
+"up": "competition, rivalry, friction",
+"rev": "blocked or excessive: competition turned inward (passion out of balance)"
+},
+{
+"id": "wands-6",
+"name": "Six of Wands",
+"arcana": "minor",
+"suit": "Wands",
+"glyph": "🔥",
+"rank": "Six",
+"numeral": "VI",
+"up": "victory, recognition, pride",
+"rev": "blocked or excessive: victory turned inward (passion out of balance)"
+},
+{
+"id": "wands-7",
+"name": "Seven of Wands",
+"arcana": "minor",
+"suit": "Wands",
+"glyph": "🔥",
+"rank": "Seven",
+"numeral": "VII",
+"up": "standing your ground, perseverance",
+"rev": "blocked or excessive: standing your ground turned inward (passion out of balance)"
+},
+{
+"id": "wands-8",
+"name": "Eight of Wands",
+"arcana": "minor",
+"suit": "Wands",
+"glyph": "🔥",
+"rank": "Eight",
+"numeral": "VIII",
+"up": "speed, news, things moving fast",
+"rev": "blocked or excessive: speed turned inward (passion out of balance)"
+},
+{
+"id": "wands-9",
+"name": "Nine of Wands",
+"arcana": "minor",
+"suit": "Wands",
+"glyph": "🔥",
+"rank": "Nine",
+"numeral": "IX",
+"up": "resilience, last stand, guarding",
+"rev": "blocked or excessive: resilience turned inward (passion out of balance)"
+},
+{
+"id": "wands-10",
+"name": "Ten of Wands",
+"arcana": "minor",
+"suit": "Wands",
+"glyph": "🔥",
+"rank": "Ten",
+"numeral": "X",
+"up": "burden, overwork, carrying too much",
+"rev": "blocked or excessive: burden turned inward (passion out of balance)"
+},
+{
+"id": "wands-11",
+"name": "Page of Wands",
+"arcana": "minor",
+"suit": "Wands",
+"glyph": "🔥",
+"rank": "Page",
+"numeral": "P",
+"up": "enthusiasm, a messenger, exploration",
+"rev": "blocked or excessive: enthusiasm turned inward (passion out of balance)"
+},
+{
+"id": "wands-12",
+"name": "Knight of Wands",
+"arcana": "minor",
+"suit": "Wands",
+"glyph": "🔥",
+"rank": "Knight",
+"numeral": "K",
+"up": "energy, impulsiveness, adventure",
+"rev": "blocked or excessive: energy turned inward (passion out of balance)"
+},
+{
+"id": "wands-13",
+"name": "Queen of Wands",
+"arcana": "minor",
+"suit": "Wands",
+"glyph": "🔥",
+"rank": "Queen",
+"numeral": "Q",
+"up": "confidence, warmth, a bold leader",
+"rev": "blocked or excessive: confidence turned inward (passion out of balance)"
+},
+{
+"id": "wands-14",
+"name": "King of Wands",
+"arcana": "minor",
+"suit": "Wands",
+"glyph": "🔥",
+"rank": "King",
+"numeral": "K",
+"up": "vision, leadership, taking charge",
+"rev": "blocked or excessive: vision turned inward (passion out of balance)"
+},
+{
+"id": "cups-1",
+"name": "Ace of Cups",
+"arcana": "minor",
+"suit": "Cups",
+"glyph": "🏆",
+"rank": "Ace",
+"numeral": "I",
+"up": "new love, compassion, an opening heart",
+"rev": "blocked or excessive: new love turned inward (emotion out of balance)"
+},
+{
+"id": "cups-2",
+"name": "Two of Cups",
+"arcana": "minor",
+"suit": "Cups",
+"glyph": "🏆",
+"rank": "Two",
+"numeral": "II",
+"up": "partnership, attraction, mutual respect",
+"rev": "blocked or excessive: partnership turned inward (emotion out of balance)"
+},
+{
+"id": "cups-3",
+"name": "Three of Cups",
+"arcana": "minor",
+"suit": "Cups",
+"glyph": "🏆",
+"rank": "Three",
+"numeral": "III",
+"up": "friendship, celebration, community",
+"rev": "blocked or excessive: friendship turned inward (emotion out of balance)"
+},
+{
+"id": "cups-4",
+"name": "Four of Cups",
+"arcana": "minor",
+"suit": "Cups",
+"glyph": "🏆",
+"rank": "Four",
+"numeral": "IV",
+"up": "apathy, missed opportunity, contemplation",
+"rev": "blocked or excessive: apathy turned inward (emotion out of balance)"
+},
+{
+"id": "cups-5",
+"name": "Five of Cups",
+"arcana": "minor",
+"suit": "Cups",
+"glyph": "🏆",
+"rank": "Five",
+"numeral": "V",
+"up": "loss, grief, focusing on what's gone",
+"rev": "blocked or excessive: loss turned inward (emotion out of balance)"
+},
+{
+"id": "cups-6",
+"name": "Six of Cups",
+"arcana": "minor",
+"suit": "Cups",
+"glyph": "🏆",
+"rank": "Six",
+"numeral": "VI",
+"up": "nostalgia, innocence, childhood memories",
+"rev": "blocked or excessive: nostalgia turned inward (emotion out of balance)"
+},
+{
+"id": "cups-7",
+"name": "Seven of Cups",
+"arcana": "minor",
+"suit": "Cups",
+"glyph": "🏆",
+"rank": "Seven",
+"numeral": "VII",
+"up": "choices, illusions, daydreaming",
+"rev": "blocked or excessive: choices turned inward (emotion out of balance)"
+},
+{
+"id": "cups-8",
+"name": "Eight of Cups",
+"arcana": "minor",
+"suit": "Cups",
+"glyph": "🏆",
+"rank": "Eight",
+"numeral": "VIII",
+"up": "walking away, seeking deeper meaning",
+"rev": "blocked or excessive: walking away turned inward (emotion out of balance)"
+},
+{
+"id": "cups-9",
+"name": "Nine of Cups",
+"arcana": "minor",
+"suit": "Cups",
+"glyph": "🏆",
+"rank": "Nine",
+"numeral": "IX",
+"up": "a wish fulfilled, contentment, satisfaction",
+"rev": "blocked or excessive: a wish fulfilled turned inward (emotion out of balance)"
+},
+{
+"id": "cups-10",
+"name": "Ten of Cups",
+"arcana": "minor",
+"suit": "Cups",
+"glyph": "🏆",
+"rank": "Ten",
+"numeral": "X",
+"up": "harmony, family bliss, lasting happiness",
+"rev": "blocked or excessive: harmony turned inward (emotion out of balance)"
+},
+{
+"id": "cups-11",
+"name": "Page of Cups",
+"arcana": "minor",
+"suit": "Cups",
+"glyph": "🏆",
+"rank": "Page",
+"numeral": "P",
+"up": "creative news, a gentle message, curiosity",
+"rev": "blocked or excessive: creative news turned inward (emotion out of balance)"
+},
+{
+"id": "cups-12",
+"name": "Knight of Cups",
+"arcana": "minor",
+"suit": "Cups",
+"glyph": "🏆",
+"rank": "Knight",
+"numeral": "K",
+"up": "romance, charm, following the heart",
+"rev": "blocked or excessive: romance turned inward (emotion out of balance)"
+},
+{
+"id": "cups-13",
+"name": "Queen of Cups",
+"arcana": "minor",
+"suit": "Cups",
+"glyph": "🏆",
+"rank": "Queen",
+"numeral": "Q",
+"up": "compassion, calm, emotional security",
+"rev": "blocked or excessive: compassion turned inward (emotion out of balance)"
+},
+{
+"id": "cups-14",
+"name": "King of Cups",
+"arcana": "minor",
+"suit": "Cups",
+"glyph": "🏆",
+"rank": "King",
+"numeral": "K",
+"up": "emotional balance, diplomacy, kindness",
+"rev": "blocked or excessive: emotional balance turned inward (emotion out of balance)"
+},
+{
+"id": "swords-1",
+"name": "Ace of Swords",
+"arcana": "minor",
+"suit": "Swords",
+"glyph": "⚔",
+"rank": "Ace",
+"numeral": "I",
+"up": "clarity, breakthrough, a sharp truth",
+"rev": "blocked or excessive: clarity turned inward (thought out of balance)"
+},
+{
+"id": "swords-2",
+"name": "Two of Swords",
+"arcana": "minor",
+"suit": "Swords",
+"glyph": "⚔",
+"rank": "Two",
+"numeral": "II",
+"up": "stalemate, a difficult decision, avoidance",
+"rev": "blocked or excessive: stalemate turned inward (thought out of balance)"
+},
+{
+"id": "swords-3",
+"name": "Three of Swords",
+"arcana": "minor",
+"suit": "Swords",
+"glyph": "⚔",
+"rank": "Three",
+"numeral": "III",
+"up": "heartbreak, painful truth, grief",
+"rev": "blocked or excessive: heartbreak turned inward (thought out of balance)"
+},
+{
+"id": "swords-4",
+"name": "Four of Swords",
+"arcana": "minor",
+"suit": "Swords",
+"glyph": "⚔",
+"rank": "Four",
+"numeral": "IV",
+"up": "rest, recovery, a needed pause",
+"rev": "blocked or excessive: rest turned inward (thought out of balance)"
+},
+{
+"id": "swords-5",
+"name": "Five of Swords",
+"arcana": "minor",
+"suit": "Swords",
+"glyph": "⚔",
+"rank": "Five",
+"numeral": "V",
+"up": "conflict, a hollow victory, tension",
+"rev": "blocked or excessive: conflict turned inward (thought out of balance)"
+},
+{
+"id": "swords-6",
+"name": "Six of Swords",
+"arcana": "minor",
+"suit": "Swords",
+"glyph": "⚔",
+"rank": "Six",
+"numeral": "VI",
+"up": "transition, moving on, calmer waters",
+"rev": "blocked or excessive: transition turned inward (thought out of balance)"
+},
+{
+"id": "swords-7",
+"name": "Seven of Swords",
+"arcana": "minor",
+"suit": "Swords",
+"glyph": "⚔",
+"rank": "Seven",
+"numeral": "VII",
+"up": "strategy, stealth, cunning",
+"rev": "blocked or excessive: strategy turned inward (thought out of balance)"
+},
+{
+"id": "swords-8",
+"name": "Eight of Swords",
+"arcana": "minor",
+"suit": "Swords",
+"glyph": "⚔",
+"rank": "Eight",
+"numeral": "VIII",
+"up": "feeling trapped, self-imposed limits",
+"rev": "blocked or excessive: feeling trapped turned inward (thought out of balance)"
+},
+{
+"id": "swords-9",
+"name": "Nine of Swords",
+"arcana": "minor",
+"suit": "Swords",
+"glyph": "⚔",
+"rank": "Nine",
+"numeral": "IX",
+"up": "anxiety, worry, sleepless nights",
+"rev": "blocked or excessive: anxiety turned inward (thought out of balance)"
+},
+{
+"id": "swords-10",
+"name": "Ten of Swords",
+"arcana": "minor",
+"suit": "Swords",
+"glyph": "⚔",
+"rank": "Ten",
+"numeral": "X",
+"up": "a painful ending, rock bottom, then dawn",
+"rev": "blocked or excessive: a painful ending turned inward (thought out of balance)"
+},
+{
+"id": "swords-11",
+"name": "Page of Swords",
+"arcana": "minor",
+"suit": "Swords",
+"glyph": "⚔",
+"rank": "Page",
+"numeral": "P",
+"up": "curiosity, vigilance, new ideas",
+"rev": "blocked or excessive: curiosity turned inward (thought out of balance)"
+},
+{
+"id": "swords-12",
+"name": "Knight of Swords",
+"arcana": "minor",
+"suit": "Swords",
+"glyph": "⚔",
+"rank": "Knight",
+"numeral": "K",
+"up": "haste, ambition, charging ahead",
+"rev": "blocked or excessive: haste turned inward (thought out of balance)"
+},
+{
+"id": "swords-13",
+"name": "Queen of Swords",
+"arcana": "minor",
+"suit": "Swords",
+"glyph": "⚔",
+"rank": "Queen",
+"numeral": "Q",
+"up": "independence, clear boundaries, perception",
+"rev": "blocked or excessive: independence turned inward (thought out of balance)"
+},
+{
+"id": "swords-14",
+"name": "King of Swords",
+"arcana": "minor",
+"suit": "Swords",
+"glyph": "⚔",
+"rank": "King",
+"numeral": "K",
+"up": "intellectual authority, truth, discipline",
+"rev": "blocked or excessive: intellectual authority turned inward (thought out of balance)"
+},
+{
+"id": "pentacles-1",
+"name": "Ace of Pentacles",
+"arcana": "minor",
+"suit": "Pentacles",
+"glyph": "⭐",
+"rank": "Ace",
+"numeral": "I",
+"up": "a new opportunity, prosperity, manifestation",
+"rev": "blocked or excessive: a new opportunity turned inward (work out of balance)"
+},
+{
+"id": "pentacles-2",
+"name": "Two of Pentacles",
+"arcana": "minor",
+"suit": "Pentacles",
+"glyph": "⭐",
+"rank": "Two",
+"numeral": "II",
+"up": "juggling, adaptability, balancing priorities",
+"rev": "blocked or excessive: juggling turned inward (work out of balance)"
+},
+{
+"id": "pentacles-3",
+"name": "Three of Pentacles",
+"arcana": "minor",
+"suit": "Pentacles",
+"glyph": "⭐",
+"rank": "Three",
+"numeral": "III",
+"up": "teamwork, craftsmanship, collaboration",
+"rev": "blocked or excessive: teamwork turned inward (work out of balance)"
+},
+{
+"id": "pentacles-4",
+"name": "Four of Pentacles",
+"arcana": "minor",
+"suit": "Pentacles",
+"glyph": "⭐",
+"rank": "Four",
+"numeral": "IV",
+"up": "holding on, saving, control",
+"rev": "blocked or excessive: holding on turned inward (work out of balance)"
+},
+{
+"id": "pentacles-5",
+"name": "Five of Pentacles",
+"arcana": "minor",
+"suit": "Pentacles",
+"glyph": "⭐",
+"rank": "Five",
+"numeral": "V",
+"up": "hardship, worry, feeling left out",
+"rev": "blocked or excessive: hardship turned inward (work out of balance)"
+},
+{
+"id": "pentacles-6",
+"name": "Six of Pentacles",
+"arcana": "minor",
+"suit": "Pentacles",
+"glyph": "⭐",
+"rank": "Six",
+"numeral": "VI",
+"up": "generosity, sharing, a fair exchange",
+"rev": "blocked or excessive: generosity turned inward (work out of balance)"
+},
+{
+"id": "pentacles-7",
+"name": "Seven of Pentacles",
+"arcana": "minor",
+"suit": "Pentacles",
+"glyph": "⭐",
+"rank": "Seven",
+"numeral": "VII",
+"up": "patience, long-term view, investment",
+"rev": "blocked or excessive: patience turned inward (work out of balance)"
+},
+{
+"id": "pentacles-8",
+"name": "Eight of Pentacles",
+"arcana": "minor",
+"suit": "Pentacles",
+"glyph": "⭐",
+"rank": "Eight",
+"numeral": "VIII",
+"up": "mastery, diligence, honing the craft",
+"rev": "blocked or excessive: mastery turned inward (work out of balance)"
+},
+{
+"id": "pentacles-9",
+"name": "Nine of Pentacles",
+"arcana": "minor",
+"suit": "Pentacles",
+"glyph": "⭐",
+"rank": "Nine",
+"numeral": "IX",
+"up": "independence, luxury, self-sufficiency",
+"rev": "blocked or excessive: independence turned inward (work out of balance)"
+},
+{
+"id": "pentacles-10",
+"name": "Ten of Pentacles",
+"arcana": "minor",
+"suit": "Pentacles",
+"glyph": "⭐",
+"rank": "Ten",
+"numeral": "X",
+"up": "legacy, wealth, family foundations",
+"rev": "blocked or excessive: legacy turned inward (work out of balance)"
+},
+{
+"id": "pentacles-11",
+"name": "Page of Pentacles",
+"arcana": "minor",
+"suit": "Pentacles",
+"glyph": "⭐",
+"rank": "Page",
+"numeral": "P",
+"up": "a student, ambition, a practical message",
+"rev": "blocked or excessive: a student turned inward (work out of balance)"
+},
+{
+"id": "pentacles-12",
+"name": "Knight of Pentacles",
+"arcana": "minor",
+"suit": "Pentacles",
+"glyph": "⭐",
+"rank": "Knight",
+"numeral": "K",
+"up": "hard work, routine, reliability",
+"rev": "blocked or excessive: hard work turned inward (work out of balance)"
+},
+{
+"id": "pentacles-13",
+"name": "Queen of Pentacles",
+"arcana": "minor",
+"suit": "Pentacles",
+"glyph": "⭐",
+"rank": "Queen",
+"numeral": "Q",
+"up": "practical nurturing, abundance, security",
+"rev": "blocked or excessive: practical nurturing turned inward (work out of balance)"
+},
+{
+"id": "pentacles-14",
+"name": "King of Pentacles",
+"arcana": "minor",
+"suit": "Pentacles",
+"glyph": "⭐",
+"rank": "King",
+"numeral": "K",
+"up": "success, wealth, a steady hand",
+"rev": "blocked or excessive: success turned inward (work out of balance)"
+}
+]

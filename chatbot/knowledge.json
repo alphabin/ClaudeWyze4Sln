@@ -1,0 +1,276 @@
+{
+ "_about": "Curated answers for Twitch chat. Each entry: keywords (any match, case-insensitive; a 'question' match also needs a question-ish message) and a reply under ~300 characters. Edit freely; the bot reloads this file every minute. Optional 'resource': an id from RESOURCES in cleobot.py (or {id, if: regex on the message}) appended as an allowlisted link.",
+ "entries": [
+  {
+   "id": "venom",
+   "keywords": [
+    "venom",
+    "poison",
+    "dangerous",
+    "bite",
+    "bites",
+    "hurt"
+   ],
+   "reply": "Venomous? Please. I'm a constrictor — I hug, I don't bite. Ball pythons are among the calmest snakes in the world, and I have never once been unladylike about it."
+  },
+  {
+   "id": "eat",
+   "keywords": [
+    "eat",
+    "eats",
+    "eating",
+    "food",
+    "feed",
+    "fed",
+    "hungry",
+    "meal",
+    "mouse",
+    "mice",
+    "rat"
+   ],
+   "reply": "I dine every week or two on a thawed rodent, when I feel like it. Refusing meals for weeks — even months — is perfectly normal for my kind, especially in the cool season. Say 'feed' for my schedule.",
+   "resource": {
+    "id": "ballpython",
+    "if": "\\bmy\\b|\\bmonths?\\b|won'?t|refus|not eating|hasn'?t"
+   }
+  },
+  {
+   "id": "shed",
+   "keywords": [
+    "shed",
+    "shedding",
+    "skin",
+    "blue eyes",
+    "cloudy"
+   ],
+   "reply": "I shed my whole skin in one piece, eye caps included, every few weeks. When my eyes go cloudy blue, a shed is days away and I'd like a bit more humidity, thank you. Say 'shed' for the last one."
+  },
+  {
+   "id": "temps",
+   "keywords": [
+    "temp",
+    "temperature",
+    "hot",
+    "cold",
+    "warm",
+    "heat",
+    "lamp",
+    "degrees"
+   ],
+   "reply": "A princess requires options: a warm side at 88–92°F (31–33°C) and a cool side at 76–80°F (24–27°C), so I can choose my own temperature. The live readings are at the bottom of the stream — or say 'temps'.",
+   "resource": {
+    "id": "reptifiles",
+    "if": "\\bmy\\b|\\bshould\\b|\\bneed\\b"
+   }
+  },
+  {
+   "id": "humidity",
+   "keywords": [
+    "humid",
+    "humidity",
+    "moist",
+    "mist",
+    "dry"
+   ],
+   "reply": "I like 55–65% humidity, a touch more when a shed is coming. Too dry and my shed sticks; too wet and my skin complains. The live number is in the bottom cards.",
+   "resource": {
+    "id": "reptifiles",
+    "if": "\\bmy\\b|\\bshould\\b|\\bneed\\b"
+   }
+  },
+  {
+   "id": "nightvision",
+   "keywords": [
+    "black and white",
+    "grey",
+    "gray",
+    "night vision",
+    "infrared",
+    "ir",
+    "why is it dark",
+    "no color",
+    "no colour"
+   ],
+   "reply": "At night my cameras switch to infrared, so the picture goes black-and-white. I can't see IR light, so it doesn't bother me — and night is when I do my best work anyway."
+  },
+  {
+   "id": "where",
+   "keywords": [
+    "where is",
+    "where's",
+    "can't see",
+    "cant see",
+    "hiding",
+    "no snake",
+    "see the snake"
+   ],
+   "reply": "I spend most of the day in my hide or under the cork — royalty rests. I usually make an appearance around dusk. The 'Habitat check' card shows my climate is right; after sunset is when I wander."
+  },
+  {
+   "id": "size",
+   "keywords": [
+    "how big",
+    "how long",
+    "size",
+    "length",
+    "weigh",
+    "weight",
+    "grow"
+   ],
+   "reply": "Adult ball pythons run 3–5 feet and a few pounds; we ladies grow larger than the males. I reached my full size at about three."
+  },
+  {
+   "id": "age",
+   "keywords": [
+    "how old",
+    "age",
+    "years old",
+    "lifespan",
+    "live long",
+    "how long do they live"
+   ],
+   "reply": "I'm four. My kind commonly lives 20–30 years with proper care — one at the Saint Louis Zoo reigned past 60. I intend to compete."
+  },
+  {
+   "id": "name",
+   "keywords": [
+    "your name",
+    "her name",
+    "the name",
+    "name mean",
+    "why cleo",
+    "why princess",
+    "cartouche",
+    "egypt",
+    "named",
+    "called"
+   ],
+   "reply": "Princess Cleo, thank you. My name sits in a cartouche — the oval ring ancient Egypt reserved for royal names — and the eye up top is the Eye of Horus, watching over my court."
+  },
+  {
+   "id": "species",
+   "keywords": [
+    "species",
+    "what kind",
+    "what type",
+    "breed",
+    "morph",
+    "python regius",
+    "royal python"
+   ],
+   "reply": "Ball python, Python regius — the royal python. My ancestors ruled the grasslands of West and Central Africa; I rule a terrarium in Southern California.",
+   "resource": {
+    "id": "morphmarket",
+    "if": "\\bmorph"
+   }
+  },
+  {
+   "id": "ball",
+   "keywords": [
+    "why ball",
+    "curl",
+    "curled",
+    "coiled",
+    "in a ball"
+   ],
+   "reply": "When a ball python feels threatened she rolls into a tight ball with her head tucked in the middle. That's where the name comes from. I rarely find it necessary."
+  },
+  {
+   "id": "handle",
+   "keywords": [
+    "hold",
+    "handle",
+    "handling",
+    "pet her",
+    "touch"
+   ],
+   "reply": "I tolerate gentle handling once I've settled — never right after a meal (give me 48 hours) or during a shed. Slow movements, support my whole body, keep it short. Royalty has standards."
+  },
+  {
+   "id": "water",
+   "keywords": [
+    "water",
+    "drink",
+    "bowl",
+    "soak",
+    "bath"
+   ],
+   "reply": "The bowl on my hot side is my water. I drink from it and, before a shed, I soak in it like a proper bath. It's kept big enough for all of me."
+  },
+  {
+   "id": "sleep",
+   "keywords": [
+    "sleep",
+    "asleep",
+    "awake",
+    "nocturnal",
+    "active",
+    "at night",
+    "all night"
+   ],
+   "reply": "I have no eyelids, so you can't tell when I'm asleep. Ball pythons are crepuscular: most active around dusk and at night, resting through the day. Like now, probably."
+  },
+  {
+   "id": "smell",
+   "keywords": [
+    "tongue",
+    "smell",
+    "flick",
+    "flicking"
+   ],
+   "reply": "Those tongue flicks collect scent and carry it to the Jacobson's organ in the roof of my mouth. That's how I smell the room — and know when a mouse is nearby."
+  },
+  {
+   "id": "heatpits",
+   "keywords": [
+    "pits",
+    "heat pit",
+    "see heat",
+    "thermal"
+   ],
+   "reply": "The pits along my lips sense infrared heat. I can find a warm mouse in total darkness. Try hiding from that."
+  },
+  {
+   "id": "setup",
+   "keywords": [
+    "setup",
+    "enclosure",
+    "tank",
+    "terrarium",
+    "how do you stream",
+    "cameras",
+    "wyze",
+    "obs"
+   ],
+   "reply": "My court runs on two Wyze cameras (hot side and cool side), a temperature and humidity sensor on each side, and OBS on a Mac mini. The overlay is a web page. It's open source — the GitHub link will be on the channel page soon.",
+   "resource": {
+    "id": "reptifiles",
+    "if": "\\bmy\\b|\\bnew\\b|\\bgetting\\b|\\bfirst\\b|\\bshould\\b"
+   }
+  },
+  {
+   "id": "vet",
+   "keywords": [
+    "sick",
+    "ill",
+    "vet",
+    "disease",
+    "mites",
+    "respiratory",
+    "wheezing",
+    "stuck shed",
+    "not eating for months",
+    "scale rot",
+    "mouth rot",
+    "regurg",
+    "injured",
+    "wound",
+    "burn"
+   ],
+   "reply": "Serious answer: wheezing, bubbles at the mouth, mites, a stuck shed, or a long fast with weight loss — that's a reptile vet, not chat. Chat can share experience; it can't examine a snake.",
+   "resource": "arav"
+  }
+ ],
+ "help": "I answer to: menu · temps · cleo · mood · feed · shed · weather · fact · resources · rip · about · help — no ! needed. Or simply talk to me; I talk back. Pokémon: 25 followers = my human rips packs live and mails a pull to a random follower; 25 subs = the same, bigger, to a random subscriber. Say RIP to hype it. Tarot: say 'tarot' or 'read my cards' for a three-card reading on the stream. Oracle: ask 'will I ever…', 'predict…' or 'fortune' and the crystal ball on the stream answers.",
+ "about": "I am Princess Cleo, a four-year-old ball python (Python regius) reigning over a terrarium in Southern California. Hot side on the left, cool side on the right, my vitals along the bottom. Ask away."
+}

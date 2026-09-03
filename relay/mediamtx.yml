@@ -1,0 +1,38 @@
+# Local video relay for snakecam (runs natively on the Mac, not in Docker).
+# A headless Chrome decodes the Pan V4's H.265 Agora stream and re-publishes it here
+# over WHIP; OBS pulls it back out as plain RTSP.  Ports chosen not to clash with the
+# bridge's own MediaMTX (8554/8888/8889) or macOS AirPlay (5000/7000).
+logLevel: info
+logDestinations: [stdout]
+
+api: no
+metrics: no
+pprof: no
+playback: no
+
+rtsp: yes
+rtspAddress: :8555
+rtspTransports: [tcp]
+rtspEncryption: "no"
+
+rtmp: no
+hls: no
+srt: no
+moq: no
+
+webrtc: yes
+webrtcAddress: :8890
+webrtcEncryption: no
+webrtcAllowOrigin: "*"
+webrtcLocalUDPAddress: :8190
+webrtcLocalTCPAddress: :8190
+webrtcIPsFromInterfaces: no
+webrtcAdditionalHosts: [127.0.0.1]
+webrtcICEServers2: []
+
+pathDefaults:
+  source: publisher
+  sourceOnDemand: no
+
+paths:
+  all_others:

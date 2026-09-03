@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <!-- Invisible decoder for the COOL cam (Pan V4, H.265 only). A headless Chrome (no window, no dock
+       icon) runs the player page, decodes, and re-publishes the picture over WHIP into the local relay
+       (mediamtx); OBS reads rtsp://127.0.0.1:8555/coolcam. Headless Chrome allows one page per process,
+       so the hot cam has its own copy of this service: com.snakecam.hotcam. -->
+  <key>Label</key><string>com.snakecam.coolcam</string>
+  <key>ProgramArguments</key><array>
+    <string>/Applications/Google Chrome.app/Contents/MacOS/Google Chrome</string>
+    <string>--headless=new</string>
+    <string>--user-data-dir=__HOME__/Library/Application Support/snakecam-coolcam</string>
+    <string>--no-first-run</string>
+    <string>--no-default-browser-check</string>
+    <string>--autoplay-policy=no-user-gesture-required</string>
+    <string>--disable-background-timer-throttling</string>
+    <string>--disable-renderer-backgrounding</string>
+    <string>--window-size=1920,1080</string>
+    <string>--remote-debugging-port=9224</string>
+    <string>--remote-allow-origins=http://localhost:9224</string>
+    <string>http://localhost:5050/static/snakecam/lake.html?cam=YOUR-COOL-CAM&amp;res=2k&amp;codec=h265&amp;whip=http://localhost:8890/coolcam/whip</string>
+  </array>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>15</integer>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/snakecam-coolcam.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/snakecam-coolcam.log</string>
+</dict></plist>

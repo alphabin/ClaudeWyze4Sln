@@ -1,0 +1,223 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>snakecam ambience</title>
+<style>html,body{margin:0;background:#000;color:#666;font:12px monospace}</style></head><body>
+<div id="msg"></div>
+<script>
+// Generative savanna-edge soundscape for the stream (no files, no licences). Nothing loops: every voice is an
+// individual with its own pitch, position, distance and habits, and the whole scene drifts over minutes so it
+// never settles into a pattern. Layers by time of day (from the same sunrise/sunset the overlay uses):
+//   night  wind · three kinds of cricket · peeper and croaking frogs · nightjar · owl
+//   dawn   chorus of many bird species, thinning after sunrise · leftover crickets
+//   day    wind with gusts and leaf rustle · birds and doves · cicada choruses · the odd insect flying past
+//   dusk   cicadas fading, crickets waking, first frogs
+// Weather joins in: real rain when Open-Meteo says it is raining outside, distant thunder in a storm.
+// Real recordings at ambience/{night,dawn,day,dusk}.mp3 are used instead if present.
+const msg = document.getElementById('msg'); const say = t => { msg.textContent = t; console.log('[ambience]', t); };
+const q = new URLSearchParams(location.search); const FORCE = q.get('phase'); const MASTER = parseFloat(q.get('gain') || '0.6'); const FORCE_RAIN = q.get('rain');
+const WEATHER = { lat: LATITUDE, lon: LONGITUDE };
+let ctx, master, SUN = null, phase = null, layers = {}, WX = { rain: 0, storm: false };
+
+// ---------- helpers ----------
+const rnd = (a, b) => a + Math.random() * (b - a), pick = a => a[Math.floor(Math.random() * a.length)], clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const now = () => ctx.currentTime;
+const noiseBuffer = (seconds = 4, colour = 'pink') => { const b = ctx.createBuffer(2, ctx.sampleRate * seconds, ctx.sampleRate);
+  for (let c = 0; c < 2; c++) { const d = b.getChannelData(c); let l = 0; for (let i = 0; i < d.length; i++) { const w = Math.random() * 2 - 1; l = (l + 0.02 * w) / 1.02; d[i] = colour === 'white' ? w * 0.5 : (w * 0.5 + l * 1.5) * 0.4; } } return b; };
+function layer(name) { if (layers[name]) return layers[name]; const g = ctx.createGain(); g.gain.value = 0; g.connect(name === 'oracle' && window.SHELF ? window.SHELF : master); layers[name] = { gain: g, timers: { push(id) { this.last = id; }, length: 0 }, nodes: [] }; return layers[name]; }   // timers are never cancelled (the page lives for days), so only the latest id is kept
+function pan(x) { const p = ctx.createStereoPanner(); p.pan.value = clamp(x, -1, 1); return p; }
+// a voice at some distance: quieter and duller the further away (lowpass), returns the node to connect into
+function place(L, x, dist) { dist = Math.max(dist, 0.45); const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 12000 / (1 + dist * 3); const g = ctx.createGain(); g.gain.value = 1 / (1 + dist * 2.2); const p = pan(x); lp.connect(g); g.connect(p); p.connect(L.gain); return lp; }
+// slow, smooth 0..1 drift unique per call (sum of three slow sines) so densities wander over minutes
+function drifter(period = 600) { const a = rnd(0, 6.28), b = rnd(0, 6.28), c = rnd(0, 6.28), p1 = period * rnd(0.7, 1.3), p2 = period * rnd(0.25, 0.5), p3 = period * rnd(0.08, 0.15);
+  return () => { const t = Date.now() / 1000; return clamp(0.5 + 0.28 * Math.sin(t / p1 * 6.28 + a) + 0.16 * Math.sin(t / p2 * 6.28 + b) + 0.06 * Math.sin(t / p3 * 6.28 + c), 0, 1); }; }
+// the whole layer's gain is set by the phase mix; individuals also come and go by hour of night/day
+const hour = () => new Date().getHours() + new Date().getMinutes() / 60;
+function every(L, fn, minGap, maxGap, active = () => true) { const tick = () => { if (L.gain.value > 0.001 && active()) fn(); L.timers.push(setTimeout(tick, rnd(minGap, maxGap) * 1000)); }; L.timers.push(setTimeout(tick, rnd(0, maxGap) * 1000)); }
+function tone(L, out, f0, f1, t, dur, peak, type = 'sine', attack = 0.015) { const o = ctx.createOscillator(), g = ctx.createGain(); o.type = type; o.frequency.setValueAtTime(f0, t); if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, t + dur * 0.7);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(peak, t + attack); g.gain.exponentialRampToValueAtTime(0.0004, t + dur); o.connect(g); g.connect(out); o.start(t); o.stop(t + dur + 0.05); }
+
+// ---------- wind: two bands (body + leaves), slow swells, and gusts that rustle the leaves ----------
+function wind() {
+  const L = layer('wind'), src = ctx.createBufferSource(); src.buffer = noiseBuffer(8); src.loop = true; src.start(); L.nodes.push(src);
+  const body = ctx.createBiquadFilter(); body.type = 'lowpass'; body.frequency.value = 320; const bg = ctx.createGain(); bg.gain.value = 0.30; src.connect(body); body.connect(bg); bg.connect(L.gain);
+  const leaves = ctx.createBiquadFilter(); leaves.type = 'bandpass'; leaves.frequency.value = 2400; leaves.Q.value = 0.7; const lg = ctx.createGain(); lg.gain.value = 0.02; src.connect(leaves); leaves.connect(lg); lg.connect(L.gain);
+  const breathe = drifter(90); setInterval(() => { const v = 0.2 + 0.2 * breathe(); bg.gain.setTargetAtTime(v, now(), 2); body.frequency.setTargetAtTime(240 + 200 * breathe(), now(), 2); }, 1000);
+  // gusts: a rise over 3-8 s, leaves hiss and a few dry rustles, then it settles
+  const gust = () => { const t = now(), up = rnd(3, 8), down = rnd(4, 10), strength = rnd(0.5, 1);
+    bg.gain.cancelScheduledValues(t); bg.gain.setValueAtTime(bg.gain.value, t); bg.gain.linearRampToValueAtTime(0.4 + 0.3 * strength, t + up); bg.gain.linearRampToValueAtTime(0.28, t + up + down);
+    lg.gain.cancelScheduledValues(t); lg.gain.setValueAtTime(lg.gain.value, t); lg.gain.linearRampToValueAtTime(0.05 + 0.09 * strength, t + up); lg.gain.linearRampToValueAtTime(0.02, t + up + down);
+    for (let k = 0; k < 3 + strength * 5; k++) rustle(L, t + rnd(up * 0.4, up + down * 0.5), strength); };
+  every(L, gust, 25, 110);
+  window.gust = gust;
+}
+function rustle(L, t, strength) { const s = ctx.createBufferSource(); s.buffer = noiseBuffer(1, 'white'); const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = rnd(1800, 4500); bp.Q.value = 1.2;
+  const out = place(L, rnd(-1, 1), rnd(0.2, 1.2)), g = ctx.createGain(); g.gain.setValueAtTime(0, t); const dur = rnd(0.3, 1.2);
+  for (let i = 0, tt = t; tt < t + dur; i++, tt += rnd(0.03, 0.09)) { g.gain.linearRampToValueAtTime(rnd(0.015, 0.04) * strength, tt + 0.01); g.gain.linearRampToValueAtTime(0.004, tt + rnd(0.03, 0.06)); }
+  g.gain.linearRampToValueAtTime(0, t + dur + 0.1); s.connect(bp); bp.connect(g); g.connect(out); s.start(t); s.stop(t + dur + 0.2); }
+
+// ---------- crickets: three species, each individual with bouts of singing and silence ----------
+function crickets() {
+  const L = layer('crickets'), density = drifter(900);
+  const nightCurve = () => { const h = hour(); const d = h >= 19 ? h - 19 : h + 5; return clamp(1.1 - Math.abs(d - 3.5) / 6, 0.25, 1); };   // peaks ~22:30, thins toward dawn
+  const singer = (make, n) => { for (let i = 0; i < n; i++) { const me = { x: rnd(-1, 1), dist: rnd(0, 1.6), f: 0, on: Math.random() < 0.6 }; const out = place(L, me.x, me.dist); make(me, out);
+    const bout = () => { me.on = !me.on && Math.random() < 0.45 + 0.5 * density() * nightCurve() ? true : (me.on && Math.random() < 0.25 ? false : me.on); L.timers.push(setTimeout(bout, rnd(8, 45) * 1000)); }; bout(); } };
+  // A: field cricket — chirps of 3-5 pulses, tempo drifts with the (imagined) temperature
+  singer((me, out) => { me.f = rnd(4000, 5200); const o = ctx.createOscillator(); o.frequency.value = me.f; const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = me.f; bp.Q.value = 14; const g = ctx.createGain(); g.gain.value = 0; o.connect(bp); bp.connect(g); g.connect(out); o.start(); L.nodes.push(o);
+    const tempo = rnd(0.5, 1.2), chirp = () => { if (me.on) { const t = now(), pulses = 3 + Math.floor(rnd(0, 3)), pr = rnd(26, 40); for (let k = 0; k < pulses; k++) { const s = t + k / pr; g.gain.setValueAtTime(0, s); g.gain.linearRampToValueAtTime(0.07, s + 0.006); g.gain.linearRampToValueAtTime(0, s + 0.018); } }
+      L.timers.push(setTimeout(chirp, (tempo * (0.85 + 0.3 * density()) + rnd(-0.1, 0.2)) * 1000)); }; L.timers.push(setTimeout(chirp, rnd(0, 1500))); }, 5);
+  // B: tree cricket — a continuous silvery trill (fast amplitude modulation) held for 5-30 s, then a pause
+  singer((me, out) => { me.f = rnd(2600, 3300); const o = ctx.createOscillator(); o.frequency.value = me.f; const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = me.f; bp.Q.value = 10; const am = ctx.createGain(); am.gain.value = 0;
+    const lfo = ctx.createOscillator(); lfo.frequency.value = rnd(38, 60); const lg = ctx.createGain(); lg.gain.value = 0.5; lfo.connect(lg); lg.connect(am.gain); const g = ctx.createGain(); g.gain.value = 0; o.connect(bp); bp.connect(am); am.connect(g); g.connect(out); o.start(); lfo.start(); L.nodes.push(o, lfo);
+    const trill = () => { const t = now(); if (me.on) { const len = rnd(5, 30); g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(g.gain.value, t); g.gain.linearRampToValueAtTime(0.035, t + 1.5); g.gain.setValueAtTime(0.035, t + len - 1); g.gain.linearRampToValueAtTime(0, t + len); L.timers.push(setTimeout(trill, (len + rnd(4, 40)) * 1000)); }
+      else { g.gain.setTargetAtTime(0, t, 0.5); L.timers.push(setTimeout(trill, rnd(5, 20) * 1000)); } }; trill(); }, 3);
+  // C: ground cricket — single high ticks, irregular, close by
+  singer((me, out) => { me.f = rnd(5600, 7200); const tick = () => { if (me.on) { const t = now(); for (let k = 0; k < 1 + Math.floor(rnd(0, 3)); k++) tone(L, out, me.f, me.f, t + k * rnd(0.09, 0.14), 0.04, 0.03, 'sine', 0.004); }
+      L.timers.push(setTimeout(tick, rnd(0.6, 2.8) * 1000)); }; tick(); }, 3);
+}
+
+// ---------- frogs: a peeper chorus that comes in waves, and a few deep croakers ----------
+function frogs() {
+  const L = layer('frogs'), wave = drifter(240);
+  for (let i = 0; i < 5; i++) { const x = rnd(-1, 1), dist = rnd(0.3, 1.8), f = rnd(1200, 2500), out = place(L, x, dist);
+    every(L, () => { const t = now(); tone(L, out, f, f * 1.28, t, 0.22, 0.16, 'sine', 0.02); if (Math.random() < 0.3) tone(L, out, f * 1.02, f * 1.3, t + rnd(0.25, 0.4), 0.2, 0.13, 'sine', 0.02); }, 1.2, 6, () => Math.random() < 0.15 + 0.8 * wave()); }
+  for (let i = 0; i < 2; i++) { const out = place(L, rnd(-0.8, 0.8), rnd(0.6, 1.6)), f = rnd(110, 190);
+    every(L, () => { const t = now(), pulses = 6 + Math.floor(rnd(0, 6)), pr = rnd(9, 14); for (let k = 0; k < pulses; k++) { const s = t + k / pr, o = ctx.createOscillator(), g = ctx.createGain(), lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 700; o.type = 'sawtooth'; o.frequency.value = f * rnd(0.97, 1.03);
+        g.gain.setValueAtTime(0, s); g.gain.linearRampToValueAtTime(0.12, s + 0.012); g.gain.exponentialRampToValueAtTime(0.0005, s + 0.07); o.connect(lp); lp.connect(g); g.connect(out); o.start(s); o.stop(s + 0.1); } }, 8, 40); }
+}
+// ---------- nightjar: a long, soft, distant churr ----------
+function nightjar() { const L = layer('night'); every(L, () => { const t = now(), len = rnd(2, 6), out = place(L, rnd(-1, 1), rnd(1.2, 2.5)), o = ctx.createOscillator(); o.frequency.value = rnd(850, 1000); const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = o.frequency.value; bp.Q.value = 6;
+  const am = ctx.createGain(); am.gain.value = 0; const lfo = ctx.createOscillator(); lfo.frequency.value = rnd(26, 34); const lg = ctx.createGain(); lg.gain.value = 0.5; lfo.connect(lg); lg.connect(am.gain); const g = ctx.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.14, t + 0.6); g.gain.setValueAtTime(0.14, t + len - 0.5); g.gain.linearRampToValueAtTime(0, t + len);
+  o.connect(bp); bp.connect(am); am.connect(g); g.connect(out); o.start(t); lfo.start(t); o.stop(t + len + 0.1); lfo.stop(t + len + 0.1); }, 90, 360); }
+// ---------- owl: two or three soft hoots, never the same pitch twice ----------
+function owl() { const L = layer('night'); every(L, () => { const t = now(), out = place(L, rnd(-0.7, 0.7), rnd(0.8, 2)), base = rnd(300, 380), n = Math.random() < 0.3 ? 3 : 2;
+  for (let i = 0; i < n; i++) { const d = i * rnd(0.5, 0.7); const o = ctx.createOscillator(), g = ctx.createGain(), lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900; o.type = 'triangle'; o.frequency.setValueAtTime(base * (i ? 0.92 : 1), t + d); o.frequency.linearRampToValueAtTime(base * (i ? 0.9 : 0.97), t + d + 0.4);
+    g.gain.setValueAtTime(0, t + d); g.gain.linearRampToValueAtTime(0.2, t + d + 0.12); g.gain.linearRampToValueAtTime(0, t + d + 0.48); o.connect(lp); lp.connect(g); g.connect(out); o.start(t + d); o.stop(t + d + 0.5); } }, 60, 200); }
+
+// ---------- birds: a handful of species, each with its own phrase shape; dawn is many voices, day a few ----------
+const SPECIES = [
+  { name: 'whistler', w: 3, sing: (L, out) => { const t = now(), base = rnd(2200, 4200), notes = 2 + Math.floor(rnd(0, 4)); for (let k = 0; k < notes; k++) { const f0 = base * rnd(0.9, 1.1); tone(L, out, f0, f0 * (Math.random() < 0.5 ? rnd(1.15, 1.5) : rnd(0.7, 0.9)), t + k * rnd(0.12, 0.24), 0.14, 0.13); } } },
+  { name: 'triller', w: 2, sing: (L, out) => { const t = now(), f = rnd(3000, 4500), n = 6 + Math.floor(rnd(0, 10)), r = rnd(12, 18); for (let k = 0; k < n; k++) tone(L, out, f * rnd(0.98, 1.02), f * 1.08, t + k / r, 0.05, 0.07, 'sine', 0.006); } },
+  { name: 'chipper', w: 3, sing: (L, out) => { const t = now(), f = rnd(4500, 6500); for (let k = 0; k < 1 + Math.floor(rnd(0, 3)); k++) tone(L, out, f * 1.3, f, t + k * rnd(0.3, 0.7), 0.06, 0.07, 'sine', 0.004); } },
+  { name: 'dove', w: 2, sing: (L, out) => { const t = now(), f = rnd(480, 620), lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1200; lp.connect(out);
+      [[0, 0.35, 1], [0.5, 0.6, 1.12], [1.25, 0.4, 1], [1.75, 0.4, 0.98]].forEach(([d, len, m]) => tone(L, lp, f * m, f * m * 0.97, t + d, len, 0.16, 'triangle', 0.06)); } },
+  { name: 'warbler', w: 2, sing: (L, out) => { const t = now(); let f = rnd(2600, 3600); for (let k = 0, s = t; k < 5 + Math.floor(rnd(0, 6)); k++) { const nf = f * rnd(0.85, 1.18); tone(L, out, f, nf, s, rnd(0.08, 0.16), 0.12, 'sine', 0.01); s += rnd(0.1, 0.2); f = nf; } } },
+  { name: 'caller', w: 1, sing: (L, out) => { const t = now(), f = rnd(1400, 1900); for (let k = 0; k < 2 + Math.floor(rnd(0, 3)); k++) tone(L, out, f, f * 0.85, t + k * rnd(0.35, 0.5), 0.25, 0.14, 'triangle', 0.02); } } ];
+function birds(name, count, minGap, maxGap, curve) { const L = layer(name), bag = SPECIES.flatMap(s => Array(s.w).fill(s));
+  for (let i = 0; i < count; i++) { const sp = pick(bag), x = rnd(-1, 1), dist = rnd(0.1, 2.2), out = place(L, x, dist); every(L, () => sp.sing(L, out), minGap, maxGap, () => Math.random() < curve()); } }
+const dawnCurve = () => { if (!SUN) return 0.8; const m = (Date.now() - SUN.rise.getTime()) / 60e3; return clamp(1 - Math.max(0, m - 20) / 80, 0.15, 1); };   // fullest around sunrise, thinning over the next hour and a half
+
+// ---------- cicadas: several choruses at different pitches and rates, swelling independently ----------
+function cicadas() {
+  const L = layer('cicadas');
+  for (let i = 0; i < 3; i++) { const src = ctx.createBufferSource(); src.buffer = noiseBuffer(3); src.loop = true; const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = rnd(4800, 7200); bp.Q.value = rnd(5, 9);
+    const am = ctx.createGain(); am.gain.value = 0; const lfo = ctx.createOscillator(); lfo.frequency.value = rnd(95, 180); const lg = ctx.createGain(); lg.gain.value = 0.5; lfo.connect(lg); lg.connect(am.gain);
+    const swell = ctx.createGain(); swell.gain.value = 0; const out = place(L, rnd(-1, 1), rnd(0.2, 1.4)); src.connect(bp); bp.connect(am); am.connect(swell); swell.connect(out); src.start(); lfo.start(); L.nodes.push(src, lfo);
+    const cycle = () => { const t = now(), up = rnd(3, 9), hold = rnd(2, 10), down = rnd(3, 9), peak = rnd(0.12, 0.26); swell.gain.cancelScheduledValues(t); swell.gain.setValueAtTime(swell.gain.value, t);
+      swell.gain.linearRampToValueAtTime(peak, t + up); swell.gain.setValueAtTime(peak, t + up + hold); swell.gain.linearRampToValueAtTime(0, t + up + hold + down); L.timers.push(setTimeout(cycle, (up + hold + down + rnd(3, 25)) * 1000)); };
+    L.timers.push(setTimeout(cycle, rnd(0, 15000))); }
+}
+// ---------- an insect flying past: a buzz that swings across the stereo field ----------
+function flyby() { const L = layer('daybirds'); every(L, () => { const t = now(), o = ctx.createOscillator(), g = ctx.createGain(), lp = ctx.createBiquadFilter(), p = pan(0); o.type = 'sawtooth'; lp.type = 'lowpass'; lp.frequency.value = 900; const f = rnd(180, 420), dur = rnd(1.2, 2.6), from = Math.random() < 0.5 ? -1 : 1;
+  o.frequency.setValueAtTime(f * 1.06, t); o.frequency.linearRampToValueAtTime(f * 0.95, t + dur); p.pan.setValueAtTime(from, t); p.pan.linearRampToValueAtTime(-from, t + dur);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.05, t + dur * 0.45); g.gain.linearRampToValueAtTime(0, t + dur); o.connect(lp); lp.connect(g); g.connect(p); p.connect(L.gain); o.start(t); o.stop(t + dur + 0.05); }, 70, 260); }
+
+// ---------- rain and thunder, only when it is really raining outside ----------
+function rain() {
+  const L = layer('rain'), src = ctx.createBufferSource(); src.buffer = noiseBuffer(6, 'white'); src.loop = true; const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 900; const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 7000;
+  const g = ctx.createGain(); g.gain.value = 0.12; src.connect(hp); hp.connect(lp); lp.connect(g); g.connect(L.gain); src.start(); L.nodes.push(src);
+  every(L, () => { const t = now(); for (let k = 0; k < 3; k++) { const s = t + rnd(0, 1.5), o = ctx.createOscillator(), gg = ctx.createGain(); o.frequency.setValueAtTime(rnd(1800, 3200), s); o.frequency.exponentialRampToValueAtTime(rnd(900, 1500), s + 0.03);
+      gg.gain.setValueAtTime(0, s); gg.gain.linearRampToValueAtTime(0.05, s + 0.003); gg.gain.exponentialRampToValueAtTime(0.0004, s + 0.06); const out = place(L, rnd(-1, 1), rnd(0, 0.8)); o.connect(gg); gg.connect(out); o.start(s); o.stop(s + 0.08); } }, 0.5, 2);   // drips from the leaves
+  every(L, () => { if (!WX.storm) return; const t = now(), s = ctx.createBufferSource(); s.buffer = noiseBuffer(6); const lp2 = ctx.createBiquadFilter(); lp2.type = 'lowpass'; lp2.frequency.setValueAtTime(140, t); lp2.frequency.linearRampToValueAtTime(60, t + 6);
+    const gg = ctx.createGain(); gg.gain.setValueAtTime(0, t); gg.gain.linearRampToValueAtTime(0.5, t + rnd(0.4, 1.5)); gg.gain.exponentialRampToValueAtTime(0.0005, t + rnd(5, 9)); const p = pan(rnd(-0.6, 0.6)); s.connect(lp2); lp2.connect(gg); gg.connect(p); p.connect(L.gain); s.start(t); s.stop(t + 10); }, 40, 150);
+}
+async function weather() { try { const w = await (await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${WEATHER.lat}&longitude=${WEATHER.lon}&current=precipitation,weather_code&daily=sunrise,sunset&timezone=auto&forecast_days=1`)).json();
+  SUN = { rise: new Date(w.daily.sunrise[0]), set: new Date(w.daily.sunset[0]) }; const code = w.current.weather_code, mm = w.current.precipitation || 0;
+  WX = { rain: (mm > 0 || (code >= 51 && code <= 67) || (code >= 80 && code <= 82) || code >= 95) ? clamp(0.4 + mm / 3, 0.4, 1) : 0, storm: code >= 95 }; } catch {}
+  if (FORCE_RAIN) WX.rain = parseFloat(FORCE_RAIN); const L = layer('rain'), t = now(); L.gain.gain.cancelScheduledValues(t); L.gain.gain.setValueAtTime(L.gain.gain.value, t); L.gain.gain.linearRampToValueAtTime(WX.rain, t + 45); }
+
+// ---------- phase mix (gains crossfade over 60 s) ----------
+const MIX = { night: { wind: 0.9, crickets: 1, frogs: 1, night: 1, dawnbirds: 0, daybirds: 0, cicadas: 0 },
+              dawn:  { wind: 0.8, crickets: 0.35, frogs: 0.25, night: 0.2, dawnbirds: 1, daybirds: 0.5, cicadas: 0.1 },
+              day:   { wind: 1, crickets: 0, frogs: 0, night: 0, dawnbirds: 0, daybirds: 0.8, cicadas: 1 },
+              dusk:  { wind: 0.9, crickets: 0.6, frogs: 0.35, night: 0.4, dawnbirds: 0, daybirds: 0.3, cicadas: 0.7 } };
+function applyPhase(ph) { if (ph === phase) return; phase = ph; say('phase ' + ph);
+  for (const [name, v] of Object.entries(MIX[ph])) { const L = layer(name); const t = now(); L.gain.gain.cancelScheduledValues(t); L.gain.gain.setValueAtTime(L.gain.gain.value, t); L.gain.gain.linearRampToValueAtTime(v, t + 60); } }
+function phaseFor() { if (FORCE) return FORCE; const n = Date.now(), h = new Date().getHours();
+  if (SUN) { const r = SUN.rise.getTime(), s = SUN.set.getTime(), H = 3600e3; if (n >= r - H && n < r + H) return 'dawn'; if (n >= r + H && n < s - H) return 'day'; if (n >= s - H && n < s + H) return 'dusk'; return 'night'; }
+  return h >= 5 && h < 8 ? 'dawn' : h >= 8 && h < 17 ? 'day' : h >= 17 && h < 20 ? 'dusk' : 'night'; }
+
+// ---------- real recordings, if present ----------
+async function recordings() { const found = {}; for (const ph of ['night', 'dawn', 'day', 'dusk']) { try { const r = await fetch(`ambience/${ph}.mp3`, { method: 'HEAD' }); if (r.ok) found[ph] = `ambience/${ph}.mp3`; } catch {} } return found; }
+let rec = {}, recNodes = {};
+function playRecording(ph) { for (const [k, n] of Object.entries(recNodes)) { const t = now(); n.g.gain.cancelScheduledValues(t); n.g.gain.setValueAtTime(n.g.gain.value, t); n.g.gain.linearRampToValueAtTime(0, t + 20); setTimeout(() => { try { n.el.pause(); } catch {} }, 21000); delete recNodes[k]; }
+  const el = new Audio(rec[ph]); el.loop = true; el.crossOrigin = 'anonymous'; const s = ctx.createMediaElementSource(el), g = ctx.createGain(); g.gain.value = 0; s.connect(g); g.connect(master); el.play().catch(() => {});
+  g.gain.linearRampToValueAtTime(1, now() + 20); recNodes[ph] = { el, g }; }
+
+// ---------- boot ----------
+window.STATS = { started: false, phase: null, level: 0, rain: 0 };
+// ---------- the Oracle: when the bot writes a new fortune, a bolt cracks over the court, then a mystic shimmer and a low temple drone ----------
+let oracleTs = 0;
+function oracleWatch() { setInterval(async () => { try { const f = await (await fetch('fortune.json?' + Date.now(), { cache: 'no-store' })).json();
+  if (!f || !f.ts || f.ts === oracleTs || Date.now() / 1000 - f.ts > 90) return; oracleTs = f.ts; setTimeout(sting, 1800); } catch {} }, 3000); }
+function sting() {
+  const t = now(), L = layer('oracle'); L.gain.setValueAtTime(1, t);
+  // 1. the crack: a short bright noise burst, then the rumble rolling away
+  const crack = ctx.createBufferSource(); crack.buffer = noiseBuffer(1, 'white'); const cg = ctx.createGain(); cg.gain.setValueAtTime(0, t); cg.gain.linearRampToValueAtTime(0.9, t + 0.01); cg.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+  const chp = ctx.createBiquadFilter(); chp.type = 'highpass'; chp.frequency.value = 1200; crack.connect(chp); chp.connect(cg); cg.connect(L.gain); crack.start(t); crack.stop(t + 0.5);
+  const rum = ctx.createBufferSource(); rum.buffer = noiseBuffer(6); const rl = ctx.createBiquadFilter(); rl.type = 'lowpass'; rl.frequency.setValueAtTime(220, t); rl.frequency.exponentialRampToValueAtTime(50, t + 5);
+  const rg = ctx.createGain(); rg.gain.setValueAtTime(0, t + 0.05); rg.gain.linearRampToValueAtTime(0.6, t + 0.25); rg.gain.exponentialRampToValueAtTime(0.0005, t + 5.5); rum.connect(rl); rl.connect(rg); rg.connect(L.gain); rum.start(t); rum.stop(t + 6);
+  // 2. the shimmer: a cascade of detuned bell tones on a pentatonic scale, panned across the court
+  const scale = [523, 587, 659, 784, 880, 1046, 1174, 1318]; for (let i = 0; i < 14; i++) { const s = t + 0.4 + i * 0.11 + rnd(0, 0.05), f = scale[(i * 3 + Math.floor(rnd(0, 3))) % scale.length] * (i > 8 ? 2 : 1);
+    const out = place(L, rnd(-0.9, 0.9), 0.6); tone(L, out, f * 1.003, f, s, rnd(1.2, 2.4), 0.14, 'sine', 0.01); tone(L, out, f * 2.01, f * 2, s, rnd(0.6, 1.2), 0.03, 'triangle', 0.005); }
+  // 3. the temple drone: two low voices a fifth apart, swelling and fading under the card
+  for (const f of [65.4, 98]) { const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'sawtooth'; o.frequency.value = f; const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 260;
+    g.gain.setValueAtTime(0, t + 0.3); g.gain.linearRampToValueAtTime(0.07, t + 2.5); g.gain.linearRampToValueAtTime(0, t + 9); o.connect(lp); lp.connect(g); g.connect(L.gain); o.start(t + 0.3); o.stop(t + 9.2); }
+  say('oracle sting');
+}
+window.sting = sting;
+let tarotTs = 0;
+function tarotWatch() { setInterval(async () => { try { const f = await (await fetch('tarot.json?' + Date.now(), { cache: 'no-store' })).json();
+  if (!f || !f.ts || f.ts === tarotTs || Date.now() / 1000 - f.ts > 90) return; tarotTs = f.ts; shuffleSting(); } catch {} }, 2000); }
+// a bowed-string voice: sawtooth through a warm lowpass, slow vibrato, soft swell — for a short caravan-fiddle phrase (quiet, under the reading)
+function fiddle(L, out, f, s, dur, peak) { const o = ctx.createOscillator(), g = ctx.createGain(), lp = ctx.createBiquadFilter(), vib = ctx.createOscillator(), vg = ctx.createGain();
+  o.type = 'sawtooth'; o.frequency.setValueAtTime(f, s); lp.type = 'lowpass'; lp.frequency.value = 1800; lp.Q.value = 1.2; vib.frequency.value = 5.5; vg.gain.value = f * 0.012; vib.connect(vg); vg.connect(o.frequency);
+  g.gain.setValueAtTime(0, s); g.gain.linearRampToValueAtTime(peak, s + 0.12); g.gain.setValueAtTime(peak, s + dur - 0.15); g.gain.linearRampToValueAtTime(0, s + dur); o.connect(lp); lp.connect(g); g.connect(out); o.start(s); vib.start(s); o.stop(s + dur + 0.05); vib.stop(s + dur + 0.05); }
+function zill(L, out, s) { for (const f of [2960, 4180, 5600]) tone(L, out, f, f * 0.998, s, 1.6, 0.16, 'sine', 0.002); tone(L, out, 1480, 1470, s, 1.2, 0.06, 'sine', 0.002); }   // finger cymbals: three inharmonic partials
+function shuffleSting() {
+  const t = now(), L = layer('oracle'); L.gain.setValueAtTime(1, t);
+  for (let i = 0; i < 14; i++) { const s = t + 0.1 + i * 0.055 + rnd(0, 0.01), src = ctx.createBufferSource(); src.buffer = noiseBuffer(0.2, 'white'); const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = rnd(2200, 3800); bp.Q.value = 2;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0, s); g.gain.linearRampToValueAtTime(0.28, s + 0.004); g.gain.exponentialRampToValueAtTime(0.0005, s + 0.05); const out = place(L, rnd(-0.3, 0.3), 0.45); src.connect(bp); bp.connect(g); g.connect(out); src.start(s); src.stop(s + 0.08); }   // the riffle
+  setTimeout(() => { const t2 = now(), crack = ctx.createBufferSource(); crack.buffer = noiseBuffer(1, 'white'); const cg = ctx.createGain(); cg.gain.setValueAtTime(0, t2); cg.gain.linearRampToValueAtTime(0.7, t2 + 0.01); cg.gain.exponentialRampToValueAtTime(0.001, t2 + 0.3);
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1200; crack.connect(hp); hp.connect(cg); cg.connect(L.gain); crack.start(t2); crack.stop(t2 + 0.4); }, 900);   // the bolt
+  [1.6, 2.9, 4.2].forEach((d, i) => zill(L, place(L, -0.5 + i * 0.5, 0.5), t + d));                                      // a finger-cymbal chime as each card turns
+  // the caravan phrase: D harmonic minor, slow, one violin far left and its echo far right
+  const notes = [[293.7, 0.6], [349.2, 0.5], [415.3, 0.7], [440, 0.4], [415.3, 0.5], [349.2, 0.6], [293.7, 1.4]]; let s = t + 5.2;
+  const vl = place(L, -0.7, 0.9), vr = place(L, 0.7, 1.3);
+  for (const [f, d] of notes) { fiddle(L, vl, f, s, d, 0.16); fiddle(L, vr, f / 2, s + 0.03, d, 0.09); s += d * 0.95; }
+  for (const f of [73.4, 110]) { const o = ctx.createOscillator(), g = ctx.createGain(), lp = ctx.createBiquadFilter(); o.type = 'sawtooth'; o.frequency.value = f; lp.type = 'lowpass'; lp.frequency.value = 220;
+    g.gain.setValueAtTime(0, t + 1); g.gain.linearRampToValueAtTime(0.09, t + 4); g.gain.linearRampToValueAtTime(0, t + 12); o.connect(lp); lp.connect(g); g.connect(L.gain); o.start(t + 1); o.stop(t + 12.2); }   // a low drone under it all
+  say('tarot sting');
+}
+window.shuffleSting = shuffleSting;
+async function start() {
+  ctx = new (window.AudioContext || window.webkitAudioContext)(); master = ctx.createGain(); master.gain.value = MASTER;
+  // blend: everything passes through a soft high cut (insects lose their edge), a gentle shelf, a shared room
+  // reverb (so the voices sit in one space) and a slow compressor
+  const hc = ctx.createBiquadFilter(); hc.type = 'lowpass'; hc.frequency.value = 5200; hc.Q.value = 0.5;
+  const shelf = ctx.createBiquadFilter(); shelf.type = 'highshelf'; shelf.frequency.value = 2800; shelf.gain.value = -7;
+  const verb = ctx.createConvolver(); { const len = ctx.sampleRate * 2.2, b = ctx.createBuffer(2, len, ctx.sampleRate); for (let ch = 0; ch < 2; ch++) { const dd = b.getChannelData(ch); for (let i = 0; i < len; i++) dd[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.2) * 0.5; } verb.buffer = b; }
+  const wet = ctx.createGain(); wet.gain.value = 0.32, dry = ctx.createGain(); dry.gain.value = 0.85;
+  const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -22; comp.ratio.value = 3; comp.attack.value = 0.03; comp.release.value = 0.6;
+  window.SHELF = shelf; master.connect(hc); hc.connect(shelf); shelf.connect(dry); shelf.connect(verb); verb.connect(wet); dry.connect(comp); wet.connect(comp); comp.connect(ctx.destination);
+  const an = ctx.createAnalyser(); an.fftSize = 1024; comp.connect(an); const buf = new Float32Array(an.fftSize);
+  setInterval(() => { an.getFloatTimeDomainData(buf); let s = 0; for (const v of buf) s += v * v; STATS.level = Math.sqrt(s / buf.length); STATS.phase = phase; STATS.rain = WX.rain; STATS.started = ctx.state === 'running'; }, 1000);
+  await weather(); rec = await recordings();
+  if (Object.keys(rec).length) { say('using recordings ' + Object.keys(rec).join(',')); const tickR = () => { const ph = rec[phaseFor()] ? phaseFor() : Object.keys(rec)[0]; if (ph !== phase) { phase = ph; playRecording(ph); } }; tickR(); setInterval(tickR, 30000); }
+  else { wind(); crickets(); frogs(); nightjar(); owl(); birds('dawnbirds', 10, 1, 5, dawnCurve); birds('daybirds', 5, 5, 20, drifter(500)); flyby(); cicadas(); rain(); applyPhase(phaseFor()); setInterval(() => applyPhase(phaseFor()), 30000); }
+  setInterval(weather, 10 * 60e3);
+  oracleWatch(); tarotWatch();
+  if (ctx.state !== 'running') { try { await ctx.resume(); } catch {} }
+  say('running: ' + ctx.state);
+}
+start();
+document.addEventListener('click', () => ctx && ctx.resume());   // for manual previews in a normal browser
+</script></body></html>

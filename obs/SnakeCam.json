@@ -1,0 +1,145 @@
+{
+  "name": "SnakeCam",
+  "current_scene": "Snake Cam",
+  "current_program_scene": "Snake Cam",
+  "scene_order": [
+    {
+      "name": "Snake Cam"
+    }
+  ],
+  "sources": [
+    {
+      "name": "Hot Side (Relay)",
+      "id": "ffmpeg_source",
+      "versioned_id": "ffmpeg_source",
+      "muted": true,
+      "monitoring_type": 0,
+      "settings": {
+        "is_local_file": false,
+        "input": "rtsp://127.0.0.1:8555/hotcam",
+        "input_format": "rtsp",
+        "buffering_mb": 2,
+        "reconnect_delay_sec": 2,
+        "restart_on_activate": true,
+        "clear_on_media_end": false,
+        "close_when_inactive": false,
+        "hw_decode": true,
+        "ffmpeg_options": "rtsp_transport=tcp"
+      }
+    },
+    {
+      "name": "Cool Side (Relay)",
+      "id": "ffmpeg_source",
+      "versioned_id": "ffmpeg_source",
+      "muted": true,
+      "monitoring_type": 0,
+      "settings": {
+        "is_local_file": false,
+        "input": "rtsp://127.0.0.1:8555/coolcam",
+        "input_format": "rtsp",
+        "buffering_mb": 2,
+        "reconnect_delay_sec": 2,
+        "restart_on_activate": true,
+        "clear_on_media_end": false,
+        "close_when_inactive": false,
+        "hw_decode": true,
+        "ffmpeg_options": "rtsp_transport=tcp"
+      }
+    },
+    {
+      "name": "Ambience",
+      "id": "browser_source",
+      "versioned_id": "browser_source",
+      "volume": 0.5,
+      "settings": {
+        "is_local_file": false,
+        "url": "http://localhost:5050/static/snakecam/ambience.html",
+        "width": 2,
+        "height": 2,
+        "reroute_audio": true,
+        "shutdown": false,
+        "restart_when_active": false
+      }
+    },
+    {
+      "name": "Overlay",
+      "id": "browser_source",
+      "versioned_id": "browser_source",
+      "settings": {
+        "is_local_file": false,
+        "url": "http://localhost:5050/static/snakecam/overlay.html",
+        "width": 1920,
+        "height": 1080,
+        "fps_custom": false,
+        "reroute_audio": false,
+        "shutdown": false,
+        "restart_when_active": false
+      }
+    },
+    {
+      "name": "Snake Cam",
+      "id": "scene",
+      "versioned_id": "scene",
+      "settings": {
+        "id_counter": 7,
+        "custom_size": false,
+        "items": [
+          {
+            "id": 4,
+            "name": "Hot Side (Relay)",
+            "visible": true,
+            "locked": true,
+            "pos": {
+              "x": 0,
+              "y": 270
+            },
+            "bounds_type": 2,
+            "bounds": {
+              "x": 960,
+              "y": 540
+            },
+            "bounds_align": 0
+          },
+          {
+            "id": 5,
+            "name": "Cool Side (Relay)",
+            "visible": true,
+            "locked": true,
+            "pos": {
+              "x": 960,
+              "y": 270
+            },
+            "bounds_type": 2,
+            "bounds": {
+              "x": 960,
+              "y": 540
+            },
+            "bounds_align": 0
+          },
+          {
+            "id": 3,
+            "name": "Overlay",
+            "visible": true,
+            "locked": true,
+            "pos": {
+              "x": 0,
+              "y": 0
+            },
+            "bounds_type": 0
+          },
+          {
+            "id": 7,
+            "name": "Ambience",
+            "visible": true,
+            "locked": true,
+            "pos": {
+              "x": 0,
+              "y": 0
+            },
+            "bounds_type": 0
+          }
+        ]
+      }
+    }
+  ]
+}

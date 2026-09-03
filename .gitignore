@@ -1,0 +1,9 @@
+.env
+tokens/
+overlay/lake/
+*.log
+token.json
+court.json
+seen.json
+rip.json
+.DS_Store
