@@ -5,7 +5,7 @@
 #         ./feed.sh plan YYYY-MM-DD        pin the next attempt to a date (cleared by ate/refused)
 #         ./feed.sh shed [YYYY-MM-DD]      she shed her skin (default: today)
 #         ./feed.sh                        show current state
-set -eu; cd "$(dirname "$0")"
+set -eu; cd "$(dirname "$0")/.."   # the kit root
 F=overlay/feeding.json; L=logs/feeding.log
 [ -f $F ] || echo '{"lastAte":null,"lastOffered":null,"intervalDays":7}' > $F
 today=$(date +%F); when=${2:-$today}

@@ -7,3 +7,11 @@ court.json
 seen.json
 rip.json
 .DS_Store
+# runtime layout created by install.sh at the kit root
+/docker-compose.yml
+/overlay/
+/logs/
+chatbot/.venv/
+chatbot/cli-workdir/
+sensors/SnakeSensors.app/
+.doctor-*.tmp

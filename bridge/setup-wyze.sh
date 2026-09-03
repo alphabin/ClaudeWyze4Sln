@@ -1,7 +1,8 @@
 #!/bin/bash
 # Prompts for your Wyze login + API key pair and writes them into .env.
 # Nothing is echoed back; the password is typed blind. Re-run any time to change them.
-cd "$(dirname "$0")"
+cd "${SNAKECAM_ROOT:-$(dirname "$0")/..}" || exit 1   # .env lives at the runtime root (the kit root by default)
+[ -f .env ] || { [ -f "$(dirname "$0")/.env.example" ] && cp "$(dirname "$0")/.env.example" .env; }
 echo "Wyze credentials -> .env   (API key pair from https://developer-api-console.wyze.com/)"
 read -r  -p "Wyze account email : " email
 read -rs -p "Wyze password      : " pw; echo

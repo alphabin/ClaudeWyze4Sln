@@ -2,6 +2,8 @@
 
 **Live demo:** [twitch.tv/princesscleolive](https://www.twitch.tv/princesscleolive) — Princess Cleo, a ball python in Southern California, streaming around the clock from two Wyze cameras. She answers chat as herself, looks at her own cameras before she tells you what she's doing, clips herself when she moves, reads tarot, and tells fortunes. Everything on that stream comes from this repository.
 
+**Start here:** [QUICKSTART.md](QUICKSTART.md) — `git clone`, `./install.sh`, and a blank Apple-silicon Mac is live on Twitch in about 20 minutes. `./doctor.sh` checks every layer afterwards.
+
 **Here for the Pan V4 / `IOTC_ER_UNLICENSE` problem?** Read [WRITEUP.md](WRITEUP.md): why the V4 never uses TUTK, the Agora ("lake") path Wyze's own web viewer takes, and a step-by-step reproduction with `lake/provision.py` + `players/lake.html` + a local relay so OBS, ffmpeg or Home Assistant can pull it as RTSP.
 
 ## What you end up with

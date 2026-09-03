@@ -1,6 +1,6 @@
 #!/bin/bash
 # Double-click in Finder: brings the whole snake stream up. Safe to run when it's already running.
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."   # the kit root (this script lives in scripts/)
 echo "▶ Docker VM";        colima start 2>&1 | grep -E "done|error" | tail -1
 echo "▶ Wyze bridge + Pan V4 provisioner"; docker compose up -d 2>&1 | tail -2
 echo "▶ Video relay";      launchctl load ~/Library/LaunchAgents/com.snakecam.relay.plist 2>/dev/null; echo "   loaded"
