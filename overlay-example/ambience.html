@@ -201,7 +201,7 @@ window.shuffleSting = shuffleSting;
 // ---------- Moon Interlude: a generative Japanese piece (hirajōshi scale) under a haiku, ~70 s, triggered by overlay/interlude.json ----------
 let interludeTs = 0;
 function interludeWatch() { setInterval(async () => { try { const f = await (await fetch('interlude.json?' + Date.now(), { cache: 'no-store' })).json();
-  if (!f || !f.ts || f.ts === interludeTs || Date.now() / 1000 - f.ts > 90) return; interludeTs = f.ts; moonInterlude(); } catch {} }, 3000); }
+  if (!f || !f.ts || f.ts === interludeTs || Date.now() / 1000 - f.ts > 90) return; interludeTs = f.ts; moonInterlude(f); } catch {} }, 3000); }
 // koto: an additive pluck — fundamental + harmonics with fast, pitch-dependent decay and a touch of inharmonicity. No feedback loop
 // anywhere (a delay-and-filter string loop can exceed unity gain and run away to infinity, which kills the whole audio graph).
 function koto(L, out, f, s, dur, peak) { const parts = [[1, 1], [2, 0.55], [3, 0.35], [4, 0.2], [5, 0.12], [6.02, 0.07]]; for (const [h, a] of parts) { const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = f * h * (1 + 0.0004 * h * h);
@@ -214,24 +214,32 @@ function shakuhachi(L, out, f, s, dur, peak) { const o = ctx.createOscillator(),
 function taiko(L, out, s, peak) { const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.setValueAtTime(110, s); o.frequency.exponentialRampToValueAtTime(48, s + 0.25); g.gain.setValueAtTime(peak, s); g.gain.exponentialRampToValueAtTime(0.0005, s + 0.6); o.connect(g); g.connect(out); o.start(s); o.stop(s + 0.7);
   const n = ctx.createBufferSource(); n.buffer = noiseBuffer(0.3, 'white'); const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900; const ng = ctx.createGain(); ng.gain.setValueAtTime(peak * 0.5, s); ng.gain.exponentialRampToValueAtTime(0.0005, s + 0.12); n.connect(lp); lp.connect(ng); ng.connect(out); n.start(s); n.stop(s + 0.3); }
 function furin(L, out, s) { const f = rnd(2400, 3600); for (const m of [1, 2.76, 5.4]) tone(L, out, f * m, f * m * 0.999, s, rnd(1.5, 3), 0.05 / m, 'sine', 0.003); }
-function moonInterlude() {
+function moonInterlude(f) {
+  // every interlude is its own piece: scene + theme pick the mode, root, tempo and who leads; the phrase is composed fresh each time
   window._oracleAt = now(); const t = now(), L = layer('oracle'); L.gain.gain.setValueAtTime(1, t);
-  const base = 146.8;                                                    // D — hirajōshi: 1, b2, 4, 5, b6  (D Eb G A Bb)
-  const scale = [1, 16 / 15, 4 / 3, 3 / 2, 8 / 5, 2, 32 / 15, 8 / 3, 3, 16 / 5].map(r => base * r);
+  f = f || {}; const day = f.scene === 'blossom'; const theme = String(f.theme || ''); let seed = 0; for (const c of theme + (f.ts || '')) seed = (seed * 31 + c.charCodeAt(0)) >>> 0;
+  const R = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; }; const pickR = a => a[Math.floor(R() * a.length)];
+  const modes = { insen: [1, 16 / 15, 4 / 3, 3 / 2, 16 / 9], hira: [1, 16 / 15, 4 / 3, 3 / 2, 8 / 5], miyako: [1, 16 / 15, 4 / 3, 3 / 2, 8 / 5], yo: [1, 9 / 8, 4 / 3, 3 / 2, 27 / 16], ritsu: [1, 9 / 8, 4 / 3, 3 / 2, 16 / 9] };
+  const modeName = day ? pickR(['yo', 'ritsu', 'yo', 'hira']) : pickR(['insen', 'miyako', 'hira', 'insen']);
+  const dark = /loss|fear|solitude|impermanence|old|silence|question/.test(theme), bright = /love|kindness|beauty|warmth|sun|home/.test(theme);
+  const base = 110 * pickR([1, 4 / 3, 3 / 2, 1.25, 1.6]) * (day ? 1.33 : 1); const sc = modes[modeName].map(r => base * r).concat(modes[modeName].map(r => base * r * 2));
+  const tempo = (dark ? 0.9 : 0.62) * pickR([0.85, 1, 1.15]);                    // seconds per koto step
+  const lead = pickR(day ? ['koto', 'koto', 'chimes', 'flute'] : ['flute', 'koto', 'flute', 'drum']);
   const kL = place(L, -0.35, 0.6), kR = place(L, 0.35, 0.7), sh = place(L, 0.1, 1.1), dr = place(L, 0, 1.4), ch = place(L, 0.8, 1.6);
-  // slow heartbeat taiko every ~4 s, softer than the strings
-  for (let i = 0; i < 17; i++) taiko(L, dr, t + 1 + i * 4.1, i % 4 === 0 ? 0.14 : 0.08);
-  // koto: an unhurried phrase, repeated with variation, two hands slightly apart
-  let s = t + 2;
-  for (let bar = 0; bar < 8; bar++) { const steps = [0, 2, 3, 4, 3, 2, 5, 4].map(i => (i + (bar % 2 ? 1 : 0)) % scale.length);
-    for (let i = 0; i < steps.length; i++) { const f = scale[steps[i]] * 2, dwell = rnd(0.55, 0.85); koto(L, i % 2 ? kR : kL, f, s, 2.6, 0.10); if (Math.random() < 0.4) koto(L, kL, f / 2, s + 0.02, 3.2, 0.05); s += dwell; } s += rnd(0.8, 1.6); }
-  // shakuhachi: three long breaths over the top, entering late
-  const breaths = [[scale[3] * 2, 5], [scale[4] * 2, 4], [scale[2] * 2, 6.5]]; let b = t + 14;
-  for (const [f, d] of breaths) { shakuhachi(L, sh, f, b, d, 0.045); b += d + rnd(4, 7); }
-  shakuhachi(L, sh, scale[0] * 2, t + 52, 8, 0.04);
-  // furin wind chimes, sparse
-  for (let i = 0; i < 9; i++) furin(L, ch, t + rnd(3, 66));
-  say('moon interlude');
+  const kotoV = lead === 'koto' ? 0.12 : 0.07, fluteV = lead === 'flute' ? 0.06 : 0.035, drumV = lead === 'drum' ? 0.16 : (day ? 0 : 0.08), chimeN = lead === 'chimes' ? 22 : (day ? 10 : 6);
+  // the phrase: a random walk of 6-9 steps with a shape (arch / descent / call-and-answer), repeated 6-8 times with variation
+  const len = 6 + Math.floor(R() * 4), shape = pickR(['arch', 'descent', 'callanswer', 'walk']); let idx = Math.floor(R() * 4), steps = [];
+  for (let k = 0; k < len; k++) { const dir = shape === 'arch' ? (k < len / 2 ? 1 : -1) : shape === 'descent' ? -1 : shape === 'callanswer' ? (k % 3 === 2 ? -2 : 1) : (R() < 0.5 ? -1 : 1); idx = Math.max(0, Math.min(sc.length - 1, idx + dir * (R() < 0.2 ? 2 : 1))); steps.push(idx); }
+  if (drumV) for (let i = 0; i < 16; i++) taiko(L, dr, t + 1 + i * (dark ? 4.6 : 3.8), i % 4 === 0 ? drumV : drumV * 0.55);
+  let s2 = t + 2;
+  for (let bar = 0; bar < 7; bar++) { const vary = bar % 2 ? 1 : 0;
+    for (let i = 0; i < steps.length; i++) { const f0 = sc[Math.min(sc.length - 1, steps[i] + vary)]; koto(L, i % 2 ? kR : kL, f0, s2, 2.6, kotoV); if (R() < 0.35) koto(L, kL, f0 / 2, s2 + 0.02, 3.2, kotoV * 0.5); s2 += tempo * (0.8 + R() * 0.5); }
+    s2 += (bright ? 0.6 : 1.2) + R() * 1.2; }
+  // flute: two to four long breaths, entering after the first phrase, notes from the same scale
+  let b = t + (lead === 'flute' ? 6 : 14), nb = 2 + Math.floor(R() * 3);
+  for (let k = 0; k < nb; k++) { const f0 = sc[3 + Math.floor(R() * (sc.length - 3))] * (day ? 1 : 1); const d = 4 + R() * 4; shakuhachi(L, sh, f0, b, d, fluteV); b += d + 3 + R() * 5; }
+  for (let i = 0; i < chimeN; i++) furin(L, ch, t + 2 + R() * 62);
+  say('interlude ' + (day ? 'blossom' : 'moon') + ' ' + modeName + ' ' + lead + ' ' + shape);
 }
 window.moonInterlude = moonInterlude;
 // ---------- the music bed: a very quiet, endless, original piece in the spirit of Japanese film scores — long breath tones, a drone that
