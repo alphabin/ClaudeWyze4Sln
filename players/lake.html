@@ -15,7 +15,8 @@
 // Wyze "lake" camera -> Agora channel -> this page -> OBS Browser Source.
 // Usage: lake.html?cam=snake-cam-cool   (session JSON written by lake/provision.py, served by the bridge at /static/lake/<cam>.json)
 const q = new URLSearchParams(location.search);
-const CAM = q.get('cam'), RES = q.get('res') || '2k';          // 360p | SD | HD | 2k
+const CAM = q.get('cam'), RES = q.get('res') || '2k';
+const BRIDGE = location.origin.startsWith('http') ? location.origin : 'http://localhost:5050';   // the bridge that serves this page; its power API reboots the camera          // 360p | SD | HD | 2k
 const WHIP = q.get('whip');   // relay mode: e.g. &whip=http://localhost:8890/coolcam/whip -> re-publish the decoded video into the local relay (mediamtx)
 const msg = document.getElementById('msg'), stage = document.getElementById('stage');
 const say = t => { msg.textContent = t; console.log('[lake]', t); };
