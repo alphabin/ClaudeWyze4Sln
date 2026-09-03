@@ -169,15 +169,31 @@
   #tcardtext .cursor{display:inline-block;width:9px;height:20px;background:#8a6a2a;margin-left:4px;vertical-align:-3px;animation:pulse 1s infinite}
   #show{position:absolute;right:40px;top:214px;display:flex;align-items:center;gap:8px;padding:4px 12px;border:1px solid rgba(217,182,91,.45);border-radius:999px;background:rgba(10,8,20,.55);font-family:var(--display);font-size:13px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold-2);opacity:0;transition:opacity 1s}
   #show.on{opacity:1} #show i{width:7px;height:7px;border-radius:50%;background:var(--gold-2);box-shadow:0 0 8px var(--gold-2)}
-  #haiku{position:absolute;right:60px;top:250px;width:420px;padding:26px 30px 30px;background:#efe6cf url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence baseFrequency='.8' numOctaves='2'/><feColorMatrix values='0 0 0 0 .3 0 0 0 0 .22 0 0 0 0 .12 0 0 0 .12 0'/></filter><rect width='120' height='120' filter='url(%23n)'/></svg>");
-    border:1px solid #9a7a3a;box-shadow:0 20px 50px rgba(0,0,0,.6),inset 0 0 0 6px #efe6cf,inset 0 0 0 7px #b8933f;opacity:0;transform:translateY(20px);transition:opacity 1.6s ease,transform 1.6s ease;pointer-events:none}
-  #haiku.on{opacity:1;transform:translateY(0)}
-  #haiku .hk{font-family:'Cinzel',serif;font-size:11px;letter-spacing:.34em;color:#7a5a1a;text-align:center;margin-bottom:14px}
-  #haiku .line{font-family:'Cinzel',serif;font-size:30px;line-height:1.35;color:#231608;opacity:0;transform:translateX(-8px);transition:opacity 1.4s ease,transform 1.4s ease;text-align:center}
-  #haiku .line.on{opacity:1;transform:none}
-  #haiku .seal{position:absolute;right:18px;bottom:14px;width:34px;height:34px;border:2px solid #a8322a;border-radius:4px;color:#a8322a;font-family:'Cinzel',serif;font-weight:700;font-size:16px;display:flex;align-items:center;justify-content:center;transform:rotate(-6deg);opacity:.85}
-  #moon{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity 2s;background:radial-gradient(circle at 78% 18%,rgba(240,235,220,.28),transparent 22%),linear-gradient(180deg,rgba(6,8,24,.35),rgba(6,8,24,.5))}
+  /* Moon Interlude scene: indigo wash, a moon with halo, drifting mist, ink-wash ridges, falling petals (canvas), the haiku brushed in */
+  #moon{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity 3s ease;background:linear-gradient(180deg,rgba(8,10,34,.72),rgba(10,12,40,.55) 55%,rgba(6,6,20,.8))}
   #moon.on{opacity:1}
+  #moon .disc{position:absolute;right:120px;top:240px;width:150px;height:150px;border-radius:50%;background:radial-gradient(circle at 42% 38%,#fff9e6,#efe3bf 55%,#d9c99a);box-shadow:0 0 40px 10px rgba(255,244,210,.55),0 0 160px 60px rgba(255,236,190,.22),0 0 320px 120px rgba(200,190,255,.12)}
+  #moon .disc:after{content:"";position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 60% 60%,rgba(120,100,70,.18),transparent 30%),radial-gradient(circle at 30% 65%,rgba(120,100,70,.14),transparent 22%)}
+  #moon .mist{position:absolute;left:-10%;width:120%;height:220px;filter:blur(38px);opacity:.55;background:linear-gradient(90deg,transparent,rgba(190,200,235,.35) 30%,rgba(190,200,235,.5) 50%,rgba(190,200,235,.3) 70%,transparent)}
+  #moon .mist.a{top:520px;animation:mist-a 46s ease-in-out infinite alternate}
+  #moon .mist.b{top:640px;opacity:.4;animation:mist-a 61s ease-in-out infinite alternate-reverse}
+  @keyframes mist-a{from{transform:translateX(-6%)}to{transform:translateX(6%)}}
+  #moon svg.ridge{position:absolute;left:0;right:0;bottom:180px;width:100%;height:420px}
+  #moon .ridge.far{opacity:.55;animation:ridge 90s ease-in-out infinite alternate}
+  #moon .ridge.near{opacity:.85;bottom:150px;animation:ridge 70s ease-in-out infinite alternate-reverse}
+  @keyframes ridge{from{transform:translateX(-1.5%)}to{transform:translateX(1.5%)}}
+  #moon .vig{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 45%,transparent 45%,rgba(0,0,10,.65))}
+  #petals{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity 2s}
+  #petals.on{opacity:1}
+  #haiku{position:absolute;left:50%;top:300px;transform:translateX(-50%) translateY(24px);width:1180px;padding:44px 60px 54px;text-align:center;
+    background:linear-gradient(180deg,rgba(14,12,30,.55),rgba(14,12,30,.35));border-top:1px solid rgba(232,215,160,.45);border-bottom:1px solid rgba(232,215,160,.45);
+    opacity:0;transition:opacity 2s ease,transform 2s ease;pointer-events:none;backdrop-filter:blur(2px)}
+  #haiku.on{opacity:1;transform:translateX(-50%) translateY(0)}
+  #haiku .hk{font-family:'Cinzel',serif;font-size:14px;letter-spacing:.42em;color:#e8d7a0;margin-bottom:22px;text-shadow:0 2px 12px rgba(0,0,0,.6)}
+  #haiku .line{font-family:'Cinzel',serif;font-size:46px;line-height:1.45;color:#f6efdc;text-shadow:0 2px 18px rgba(0,0,0,.7),0 0 40px rgba(255,236,190,.15);opacity:0;clip-path:inset(0 100% 0 0);transition:opacity .4s,clip-path 2.6s cubic-bezier(.3,0,.2,1)}
+  #haiku .line.on{opacity:1;clip-path:inset(0 0 0 0)}
+  #haiku .kanji{position:absolute;right:40px;top:-38px;font-family:'Hiragino Mincho ProN','Yu Mincho','Noto Serif JP',serif;font-size:120px;color:rgba(232,215,160,.14);line-height:1}
+  #haiku .seal{position:absolute;right:52px;bottom:22px;width:38px;height:38px;border:2px solid #b8342c;border-radius:4px;color:#d9463c;font-family:'Cinzel',serif;font-weight:700;font-size:18px;display:flex;align-items:center;justify-content:center;transform:rotate(-6deg);box-shadow:0 0 10px rgba(217,70,60,.35)}
   #fog{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity 2.5s ease;mix-blend-mode:screen}
   #fog.on{opacity:.45}
   #dim{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity 2.5s ease;background:radial-gradient(ellipse at 50% 55%,rgba(40,10,60,.1),rgba(10,4,20,.5) 80%)}
@@ -231,7 +247,11 @@
 
 
 <div id="rule"></div>
-<div id="moon"></div><div id="haiku"><div class="hk">☾ MOON INTERLUDE</div><div class="line" id="hk0"></div><div class="line" id="hk1"></div><div class="line" id="hk2"></div><div class="seal">C</div></div><div id="show"><i></i><span id="show-label"></span></div><div id="dim"></div><canvas id="fog" width="960" height="540"></canvas><div id="flash"></div><svg id="bolt" viewBox="0 0 1920 1080" preserveAspectRatio="none"><g id="boltg" fill="none" stroke-linecap="round" stroke-linejoin="round"></g></svg>
+<div id="moon"><div class="disc"></div><div class="mist a"></div><div class="mist b"></div>
+  <svg class="ridge far" viewBox="0 0 1920 420" preserveAspectRatio="none"><path fill="#0b0e2c" d="M0 300 C120 250 220 230 340 260 C460 290 520 200 660 210 C800 220 860 280 980 250 C1100 220 1180 150 1300 180 C1420 210 1480 260 1600 240 C1720 220 1800 190 1920 230 L1920 420 L0 420 Z"/></svg>
+  <svg class="ridge near" viewBox="0 0 1920 420" preserveAspectRatio="none"><path fill="#05061a" d="M0 360 C150 330 260 300 400 330 C540 360 620 280 760 300 C900 320 940 380 1080 350 C1220 320 1320 250 1460 290 C1600 330 1700 300 1920 340 L1920 420 L0 420 Z"/></svg>
+  <div class="vig"></div></div><canvas id="petals" width="1920" height="1080"></canvas>
+<div id="haiku"><div class="kanji">月</div><div class="hk">☾ MOON INTERLUDE · A HAIKU FROM THE COURT</div><div class="line" id="hk0"></div><div class="line" id="hk1"></div><div class="line" id="hk2"></div><div class="seal">C</div></div><div id="show"><i></i><span id="show-label"></span></div><div id="dim"></div><canvas id="fog" width="960" height="540"></canvas><div id="flash"></div><svg id="bolt" viewBox="0 0 1920 1080" preserveAspectRatio="none"><g id="boltg" fill="none" stroke-linecap="round" stroke-linejoin="round"></g></svg>
 <div id="tarot"><div class="tmarq">✦ THE CARDS ARE DRAWN ✦</div>
   <div class="slot"><div class="pos">PAST</div><div class="tcard" id="tc0"><div class="inner"><div class="back"></div><div class="face"></div></div></div></div>
   <div class="slot"><div class="pos">PRESENT</div><div class="tcard" id="tc1"><div class="inner"><div class="back"></div><div class="face"></div></div></div></div>
@@ -483,10 +503,17 @@
   function interludePoll() { fetch('interlude.json?' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(f => {
     if (!f || !f.ts || f.ts === interludeTs || Date.now() / 1000 - f.ts > 90 || !Array.isArray(f.haiku)) return; interludeTs = f.ts;
     const box = document.getElementById('haiku'), moon = document.getElementById('moon'); for (let i = 0; i < 3; i++) { const el = document.getElementById('hk' + i); el.classList.remove('on'); el.textContent = esc(f.haiku[i] || ''); }
-    moon.classList.add('on'); setTimeout(() => box.classList.add('on'), 2500);
-    [0, 1, 2].forEach(i => setTimeout(() => document.getElementById('hk' + i).classList.add('on'), 6000 + i * 7000));
-    setTimeout(() => { if (interludeTs === f.ts) { box.classList.remove('on'); moon.classList.remove('on'); } }, 68000);
+    moon.classList.add('on'); petals(true); setTimeout(() => box.classList.add('on'), 3500);
+    [0, 1, 2].forEach(i => setTimeout(() => document.getElementById('hk' + i).classList.add('on'), 7000 + i * 8000));
+    setTimeout(() => { if (interludeTs === f.ts) { box.classList.remove('on'); moon.classList.remove('on'); petals(false); } }, 68000);
   }).catch(() => {}); }
+  // falling petals: slow, swaying, lit by the moon; runs only during the interlude
+  const petC = document.getElementById('petals'), petX = petC.getContext('2d'); let petOn = false, petRaf = 0, PET = [];
+  function petals(on) { petOn = on; petC.classList.toggle('on', on); if (on) { PET = Array.from({ length: 46 }, () => ({ x: Math.random() * 1920, y: -Math.random() * 1080, r: 5 + Math.random() * 7, vy: 0.35 + Math.random() * 0.6, ph: Math.random() * 6.28, sp: 0.004 + Math.random() * 0.006, rot: Math.random() * 6.28, a: 0.35 + Math.random() * 0.45 })); petFrame(); } else setTimeout(() => { if (!petOn) { cancelAnimationFrame(petRaf); petX.clearRect(0, 0, 1920, 1080); } }, 2100); }
+  function petFrame() { if (!petOn) return; petX.clearRect(0, 0, 1920, 1080);
+    for (const p of PET) { p.ph += p.sp; p.y += p.vy; p.x += Math.sin(p.ph) * 0.6 + 0.15; p.rot += 0.01; if (p.y > 1100) { p.y = -20; p.x = Math.random() * 1920; }
+      petX.save(); petX.translate(p.x, p.y); petX.rotate(p.rot); petX.scale(1, 0.55 + 0.45 * Math.abs(Math.sin(p.ph * 1.7))); petX.fillStyle = `rgba(246,222,214,${p.a})`; petX.beginPath(); petX.ellipse(0, 0, p.r, p.r * 0.62, 0, 0, 6.283); petX.fill(); petX.restore(); }
+    petRaf = requestAnimationFrame(petFrame); }
   setInterval(interludePoll, 3000); interludePoll();
   function esc(t) { return String(t).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
   setInterval(oracle, 3000); oracle();
