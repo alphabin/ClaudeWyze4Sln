@@ -1231,6 +1231,12 @@ class Bot:
             time.sleep(5); st, d2 = self.helix(f"clips?id={cid}")
             if st == 200 and d2.get("data"): return d2["data"][0].get("url") or f"https://clips.twitch.tv/{cid}"
         return None
+    def keep_haiku(self, user):
+        """Clip the interlude (scene + haiku on screen); hand it to the asker, or just keep it on the Clips tab when it was scheduled."""
+        try:
+            url = self.make_clip(f"haiku for {user or 'the court'}")
+            if url and user: self.send(f"@{user} your haiku, kept for you: {url} 🌸")
+        except Exception as e: log("keep_haiku error:", e)
     def keep_reading(self, user):
         """Clip the last 30 s (cards + reading on screen) and give the asker the link — their reading, kept."""
         try:
@@ -1303,7 +1309,9 @@ class Bot:
         if now - getattr(self, "last_interlude", 0) < gap or int(_llm["viewers"]) < 1 or self.game: return
         if now - self.last_human < 240 or not bg_ok(): return                   # never over a live conversation
         line = self.interlude(None, "scheduled")
-        if line: self.send(line)
+        if line:
+            self.send(line)
+            if CLIPS: threading.Timer(38, self.keep_haiku, args=(None,)).start()
     def maybe_notice(self, now):
         """One short feature notice every NOTICE_HOURS when at least one person is watching and chat has been quiet 5 min. Rotates, zero tokens."""
         if now - self.last_notice < NOTICE_HOURS * 3600 or int(_llm["viewers"]) < 1 or now - self.last_human < 300 or self.game: return
@@ -1409,7 +1417,9 @@ class Bot:
         elif re.search(r"\b(haiku|poem|poetry|interlude)\b", low) and ai_first_ok():
             path = "haiku"
             if now - getattr(self, "last_interlude", 0) < 600: reply = "The moon interlude has just passed, courtier — the ink must dry. Ask again in a little while."
-            else: reply = self.interlude(user, f"requested by {user}") or "The ink ran dry. Ask again in a moment."
+            else:
+                reply = self.interlude(user, f"requested by {user}") or "The ink ran dry. Ask again in a moment."
+                if reply.startswith(("☾", "🌸")) and CLIPS: threading.Timer(38, self.keep_haiku, args=(user,)).start()
         elif WHOAMI.search(t):
             path = "memory"; ref = whoami_line(user, v)
             reply = (llm_answer(user, t, v=v, recent=self.recent, model=CLI_MODEL_TALK if LLM_BACKEND == "cli" else None, cache=False, ref="What you remember about them (say it in your voice, keep the numbers): " + ref) if ai_first_ok() else None) or ref      # what she remembers about this viewer
