@@ -117,6 +117,26 @@ RTSP = CFG.get("CLEOBOT_RTSP", "rtsp://127.0.0.1:8555"); FFMPEG = CFG.get("CLEOB
 CLIPS = CFG.get("CLEOBOT_CLIPS", "1") != "0"; CLIPS_PER_HOUR = int(CFG.get("CLEOBOT_CLIPS_PER_HOUR", "6")); CLIPS_PER_DAY = int(CFG.get("CLEOBOT_CLIPS_PER_DAY", "30"))
 CLIP_REQUEST_MINUTES = float(CFG.get("CLEOBOT_CLIP_REQUEST_MINUTES", "5"))   # viewers may say 'clip' this often
 NOTICE_HOURS = float(CFG.get("CLEOBOT_NOTICE_HOURS", "2.5"))              # rotating 'court notice' feature line, only with viewers present
+# Programming blocks: the channel is a show with a schedule, not just a cam. Every 10 min the bot picks the block for the hour
+# and sets Twitch category + title + tags to match (needs channel:manage:broadcast). Overlay shows the block from overlay/show.json.
+SHOWS_ON = CFG.get("CLEOBOT_SHOWS", "1") != "0"
+SHOWS = {   # key: (category id, category name, title, tags)  — hours are local; sunset shifts 'oracle' automatically
+    "court":   ("272263131", "Animals, Aquariums, and Zoos", "Ball Python 24/7 Live Cam 🐍 Princess Cleo talks back · say 'tarot' for a reading 🃏 · 25 followers = Pokémon pack rip 🎴",
+                ["Animals", "AnimalCam", "24HourStream", "FamilyFriendly", "Snake", "BallPython", "Reptile", "Relaxing", "ASMR", "Tarot"]),
+    "oracle":  ("83418", "Tarot", "🔮 ORACLE HOURS · tarot & fortunes read live by a ball python queen 🐍 say 'tarot' or 'will I ever…' in chat 🃏 24/7 snake cam",
+                ["Tarot", "Fortune", "Oracle", "Interactive", "AnimalCam", "Snake", "BallPython", "Relaxing", "FamilyFriendly", "English"]),
+    "night":   ("499973", "Always On", "🌙 Night Watch · ball python patrols after dark, live 24/7 🐍 talks back in chat, tarot on request 🃏 generative jungle soundscape",
+                ["AlwaysOn", "24HourStream", "AnimalCam", "Snake", "BallPython", "Relaxing", "ASMR", "Sleep", "Cozy", "Tarot"]),
+    "rip":     ("9618", "Pokémon Trading Card Game", "🎴 PACK RIP NIGHT at the snake's glass · a ball python judges every pull 🐍 First Partner packs · a pull mailed to a random follower",
+                ["Pokemon", "PokemonTCG", "PackOpening", "Giveaway", "AnimalCam", "Snake", "BallPython", "FamilyFriendly", "Interactive", "Tarot"]),
+}
+def current_show(now=None):
+    """oracle: sunset -> 23:00 (prime time, she's out, people are home); night: 23:00 -> 06:00; court: the rest; rip: forced by 'ripset'."""
+    import datetime; n = now or datetime.datetime.now(); rise, sset = _sun_times()
+    if RIP.d.get("show_until", 0) > time.time(): return "rip"
+    if sset and n >= sset.replace(second=0) and n.hour < 23: return "oracle"
+    if n.hour >= 23 or n.hour < 6: return "night"
+    return "court"
 RANKS = [(30, "Royal Advisor"), (15, "Duke or Duchess"), (7, "Knight"), (3, "Courtier"), (1, "Visitor")]
 def rank(visits): return next(name for n, name in RANKS if visits >= n) if visits >= 1 else "Visitor"
 if CFG.get("ANTHROPIC_API_KEY"): os.environ["ANTHROPIC_API_KEY"] = CFG["ANTHROPIC_API_KEY"]
@@ -1079,7 +1099,7 @@ class Bot:
                     self.send(random.choice([f"{n} of you watching me sleep — a record court. We slay. 👑", f"{n} in the court at once. A new record; I shall move slightly to celebrate. 🐍"]))
                 elif n > self.record_viewers: self.record_viewers = n
                 llm_log_budget()                                                            # once an hour
-                if time.time() - self.last_goal_poll >= 600: self.last_goal_poll = time.time(); self.poll_goals()
+                if time.time() - self.last_goal_poll >= 600: self.last_goal_poll = time.time(); self.poll_goals(); self.apply_show()
                 if FOLLOW_THANKS and not self.follow_disabled: self.poll_followers()
             except Exception as e: log("helix loop error:", e)
     def _broadcaster(self):
@@ -1227,6 +1247,28 @@ class Bot:
                "Court notice: I remember my courtiers — visits earn rank, Visitor to Royal Advisor. Say 'remember me' to see yours. 🐍",
                f"Court notice: {DEAL} First Partner packs are on the menu. Say RIP to hype it. 🎴",
                "Court notice: I answer anything about ball pythons, and I have opinions. Test me. 👑"]
+    def apply_show(self, force=False):
+        """Set category/title/tags to the current block; write overlay/show.json; announce the change once."""
+        if not SHOWS_ON or not self._broadcaster(): return
+        key = current_show()
+        if key == getattr(self, "show_key", None) and not force: return
+        cid, name, title, tags = SHOWS[key]
+        body = json.dumps({"game_id": cid, "title": title[:140], "tags": tags[:10]}).encode()
+        req = urllib.request.Request(f"https://api.twitch.tv/helix/channels?broadcaster_id={self.broadcaster_id}", data=body, method="PATCH",
+                                     headers={"Authorization": "Bearer " + (self.token or ""), "Client-Id": CLIENT_ID, "Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=10) as r: ok = r.status == 204
+        except urllib.error.HTTPError as e:
+            log(f"show change failed HTTP {e.code} (needs channel:manage:broadcast; re-run auth.py)"); return
+        except Exception as e: log("show change error:", str(e)[:80]); return
+        prev = getattr(self, "show_key", None); self.show_key = key; log(f"show -> {key} ({name})")
+        try: json.dump({"show": key, "name": name, "label": {"court": "THE COURT IS OPEN", "oracle": "ORACLE HOURS", "night": "NIGHT WATCH", "rip": "PACK RIP NIGHT"}[key], "ts": int(time.time())}, open(f"{ROOT}/overlay/show.json", "w"))
+        except Exception as e: log("show.json error:", e)
+        if prev and not self.room_empty():
+            self.send({"oracle": "🔮 Oracle hours begin. The cards are shuffled and the ball is clear — say 'tarot' or ask 'will I ever…'. Prime time in my court.",
+                       "night": "🌙 Night watch. I patrol, you rest; the soundscape is yours. Say 'tarot' if the dark asks you questions.",
+                       "court": "☀️ The court is open. I rest by day and answer everything — ask me anything about ball pythons, or say 'menu'.",
+                       "rip": "🎴 Pack rip night at my glass. Say RIP to hype it; I judge every pull."}[key])
     def maybe_notice(self, now):
         """One short feature notice every NOTICE_HOURS when at least one person is watching and chat has been quiet 5 min. Rotates, zero tokens."""
         if now - self.last_notice < NOTICE_HOURS * 3600 or int(_llm["viewers"]) < 1 or now - self.last_human < 300 or self.game: return
@@ -1291,7 +1333,7 @@ class Bot:
             reply = COMMANDS[bare_command(t)](); path = "command"
         elif RESOURCE_Q.search(t): reply = cmd_resources(t); path = "resources"     # "where can I learn more?" -> allowlisted links
         elif low.strip("! .") == "ripset":                                    # broadcaster only: reset the vote, announce the rip
-            if user == CHANNEL: reply = RIP.reset(); path = "ripset"
+            if user == CHANNEL: reply = RIP.reset(); path = "ripset"; RIP.d["show_until"] = time.time() + 7200; RIP._save(); threading.Thread(target=self.apply_show, daemon=True).start()
             else: reply = "Only my human may start a set rip. You may, however, say RIP to vote. 👑"; path = "ripset-denied"
         elif re.fullmatch(r"\W*(clip|clip it|clip that|!clip)\W*", low):     # anyone may ask for a clip, every CLIP_REQUEST_MINUTES
             path = "clip"

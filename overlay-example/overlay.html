@@ -167,6 +167,8 @@
   #tcardtext .pg{position:absolute;right:12px;bottom:6px;font-family:'Inter',sans-serif;font-size:15px;letter-spacing:.2em;color:#8a6a2a}
   #tcardtext .wait{color:#8a6a2a;font-style:italic;font-family:'Inter',sans-serif;font-size:22px}
   #tcardtext .cursor{display:inline-block;width:9px;height:20px;background:#8a6a2a;margin-left:4px;vertical-align:-3px;animation:pulse 1s infinite}
+  #show{position:absolute;right:52px;top:122px;display:flex;align-items:center;gap:8px;padding:4px 12px;border:1px solid rgba(217,182,91,.45);border-radius:999px;background:rgba(10,8,20,.55);font-family:var(--display);font-size:13px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold-2);opacity:0;transition:opacity 1s}
+  #show.on{opacity:1} #show i{width:7px;height:7px;border-radius:50%;background:var(--gold-2);box-shadow:0 0 8px var(--gold-2)}
   #fog{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity 2.5s ease;mix-blend-mode:screen}
   #fog.on{opacity:.45}
   #dim{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity 2.5s ease;background:radial-gradient(ellipse at 50% 55%,rgba(40,10,60,.1),rgba(10,4,20,.5) 80%)}
@@ -220,7 +222,7 @@
 
 
 <div id="rule"></div>
-<div id="dim"></div><canvas id="fog" width="960" height="540"></canvas><div id="flash"></div><svg id="bolt" viewBox="0 0 1920 1080" preserveAspectRatio="none"><g id="boltg" fill="none" stroke-linecap="round" stroke-linejoin="round"></g></svg>
+<div id="show"><i></i><span id="show-label"></span></div><div id="dim"></div><canvas id="fog" width="960" height="540"></canvas><div id="flash"></div><svg id="bolt" viewBox="0 0 1920 1080" preserveAspectRatio="none"><g id="boltg" fill="none" stroke-linecap="round" stroke-linejoin="round"></g></svg>
 <div id="tarot"><div class="tmarq">✦ THE CARDS ARE DRAWN ✦</div>
   <div class="slot"><div class="pos">PAST</div><div class="tcard" id="tc0"><div class="inner"><div class="back"></div><div class="face"></div></div></div></div>
   <div class="slot"><div class="pos">PRESENT</div><div class="tcard" id="tc1"><div class="inner"><div class="back"></div><div class="face"></div></div></div></div>
@@ -463,6 +465,10 @@
   }
   function fog(on) { const was = fogOn; fogOn = on; document.getElementById('fog').classList.toggle('on', on); document.getElementById('dim').classList.toggle('on', on); if (on && !was) fogFrame(); if (!on) setTimeout(() => { if (!fogOn) { cancelAnimationFrame(fogRaf); fogX.clearRect(0, 0, 960, 540); } }, 2600); }
   setInterval(() => fog(document.getElementById('tarot').classList.contains('on') || document.getElementById('oracle').classList.contains('on')), 500);
+  // ---- programming block badge (overlay/show.json written by the bot) ----
+  function showBadge() { fetch('show.json?' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(f => { const el = document.getElementById('show'); if (!f || !f.label) { el.classList.remove('on'); return; }
+    document.getElementById('show-label').textContent = 'Now · ' + f.label + ({ oracle: ' · say tarot', rip: ' · say RIP', night: '', court: '' }[f.show] || ''); el.classList.add('on'); }).catch(() => {}); }
+  setInterval(showBadge, 30000); showBadge();
   function esc(t) { return String(t).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
   setInterval(oracle, 3000); oracle();
   fetch('facts.json?' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(list => { SNAKE.facts = list; fi = Math.floor(Math.random() * list.length); nextFact(); }).catch(() => {});
