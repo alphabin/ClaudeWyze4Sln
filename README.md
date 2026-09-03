@@ -1,6 +1,76 @@
-# ClaudeWyze4Sln — Wyze Cam Pan V4 (HL_PAN4) streaming, and a 24/7 snake-cam kit
+# ClaudeWyze4Sln — a 24/7 talking animal cam on Twitch, and the Wyze Cam Pan V4 fix that made it possible
 
-**Here for the Pan V4 / `IOTC_ER_UNLICENSE` problem?** Read [WRITEUP.md](WRITEUP.md): why the V4 never uses TUTK, the Agora ("lake") path Wyze's own web viewer takes, and a step-by-step reproduction with `lake/provision.py` + `players/lake.html` + a local relay so OBS, ffmpeg or Home Assistant can pull it as RTSP. The rest of this README is the full stream kit built around it (overlay, sensors, the chat bot).
+**Live demo:** [twitch.tv/princesscleolive](https://www.twitch.tv/princesscleolive) — Princess Cleo, a ball python in Southern California, streaming around the clock from two Wyze cameras. She answers chat as herself, looks at her own cameras before she tells you what she's doing, clips herself when she moves, reads tarot, and tells fortunes. Everything on that stream comes from this repository.
+
+**Here for the Pan V4 / `IOTC_ER_UNLICENSE` problem?** Read [WRITEUP.md](WRITEUP.md): why the V4 never uses TUTK, the Agora ("lake") path Wyze's own web viewer takes, and a step-by-step reproduction with `lake/provision.py` + `players/lake.html` + a local relay so OBS, ffmpeg or Home Assistant can pull it as RTSP.
+
+## What you end up with
+
+A Mac (we use a Mac mini) that, from power-on and with nobody touching it:
+
+1. **Pulls two Wyze cameras** through Wyze's own cloud paths (Kinesis WebRTC for the Pan V3, Agora H.265 for the Pan V4), decodes each in a headless Chrome and republishes them locally as RTSP.
+2. **Composites a 1080p scene in OBS**: both cameras side by side under a procedural, weather-aware overlay (live temperatures and humidity from Bluetooth sensors with 6-hour charts, a "habitat check" verdict, feeding log, sunrise/sunset scenery that shifts from night to dawn to day to dusk, a follower/subscriber goal bar).
+3. **Plays a generative soundscape**: crickets, frogs, birds, wind, rain and thunder synthesized live from the real weather and time of day, no audio files, no licences.
+4. **Streams to Twitch 24/7** with a watchdog that restarts the stream if Twitch drops the ingest, and players that reboot a camera when its stream goes stale.
+5. **Runs a chat bot with a personality**, backed by Claude:
+   - answers every real message in the animal's voice (spicy, opinionated, accurate about husbandry, never diagnoses illness, sends people to a vet);
+   - **looks at the cameras** ("what are you doing?") by grabbing stills and reading them with a vision model;
+   - **clips itself** on Twitch when the sensors see movement, and on request (`clip`);
+   - **tarot readings**: three cards from a full 78-card Rider-Waite deck flip on the overlay with lightning and sound, then a real reading; follow-up questions stay inside that spread;
+   - **fortunes** from a Zoltar-style crystal-ball booth on the overlay;
+   - remembers viewers (visits, their pet's name, what they talked about), court ranks, votes and quiz rounds, welcome and follow thanks, model-written idle lines only when someone is watching;
+   - a token budget that scales with viewer count, a kill switch, an allowlist of the only links it may ever post, and no personal data collection (addresses and such are refused in chat).
+6. **Heals and reboots itself**: launchd brings every piece up at login; camera, relay, OBS and bot each restart independently.
+
+Cost to run: the Wyze cameras and a Mac you already have, one Govee Bluetooth thermometer per side (about $12 each), Twitch (free), and the Claude subscription the bot uses through the `claude` command (or an API key). No Wyze Cam Plus needed for this path.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  V3[Wyze Pan V3<br/>hot side] -->|Kinesis WebRTC| C1[headless Chrome<br/>players/cam.html]
+  V4[Wyze Pan V4<br/>cool side] -->|Agora H.265<br/>session from lake/provision.py| C2[headless Chrome<br/>players/lake.html]
+  C1 -->|WHIP| R[mediamtx relay<br/>RTSP :8555]
+  C2 -->|WHIP| R
+  R --> OBS[OBS<br/>scene + overlay + soundscape]
+  S[Govee BLE sensors<br/>sensors/] --> HUB[state.json :5090]
+  HUB --> OV[overlay-example/overlay.html]
+  OV --> OBS
+  OBS -->|RTMP| TW[Twitch]
+  BOT[chatbot/cleobot.py<br/>Claude via CLI or API] <-->|IRC + Helix| TW
+  R -->|stills| BOT
+  BOT -->|goal / fortune / tarot .json| OV
+  WD[obs/watchdog.py] --> OBS
+```
+
+## Requirements
+
+- macOS on Apple silicon (launchd, Chrome path and OBS config are Mac-specific; the camera path itself is portable).
+- Docker via Colima (`brew install colima docker docker-compose`), Google Chrome 130+, OBS 30+, `mediamtx`, ffmpeg, Python 3.9+.
+- A Wyze account with an API key pair; the cameras set up in the Wyze app.
+- A Twitch account for the channel (the bot posts as the channel account) and a Twitch developer app (free).
+- For the bot's brain: the `claude` command signed in to a Claude subscription, or `ANTHROPIC_API_KEY`.
+
+## Adapting it to your animal
+
+- **Overlay text and facts:** `overlay-example/overlay.html` (name, species line, healthy ranges) and `overlay-example/facts.json`.
+- **Bot voice and knowledge:** the system prompt in `chatbot/cleobot.py` (`_system_prompt`) and `chatbot/knowledge.json` (curated answers; the vet answer is always sent verbatim). Replace the ball-python husbandry with yours and keep the "a vet, not chat" rule.
+- **Resources:** `RESOURCES` in `cleobot.py` is the only set of links the bot may ever post.
+- **Sensors:** `sensors/` reads Govee H5075-class thermometers over Bluetooth; anything that can write `state.json` works.
+- **One camera only?** Use a single decoder agent and one pane in the OBS scene; the overlay handles a missing side.
+
+## Known limits
+
+- The whole video path is cloud-dependent (camera → Wyze/Agora → your Mac). A Wyze password change, a new API key or a web-app rewrite can break it; the constants are documented in WRITEUP.md.
+- Pan/tilt is not controllable from here (the bridge's control channel doesn't reach the cameras from inside a NAT'd Docker VM; Agora carries video, not PTZ). Use the Wyze app, and `campause.sh` to release a camera for a few minutes.
+- OBS's built-in browser cannot decode H.265, hence the headless-Chrome relay.
+- Twitch Affiliate needs an average of 3 viewers; a 24/7 stream with empty nights lowers that average.
+
+## Credits and licence
+
+MIT. Tarot art is the 1909 Rider-Waite-Smith deck (public domain, scans from Wikimedia Commons). The Agora Web SDK is downloaded by `players/get-agora-sdk.sh` under Agora's terms, not redistributed. Built with Claude Code; the Wyze API details were captured from Wyze's own web viewer. If this helped you, star the repo and say hi in Cleo's chat. 🐍
+
+---
 
 ## snakecam — hot/cool side to Twitch (+ YouTube) via OBS
 
@@ -19,15 +89,19 @@ Unattended on the Mac mini: launchd starts OBS streaming at login, restarts on c
     overlay/lake.html         Agora player + WHIP relay mode (cool cam) -> run only by the headless decoder
     overlay/lake/             session files written by the provisioner (renewed every 45 min)
     relay/mediamtx.yml        local relay: WHIP in :8890, RTSP out :8555
-    obs/com.snakecam.relay.plist    launchd: the relay
-    obs/com.snakecam.hotcam.plist   launchd: headless Chrome decoding the hot cam into the relay (Kinesis; &profile=lowest = 360p)
-    obs/com.snakecam.coolcam.plist  launchd: headless Chrome decoding the cool cam into the relay (Agora, H.265)
+    launchd/com.snakecam.relay.plist    launchd: the relay
+    launchd/com.snakecam.hotcam.plist   launchd: headless Chrome decoding the hot cam into the relay (Kinesis; &profile=lowest = 360p)
+    launchd/com.snakecam.coolcam.plist  launchd: headless Chrome decoding the cool cam into the relay (Agora, H.265)
+    launchd/com.snakecam.chatbot.plist  launchd: CleoBot;  launchd/com.snakecam.watchdog.plist: the stream watchdog
+    chatbot/                  CleoBot (cleobot.py), Twitch auth (auth.py), knowledge.json, tarot.json (78-card deck)
+    sensors/                  Govee Bluetooth thermometer reader + motion hub (state.json on :5090)
+    overlay-example/          the overlay page, generative soundscape, facts, the public-domain tarot card scans
     Start Snakecam.command / Stop Snakecam.command   double-click in Finder
     discover.sh               prints camera names/models once the bridge is up
     obs/SnakeCam.json         scene: Hot Side | Cool Side, overlay on top
     obs/basic.ini             1080p30, Apple hardware H264, 4500 kbps
     obs/install-obs-config.sh drops the above into OBS, fills in camera names
-    obs/com.snakecam.obs.plist launchd: OBS --startstreaming, KeepAlive
+    launchd/com.snakecam.obs.plist launchd: OBS --startstreaming, KeepAlive
     overlay/overlay.html      labels + clock. THIS is where graphics go later.
     fallback-ffmpeg/          headless ffmpeg version, no OBS. Kept as plan B.
 
@@ -117,9 +191,9 @@ say 'mood' or 'how are you'. Viewer memory in chatbot/court.json (per viewer: fi
 Claude tier (CLEOBOT_LLM_BACKEND=cli via the `claude` command on this Mac with your subscription; =api uses ANTHROPIC_API_KEY;
 =off is the kill switch - templates only). Runs from an EMPTY folder (chatbot/cli-workdir) so it inherits no project notes or
 memory; replies containing an email address are dropped and every URL not on the RESOURCES allowlist is stripped.
-  Budget per hour = CLEOBOT_LLM_BASE_PER_HOUR (20) + CLEOBOT_LLM_PER_VIEWER (10) x live viewers (capped at 10), never above
-  CLEOBOT_LLM_PER_HOUR (120); CLEOBOT_LLM_PER_DAY (500) hard daily ceiling; CLEOBOT_LLM_PER_USER_DAY (8) and
-  CLEOBOT_LLM_PER_REGULAR_DAY (16, viewers with 3+ visits). Identical questions are answered from a 6 h cache; 10 s between
+  Budget per hour = CLEOBOT_LLM_BASE_PER_HOUR (60) + CLEOBOT_LLM_PER_VIEWER (15) x live viewers (capped at 10), never above
+  CLEOBOT_LLM_PER_HOUR (200); CLEOBOT_LLM_PER_DAY (1500) hard daily ceiling; CLEOBOT_LLM_PER_USER_DAY (40) and
+  CLEOBOT_LLM_PER_REGULAR_DAY (80, viewers with 3+ visits). Below the AI-first floor these rationing rules apply: Identical questions are answered from a 6 h cache; 10 s between
   calls; no links in, no one-word questions. The budget state is logged once an hour.
   Priority, not first-come: each candidate message is scored (first message ever +3, a regular's first message of a visit +3,
   a question +3, @mention/"cleo" +2, their own snake +3, length +1/+2; emotes/one-two words/repeats and things banter already
@@ -158,17 +232,6 @@ batches of 3+ follows and a new viewer record (5+) get a hype line. Setup, once:
     3. chatbot/.venv/bin/python chatbot/auth.py      (sign in as the bot account, enter the code)
     4. launchctl load ~/Library/LaunchAgents/com.snakecam.chatbot.plist   (Start Snakecam does this too)
 Facts shown on the overlay and quoted by the bot live in overlay/facts.json.
-Personality: Cleo talks back. Ordinary chat (compliments, "she moved!", "is this live?", "boring", "ew", good-nights, food
-talk, emotes, "my snake...", her name) gets a templated queen-voiced line (BANTER in cleobot.py: 14 categories, random, never
-the same twice in a row, max one per 12 s channel-wide and one per viewer per 45 s, zero tokens; commands, greetings and
-knowledge.json answers take priority). Claude only sees questions and statements aimed at her that nothing templated matched,
-under the same caps; when the caps are spent she answers with a banter line instead of silence. Mood engine (zero tokens,
-recomputed every minute from the sensors, feeding log, sunset and weather; priority: too warm > chilly > parched > fresh and
-shiny (shed <= 3 days) > hangry (past the feeding interval or feed day) > storm-watching > prowling (after sunset) > sleepy
-(10-16 h) > content) colours greetings, some banter, one ambient line and the Claude prompt; say 'mood' or 'how are you'.
-Viewer memory in chatbot/court.json (per viewer: first/last seen, visits = first message after a 6 h gap, message count, pet
-snake's name if they say "my snake Noodle"; never message text, never the bot account, capped at 2000 viewers): returning
-viewers are greeted by visit count and asked about their snake by name; 'whoami' / 'do you remember me' tells them what she knows.
 
 ## Restart & test, layer by layer (a failure points at exactly one part)
 1. VM + bridge + provisioner:
