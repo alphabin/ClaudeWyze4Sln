@@ -273,6 +273,42 @@ def value_words(v):
     return f"anywhere from ${lo:,.0f} to ${hi:,.0f} depending on the printing — the {st} {rar} version is the ${hi:,.0f} one"
 RIP_CAM = CFG.get("CLEOBOT_RIP_CAM", "coolcam")                          # the terrarium camera the cards are held up to (1080p on the relay)
 RIPCAM_RTSP = CFG.get("CLEOBOT_RIPCAM_RTSP", "rtsp://127.0.0.1:8556/ripcam")   # the companion phone camera, when it is publishing
+RIPCAM_LAYOUT = {"table": (1040, 300, 800, 450), "eagle": (1400, 250, 480, 270)}      # x, y, w, h on the 1920x1080 canvas
+_ripcam = {"live": False, "mode": None}
+def obs_req(t, data=None):
+    import hashlib, base64
+    pw = CFG.get("OBS_WS_PASSWORD", ""); ws = websocket.create_connection("ws://127.0.0.1:4455", timeout=8); h = json.loads(ws.recv())["d"].get("authentication"); ident = {"rpcVersion": 1}
+    if h:
+        sec = base64.b64encode(hashlib.sha256((pw + h["salt"]).encode()).digest()).decode(); ident["authentication"] = base64.b64encode(hashlib.sha256((sec + h["challenge"]).encode()).digest()).decode()
+    ws.send(json.dumps({"op": 1, "d": ident})); ws.recv(); ws.send(json.dumps({"op": 6, "d": {"requestType": t, "requestId": "1", "requestData": data or {}}}))
+    while True:
+        m = json.loads(ws.recv())
+        if m.get("op") == 7: ws.close(); return m["d"].get("responseData") or {}
+def ripcam_layout(mode):
+    """Place the OBS 'Rip Cam' source for the mode and tell the overlay (overlay/ripcam.json) so it can draw the frame."""
+    try:
+        x, y, w, h = RIPCAM_LAYOUT[mode]; scene = obs_req("GetCurrentProgramScene")["currentProgramSceneName"]
+        items = obs_req("GetSceneItemList", {"sceneName": scene})["sceneItems"]; iid = [i["sceneItemId"] for i in items if i["sourceName"] == "Rip Cam"]
+        if iid: obs_req("SetSceneItemTransform", {"sceneName": scene, "sceneItemId": iid[0], "sceneItemTransform": {"positionX": x, "positionY": y, "boundsType": "OBS_BOUNDS_SCALE_INNER", "boundsWidth": w, "boundsHeight": h, "boundsAlignment": 0}})
+    except Exception as e: log("ripcam layout error:", type(e).__name__, str(e)[:60])
+def ripcam_tick(rip_active, bot=None):
+    """Every ~30 s: is the phone publishing, and which mode? Writes overlay/ripcam.json; moves the OBS source when the mode changes.
+    Publishing the phone starts the card watch by itself (Card Table); stopping it ends the watch, unless a 'ripset' session is running."""
+    live = ripcam_live()
+    if bot is not None:
+        if live and not getattr(bot, "rip_until", 0) > time.time():
+            bot.rip_until = time.time() + 20 * 60; bot.rip_auto = True; threading.Thread(target=bot.rip_watch, daemon=True).start()
+            bot.send("The card table is open. Show me what you pulled — hold it still and I will judge it. 👑"); rip_active = True
+        elif not live and getattr(bot, "rip_auto", False) and getattr(bot, "rip_until", 0) > time.time():
+            bot.rip_until = 0; bot.rip_auto = False; log("rip cam: phone stopped, table closed")
+        elif live and getattr(bot, "rip_until", 0) > time.time(): bot.rip_until = max(bot.rip_until, time.time() + 20 * 60); rip_active = True   # keep the watch alive while the phone is up
+    mode = ("table" if rip_active else "eagle") if live else None
+    if (live, mode) != (_ripcam["live"], _ripcam["mode"]):
+        _ripcam.update(live=live, mode=mode); log(f"rip cam: {'live, ' + mode if live else 'off'}")
+        if mode: ripcam_layout(mode)
+        try:
+            x, y, w, h = RIPCAM_LAYOUT.get(mode, (0, 0, 0, 0)); json.dump({"live": live, "mode": mode, "x": x, "y": y, "w": w, "h": h, "ts": int(time.time())}, open(f"{ROOT}/overlay/ripcam.json", "w"))
+        except Exception as e: log("ripcam.json error:", e)
 def ripcam_live():
     """True when the phone is publishing to the rip-cam relay (a quick RTSP probe)."""
     import subprocess
@@ -1508,6 +1544,8 @@ class Bot:
                 if not self.ws: continue
                 active = now - self.last_human < 7200 or now - self.viewers_ts < 7200
                 if getattr(self, "rip_until", 0) > now: continue                            # Rip Night: no idle lines, looks, games, notices, interludes
+                try: ripcam_tick(getattr(self, "rip_until", 0) > now, self)
+                except Exception as e: log("ripcam tick error:", e)
                 if CLIPS and self.ws: self.clip_out(now)                                 # clips cost no tokens: always catch her
                 if PROACTIVE: self.maybe_out_line(now)                                  # she's moving: look and say so, even to an empty room (it's the good stuff)
                 # presence check: in the evening blocks, if she has not been seen in frame for a while, go look at her spots (bounded)
