@@ -473,7 +473,7 @@ def search_for_her():
 def framing():
     """SECURITY BOUNDARY like describe_cams. Once she is in frame: is her head AND body both showing, and which small nudge would improve the shot?"""
     if LLM_BACKEND != "cli" or not grab_frames(cams=("coolcam",), width=1280): return None
-    prompt = ("Use the Read tool on exactly this file and nothing else: frames/coolcam.jpg. A ball python is in this still from her terrarium camera. Judge the framing: "
+    prompt = ("Use the Read tool on exactly this file and nothing else: frames/coolcam.jpg. A ball python is in this still from her terrarium camera (her head is small and may be tucked under a rope or bark edge; look carefully). Judge the framing: "
               "reply ONLY with JSON {\"head\": \"visible|hidden\", \"body\": \"visible|hidden\", \"cut\": \"none|left|right|top|bottom\" (which edge cuts her off), "
               "\"nudge\": \"none|left|right|up|down\" (the ONE small camera move that would show more of her head and body together), \"good\": true/false}")
     os.chdir(f"{HERE}/cli-workdir")
@@ -482,7 +482,7 @@ def framing():
     m = re.search(r"\{.*\}", txt or "", re.S)
     try: return json.loads(m.group(0)) if m else None
     except Exception: return None
-def frame_her(max_nudges=2, step=6):
+def frame_her(max_nudges=3, step=12):
     """After a sighting: up to two tiny nudges to get head and body in the shot together."""
     for i in range(max_nudges):
         f = framing() or {}; log(f"frame: head {f.get('head')} body {f.get('body')} cut {f.get('cut')} nudge {f.get('nudge')} good {f.get('good')}")
