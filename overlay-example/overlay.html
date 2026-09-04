@@ -237,6 +237,7 @@
   #pull .val{margin-left:auto;padding-left:30px;max-width:560px;text-align:right;font-family:var(--display);font-size:34px;line-height:1.15;flex:none;color:#f2d27a;letter-spacing:.02em;text-shadow:0 0 30px rgba(242,210,122,.35)} #pull .val small{display:block;font-family:var(--sans);font-size:12px;color:var(--muted);letter-spacing:.14em;text-transform:uppercase;margin-top:2px}
   #pull .holo-tag{display:inline-block;margin:0;vertical-align:middle;padding:2px 10px;border:1px solid #9fd8ff;border-radius:999px;color:#bfe6ff;font-family:var(--display);font-size:12px;letter-spacing:.2em}
   /* the companion phone cam: a drawn frame around the OBS 'Rip Cam' source — Card Table during a rip, Eagle Eye otherwise */
+  #kills{position:absolute;right:430px;top:212px;z-index:6;display:flex;align-items:center;gap:10px;padding:3px 12px 3px 14px;background:rgba(10,8,20,.55);border:1px solid rgba(217,182,91,.5);border-radius:999px;font-family:'Cinzel',serif;letter-spacing:.22em} #kills .k{font-size:11px;color:#f2d27a} #kills .n{font-size:16px;font-weight:700;color:#fff;text-shadow:0 0 12px rgba(224,72,60,.8)}
   #cam-rest{position:absolute;right:24px;top:786px;z-index:6;padding:3px 12px;background:rgba(10,8,20,.85);border:1px solid rgba(217,182,91,.5);border-radius:999px;color:#f2d27a;font-family:'Cinzel',serif;font-size:11px;letter-spacing:.22em}
   .win.solo .chip.side{left:24px}
   #ripframe{position:absolute;pointer-events:none;opacity:0;transition:opacity .8s;border:3px solid #c9a24d;border-radius:12px;box-shadow:0 0 0 6px rgba(20,8,14,.85),0 18px 50px rgba(0,0,0,.65),inset 0 0 40px rgba(0,0,0,.35)}
@@ -628,6 +629,10 @@
     let tag = document.getElementById('cam-rest'); if (!tag) { tag = document.createElement('div'); tag.id = 'cam-rest'; document.body.appendChild(tag); }
     tag.textContent = dead ? ('◆ ' + (dead === 'hot' ? 'HOT' : 'COOL') + ' SIDE CAM TEMPORARILY UNAVAILABLE DUE TO PYTHON CONSTRICTION') : ''; tag.style.display = dead ? '' : 'none'; }).catch(() => {}); }
   setInterval(camsPoll, 5000); camsPoll();
+  // ---- cameras destroyed (overlay/kills.json): the queen's trophy count, in the header
+  function killsPoll() { fetch('kills.json?' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(k => { let el = document.getElementById('kills'); if (!el) { el = document.createElement('div'); el.id = 'kills'; document.body.appendChild(el); }
+    const n = (k && k.count) || 0; el.innerHTML = '<span class="k">☠ CAMERAS DESTROYED</span><span class="n">' + n + '</span>'; el.style.display = n ? '' : 'none'; }).catch(() => {}); }
+  setInterval(killsPoll, 60000); killsPoll();
   function esc(t) { return String(t).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
   setInterval(oracle, 3000); oracle();
   fetch('facts.json?' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(list => { SNAKE.facts = list; fi = Math.floor(Math.random() * list.length); nextFact(); }).catch(() => {});

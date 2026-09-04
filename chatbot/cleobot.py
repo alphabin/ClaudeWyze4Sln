@@ -358,7 +358,7 @@ def ripcam_live():
     return ok or (_ripcam["live"] and _ripcam["miss"] < 2)
 # ---------- pan/tilt over the camera's own command channel (Pan V4 via Agora data stream; discovered 2026-09-03) ----------
 CAM_PORTS = {"coolcam": int(CFG.get("CLEOBOT_COOLCAM_CDP", "9224")), "hotcam": int(CFG.get("CLEOBOT_HOTCAM_CDP", "9225"))}
-_cam_pos = {"coolcam": [0, 0], "hotcam": [0, 0]}                              # a step ledger so 'home' can undo moves
+_cam_pos = {"coolcam": [0, 0], "hotcam": [0, 0]}; _cam_fail = {}                              # a step ledger so 'home' can undo moves
 def cam_move(cam, direction, step=10, speed=5):
     """Nudge a camera: direction left|right|up|down, step in the camera's units (10 ≈ a small nudge, 20 clearly visible). Returns True on the camera's ack."""
     port = CAM_PORTS.get(cam)
@@ -378,7 +378,14 @@ def cam_move(cam, direction, step=10, speed=5):
         if ok:
             dx = {"left": -step, "right": step}.get(direction, 0); dy = {"up": step, "down": -step}.get(direction, 0)
             _cam_pos[cam][0] += dx; _cam_pos[cam][1] += dy
-        log(f"cam {cam} {direction} {step}: {'ok' if ok else 'refused'}"); return ok
+        log(f"cam {cam} {direction} {step}: {'ok' if ok else 'refused'}")
+        _cam_fail[cam] = 0 if ok else _cam_fail.get(cam, 0) + 1
+        if not ok and _cam_fail[cam] >= 3 and time.time() - _cam_fail.get(cam + "_reload", 0) > 900:   # no acks three times running: the control channel is stale (seen 2026-09-04 05:05-15:20) — reload the page
+            _cam_fail[cam + "_reload"] = time.time(); _cam_fail[cam] = 0
+            try:
+                r = websocket.create_connection(pg["webSocketDebuggerUrl"], timeout=10); r.send(json.dumps({"id": 1, "method": "Page.reload", "params": {}})); r.recv(); r.close(); log(f"cam {cam}: control channel reloaded")
+            except Exception as e: log("cam reload error:", str(e)[:60])
+        return ok
     except Exception as e: log("cam_move error:", type(e).__name__, str(e)[:60]); return False
 def cam_home(cam):
     """Undo the ledger: move back by what we moved."""
@@ -668,9 +675,12 @@ def dead_cam():
 def situation():
     """Live notes she must know when she speaks (shown to the model as trusted facts)."""
     d = dead_cam()
-    if d == "hot": return "SITUATION: the hot-side camera is temporarily unavailable due to python constriction — she coiled around it last night and squeezed it dead. Only the cool-side camera is live; the stream shows it full width. If anyone asks about the black/missing hot side or the second camera, say exactly that, with pride. A new camera is coming."
+    try: kills = json.load(open(f"{ROOT}/overlay/kills.json")).get("count", 0)
+    except Exception: kills = 0
+    tally = f" Cameras destroyed by her so far: {kills} (the stream keeps a counter; she is proud of it)." if kills else ""
+    if d == "hot": return tally + " SITUATION: the hot-side camera is temporarily unavailable due to python constriction — she coiled around it last night and squeezed it dead. Only the cool-side camera is live; the stream shows it full width. If anyone asks about the black/missing hot side or the second camera, say exactly that, with pride. A new camera is coming."
     if d == "cool": return "SITUATION: the cool-side camera is temporarily unavailable (she got it); only the hot-side camera is live, shown full width."
-    return ""
+    return tally
 def facts():
     try: return json.load(open(f"{ROOT}/overlay/facts.json"))
     except Exception: return ["Ball pythons are constrictors and not venomous."]
@@ -1656,6 +1666,10 @@ class Bot:
                         moving = lambda: bool(((hub() or {}).get("motion") or {}).get("cool", {}).get("moving"))
                         if moving(): _track["last_motion"] = now; threading.Thread(target=track_session, args=(moving,), daemon=True).start()
                     except Exception as e: log("track error:", e)
+                if getattr(self, "_title_dead", "unset") != dead_cam():                    # a camera died or came back: the title and category text follow at once
+                    self._title_dead = dead_cam()
+                    try: self.apply_show(force=True); log(f"show re-applied for dead cam = {dead_cam()}")
+                    except Exception as e: log("apply_show error:", e)
                 if PATROL_ON and TRACK_ON and dead_cam() == "hot" and not _patrol["on"] and not _track["on"] and now - _patrol["last"] > 600:
                     try:
                         m = ((hub() or {}).get("motion") or {}).get("cool", {}); awake = now - m.get("lastMove", 0) < 45 * 60 or current_show() in ("oracle", "night")
@@ -1987,6 +2001,7 @@ class Bot:
         key = current_show()
         if key == getattr(self, "show_key", None) and not force: return
         cid, name, title, tags = SHOWS[key]
+        if dead_cam() == "hot": title = ("☠ she constricted a camera · " + title)                                   # the story goes in the title while the hot cam is dead
         body = json.dumps({"game_id": cid, "title": title[:140], "tags": tags[:10]}).encode()
         req = urllib.request.Request(f"https://api.twitch.tv/helix/channels?broadcaster_id={self.broadcaster_id}", data=body, method="PATCH",
                                      headers={"Authorization": "Bearer " + (self.token or ""), "Client-Id": CLIENT_ID, "Content-Type": "application/json"})
