@@ -267,6 +267,7 @@ def value_words(v):
     lo, hi, st, rar, n = v
     if n == 1 or hi < lo * 1.6: return f"about ${hi:,.0f} on the market ({st}, {rar})"
     return f"anywhere from ${lo:,.0f} to ${hi:,.0f} depending on the printing — the {st} {rar} version is the ${hi:,.0f} one"
+RIP_CAM = CFG.get("CLEOBOT_RIP_CAM", "coolcam")                          # the camera the cards are held up to (1080p on the relay)
 RIP_WATCH_MINUTES = float(CFG.get("CLEOBOT_RIP_WATCH_MINUTES", "30")); RIP_WATCH_EVERY = float(CFG.get("CLEOBOT_RIP_WATCH_EVERY", "1.5"))   # Rip Night eyes: up to 3 h, idle-aware
 RANKS = [(30, "Royal Advisor"), (15, "Duke or Duchess"), (7, "Knight"), (3, "Courtier"), (1, "Visitor")]
 def rank(visits): return next(name for n, name in RANKS if visits >= n) if visits >= 1 else "Visitor"
@@ -898,14 +899,14 @@ def pick_model(text):
 LOOK_RX = re.compile(r"\b(what (are|r) (you|u) doing|where (are|r) (you|u)|can (you|u) see|what do (you|u) see|what can (you|u) see|look at (the|your|ur) cam|what('s| is) on (the|your) cam|"
                      r"what('s| is) (she|cleo) doing|where('s| is) (she|cleo)|(are|r) (you|u) (out|hiding|awake|moving)|show (me )?(yourself|urself)|peek|what('s| is) happening)\b", re.I)
 _vision = {"last": 0}
-def grab_frames():
+def grab_frames(cams=("hotcam", "coolcam"), width=960):
     """One still per camera from the local relay -> cli-workdir/frames/{hotcam,coolcam}.jpg. Returns the list that worked."""
     import subprocess
     ok = []; os.makedirs(f"{HERE}/cli-workdir/frames", exist_ok=True)
-    for cam in ("hotcam", "coolcam"):
+    for cam in cams:
         out = f"{HERE}/cli-workdir/frames/{cam}.jpg"
         try:
-            r = subprocess.run([FFMPEG, "-loglevel", "error", "-y", "-rtsp_transport", "tcp", "-i", f"{RTSP}/{cam}", "-frames:v", "1", "-vf", "scale=960:-1", "-q:v", "4", out],
+            r = subprocess.run([FFMPEG, "-loglevel", "error", "-y", "-rtsp_transport", "tcp", "-i", f"{RTSP}/{cam}", "-frames:v", "1", "-vf", f"scale={width}:-1", "-q:v", "3", out],
                                capture_output=True, text=True, timeout=20)
             if r.returncode == 0 and os.path.getsize(out) > 5000: ok.append(cam)
         except Exception as e: log("frame grab error:", cam, str(e)[:80])
@@ -933,16 +934,16 @@ def describe_cams():
 def describe_pull():
     """Rip Night eyes: SECURITY BOUNDARY like describe_cams — Read tool on the stills only, no chat text. Returns dict or None."""
     import subprocess
-    cams = grab_frames()
+    cams = grab_frames(cams=(RIP_CAM,), width=1920)
     if not cams or LLM_BACKEND != "cli": return None
     files = " and ".join(f"frames/{c}.jpg" for c in cams)
-    prompt = (f"Use the Read tool on exactly these files and nothing else: {files}. They are stills from two cameras inside a snake terrarium; a person may be holding a "
+    prompt = (f"Use the Read tool on exactly this file and nothing else: {files}. It is a still from a camera inside a snake terrarium looking out through the glass; a person may be holding a "
               f"Pokémon trading card or a booster pack up to the glass. Reply ONLY with JSON: {{\"pack\": true/false (a sealed or torn booster pack visible), "
-              f"\"card\": true/false (a single card held up, readable), \"name\": \"card name as printed, or null\", \"holo\": true/false (foil/holographic shine), "
+              f"\"card\": true/false (a single card held up), \"name\": \"card name as printed; if the print is blurred but the Pokémon is clearly recognisable from the artwork, its name; else null\", \"guess\": true/false (name came from the artwork, not the print), \"holo\": true/false (foil/holographic shine), "
               f"\"art\": \"five words on the artwork, or null\", \"hands\": true/false (human hands visible), \"cam\": \"hotcam\" or \"coolcam\" (which still shows the card), "
               f"\"box\": [left, top, width, height] as fractions 0-1 of that image around the card, or null, \"number\": \"collector number as printed e.g. 234/091, or null\", "
               f"\"set\": \"set name if printed/readable, or null\", \"product\": \"if a sealed product is held up (booster box, elite trainer box, tin, blister, booster pack): its printed name, or null\", "
-              f"\"product_type\": \"box|etb|tin|blister|pack|null\"}}. Never invent a name, number or set you cannot read.")
+              f"\"product_type\": \"box|etb|tin|blister|pack|null\"}}. Never invent a number or set you cannot read; a name from the artwork must be marked guess.")
     if not _cli_lock.acquire(timeout=20): return None
     try:
         r = subprocess.run([CLI_BIN, "-p", prompt, "--model", CLI_MODEL, "--max-turns", "4", "--tools", "Read", "--output-format", "text",
@@ -1388,7 +1389,7 @@ class Bot:
     # ------------------------------------------------ Rip Night: she watches the pulls ----
     def rip_watch(self):
         """After 'ripset': look at the glass every ~8 s for up to RIP_WATCH_MINUTES; comment once per new card (spoken + chat), once when the pack appears."""
-        seen = set(); seen_at = {}; dupes = set(); products = set(); last_pack = 0; started = time.time(); last_activity = time.time(); log("rip watch started")
+        seen = set(); seen_at = {}; dupes = set(); products = set(); last_pack = 0; last_blur = 0; started = time.time(); last_activity = time.time(); log("rip watch started")
         while time.time() < self.rip_until and time.time() - started < RIP_WATCH_MINUTES * 60:
             try:
                 if not bg_ok(): time.sleep(2); continue                                   # a viewer is waiting for a reply: let that go first
@@ -1412,13 +1413,16 @@ class Bot:
                         self.send(f"🎴 {line}"); threading.Thread(target=speak, args=(line, "rip"), daemon=True).start()
                         self.show_pull(d, prod, line, len(seen), pv, kind=kind.upper() if kind else "PRODUCT")
                 name = (d.get("name") or "").strip(); key = re.sub(r"[^a-z0-9]", "", name.lower())
+                if d.get("card") and not name and time.time() - last_blur > 40:
+                    last_blur = time.time(); bl = random.choice(["I see a card, but the letters swim — hold it a hand's width back from the glass, still, so my eye can focus.", "A card, yes, but a blur. Not against the glass: a hand's width back, and hold it there."])
+                    self.send(bl); threading.Thread(target=speak, args=(bl, "rip"), daemon=True).start()
                 if d.get("card") and name and len(name) < 60 and key in seen and time.time() - seen_at.get(key, 0) > 45 and key not in dupes:
                     dupes.add(key); dl = f"Another {name}. The ledgers do not blink twice; neither do I."
                     self.send(f"🎴 {dl}"); threading.Thread(target=speak, args=(dl, "rip"), daemon=True).start()
                 if d.get("card") and name and key not in seen and len(name) < 60 and not any(key[:10] == k[:10] and abs(len(key) - len(k)) <= 2 for k in seen):   # "Charizard ex" vs "Charizard EX"
                     seen.add(key); seen_at[key] = time.time()
                     val = card_value(name, d.get("number")); vw = value_words(val)
-                    ctx = f"Card just pulled and held to your glass: {name}{(' #' + d['number']) if d.get('number') else ''}. Foil/holo: {'yes' if d.get('holo') else 'no'}. Art: {d.get('art') or 'unclear'}. Pull number {len(seen)} of this rip. What the ledgers say (TCGplayer market): {vw}."
+                    ctx = f"Card just pulled and held to your glass: {name}{(' #' + d['number']) if d.get('number') else ''}{' (the print was blurred; you recognised it from the artwork — say so lightly, e.g. if my eyes serve)' if d.get('guess') else ''}. Foil/holo: {'yes' if d.get('holo') else 'no'}. Art: {d.get('art') or 'unclear'}. Pull number {len(seen)} of this rip. What the ledgers say (TCGplayer market): {vw}."
                     line = llm_answer("court", "pull", recent=self.recent, model=CLI_MODEL_TALK if LLM_BACKEND == "cli" else None, cache=False, vip=True,
                                       task=f"{ctx} Give your verdict on this pull in ONE or TWO sentences as the queen with her clairvoyant Oracle air: name the card, judge the art and the shine, "
                                            f"then reveal its worth the way a seer reads tea leaves ('the ledgers whisper...', 'I see...'), quoting the market figure above plainly. "
@@ -1428,7 +1432,7 @@ class Bot:
                     if CLIPS: threading.Timer(20, self.make_clip, args=(f"pull: {name}",)).start()
             except Exception as e: log("rip watch error:", e)
             time.sleep(RIP_WATCH_EVERY if time.time() - last_activity < 600 else 30)   # nothing at the glass for 10 min: glance every 30 s
-        log(f"rip watch ended, {len(seen)} cards seen"); self.rip_until = 0
+        log(f"rip watch ended, {len(seen)} cards seen"); self.rip_until = 0; RIP.d["watch_until"] = 0; RIP._save()
     def judge_card(self, name, number=""):
         """Judge a named card now (the broadcaster's correction, or a pull the eyes missed): price, verdict, voice, screen, clip."""
         try:
@@ -1616,11 +1620,12 @@ class Bot:
             cname, cnum = (m.group(1).strip(), (m.group(2) or "").replace(" ", "")) if m else ("", "")
             if cname: threading.Thread(target=self.judge_card, args=(cname, cnum), daemon=True).start(); reply = f"By your word: {cname}{(' ' + cnum) if cnum else ''}. Let me look."
         elif low.strip("! .") in ("ripstop", "ripdone") and user == CHANNEL:
-            self.rip_until = 0; RIP.d["show_until"] = 0; RIP._save(); threading.Thread(target=self.apply_show, daemon=True).start(); reply = "The rip is concluded. My verdicts stand. 👑"; path = "ripstop"
+            self.rip_until = 0; RIP.d["show_until"] = 0; RIP.d["watch_until"] = 0; RIP._save(); threading.Thread(target=self.apply_show, daemon=True).start(); reply = "The rip is concluded. My verdicts stand. 👑"; path = "ripstop"
         elif low.strip("! .") == "ripset":                                    # broadcaster only: reset the vote, announce the rip
             if user == CHANNEL:
-                reply = RIP.reset() + " I'm watching the glass — hold each card flat to the cool side and KEEP IT THERE until I speak (about ten seconds)."; path = "ripset"; threading.Thread(target=speak, args=(reply, "rip"), daemon=True).start()
+                reply = RIP.reset() + " I'm watching the cool side — hold each card a hand's width back from the glass, facing me, still, until I speak (about ten seconds)."; path = "ripset"; threading.Thread(target=speak, args=(reply, "rip"), daemon=True).start()
                 running = getattr(self, "rip_until", 0) > time.time(); self.rip_until = time.time() + RIP_WATCH_MINUTES * 60
+                RIP.d["watch_until"] = self.rip_until; RIP._save()
                 if not running: threading.Thread(target=self.rip_watch, daemon=True).start()
                 RIP.d["show_until"] = time.time() + 7200; RIP._save(); threading.Thread(target=self.apply_show, daemon=True).start()
             else: reply = "Only my human may start a set rip. You may, however, say RIP to vote. 👑"; path = "ripset-denied"
@@ -1754,6 +1759,8 @@ class Bot:
                 log(f"connected as {NICK}, joined #{CHANNEL}")
                 if not getattr(self, "_threads", False):
                     self._threads = True
+                    if RIP.d.get("watch_until", 0) > time.time():                          # a rip was running when the bot restarted: pick it back up
+                        self.rip_until = RIP.d["watch_until"]; threading.Thread(target=self.rip_watch, daemon=True).start(); log("rip watch resumed after restart")
                     threading.Thread(target=self.ambient_loop, daemon=True).start(); threading.Thread(target=self.helix_loop, daemon=True).start()
                 while True:
                     for line in self.ws.recv().split("\r\n"):

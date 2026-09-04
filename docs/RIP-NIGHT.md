@@ -20,7 +20,7 @@ Viewers can say `RIP` to vote/hype at any time; that is separate from watching.
 3. **Card held flat, 2–3 s**: she reads the name and collector number, looks the price up in her local price book (instant), then speaks a 1–2 sentence verdict: name, art, shine, "the ledgers whisper… $X". On screen: **PULL n · THE QUEEN JUDGES**, the card cropped from the still, value line, holo shimmer + "HOLO · SLOW BLINK" for foils. A Twitch clip is cut 20 s later.
 4. **Dud card**: same flow, a regal dismissal ("worth pennies" is allowed).
 5. **Same card again** (a second copy, >45 s later): one short line, "Another X. The ledgers do not blink twice." No second full verdict.
-6. **Unreadable card** (angle, glare, too far, motion blur): she stays silent rather than guess. Re-present it flat and still.
+6. **Unreadable print**: she says "the letters swim, a hand's width back". If the Pokémon is obvious from the artwork she names it as a guess ("if my eyes serve") and prices by name (a range); an exact price needs the collector number readable.
 7. **Name read slightly differently on consecutive looks** ("Charizard ex" / "Charizard EX"): treated as the same card.
 8. **A viewer asks something mid-rip**: their reply goes first; the next look waits a couple of seconds.
 9. **Idle**: nothing at the glass → glance every 30 s → session ends after 40 min with a line inviting the next `ripset`.
@@ -41,7 +41,7 @@ We do **not** scrape eBay/TCGplayer pages: both serve automated browsers a bot-c
 
 ## Physical setup that makes it work
 - Use the **cool-side camera** (the 4K one; the still she reads is 1080p). The hot side is 360p and cannot read text.
-- Card **flat against the glass**, centred, and **keep it there until she speaks** (a look takes ~8 s; she looks back-to-back, so 10–12 s covers it). Foils: tilt slightly so the shine is visible, then flat.
+- Card **a hand's width (15–25 cm) back from the glass**, facing the camera, still, and **keep it there until she speaks** (a look takes ~8 s; she looks back-to-back, so 10–12 s covers it). Flat against the glass is too close for the lens to focus: the name blurs and she stays silent or guesses from the art. Foils: tilt slightly so the shine is visible, then flat.
 - Light from the front, not behind the card. Avoid the IR night mode if you can (rip while the room is lit).
 - One card at a time. A fanned hand of cards reads as "no card".
 
