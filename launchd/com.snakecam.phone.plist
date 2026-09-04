@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.snakecam.phone</string>
+  <key>ProgramArguments</key><array><string>/opt/homebrew/bin/python3</string><string>-u</string><string>__ROOT__/scripts/phone-server.py</string></array>
+  <key>RunAtLoad</key><true/><key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/snakecam-phone.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/snakecam-phone.log</string>
+</dict></plist>

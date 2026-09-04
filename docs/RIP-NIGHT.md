@@ -37,8 +37,7 @@ Viewers can say `RIP` to vote/hype at any time; that is separate from watching.
 A phone held over the cards beats the terrarium camera through glass. A second, tiny relay (`relay/ripcam/mediamtx.yml`, launchd
 `com.snakecam.ripcam-relay`) accepts the phone's camera over WHIP on `https://<mac-lan-ip>:8891` (self-signed certificate, user `phone`,
 password `RIPCAM_PASSWORD` in `.env`) and re-serves it on loopback as `rtsp://127.0.0.1:8556/ripcam`.
-- **Phone:** open `https://<mac-lan-ip>:8891/ripcam/publish`, accept the certificate once, log in as `phone`, pick the rear camera, tap Publish.
-  Keep the page open (screen on); Publish again if it drops.
+- **Phone:** open **`https://<mac-lan-ip>:8895/`** (the companion page, `overlay/phone/index.html` served by `scripts/phone-server.py`, launchd `com.snakecam.phone`): accept the certificate once, tap **Start camera**. The login is built into the page. Buttons: **Card table** (she reads, prices and judges cards), **Eagle eye** (close-up of her on the stream, no judging), **Judge now** (look immediately), **Stop**. The page shows her status and each verdict. Publishing opens the card table by itself; stopping closes it. (`:8891/ripcam/publish` is the relay's raw page, same thing without the UI.)
 - **Bot:** the rip eyes use the phone stream automatically whenever it is live (log line "using the phone rip cam"), and fall back to the cool cam.
 - **OBS:** a "Rip Cam" media source (rtsp 8556) sits top-right as a picture-in-picture, transparent until the phone publishes — it doubles as a
   close-up cam when she's by the glass.

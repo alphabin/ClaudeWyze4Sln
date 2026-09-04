@@ -1,0 +1,65 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="theme-color" content="#120a1a">
+<title>Cleo's Court · Phone Cam</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap">
+<style>
+:root{--bg:#120a1a;--panel:#1d1128;--gold:#d9b65b;--gold2:#f2d27a;--ink:#f3e9d2;--muted:#a89a7a;--red:#e0483c;--green:#5fd39b}
+*{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:16px -apple-system,system-ui,sans-serif}
+body{display:flex;flex-direction:column;min-height:100dvh;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);overflow-x:hidden;max-width:100vw}
+header{padding:14px 18px 8px;text-align:center}
+h1{margin:0;font-family:Cinzel,serif;font-weight:700;font-size:15px;letter-spacing:.34em;color:var(--gold2)}
+.sub{color:var(--muted);font-size:12px;letter-spacing:.14em;text-transform:uppercase;margin-top:4px}
+.stage{position:relative;margin:8px 14px;border:2px solid var(--gold);border-radius:14px;overflow:hidden;background:#000;aspect-ratio:4/3;box-shadow:0 0 0 6px rgba(20,8,14,.8),0 14px 40px rgba(0,0,0,.6)}
+video{width:100%;height:100%;object-fit:cover;background:#000}
+.badge{position:absolute;top:10px;left:10px;padding:5px 12px;border-radius:999px;background:rgba(10,8,20,.85);border:1px solid rgba(217,182,91,.5);font-family:Cinzel,serif;font-size:11px;letter-spacing:.22em;color:var(--gold2)}
+.badge i{display:inline-block;width:8px;height:8px;border-radius:50%;background:#666;margin-right:7px;vertical-align:0}
+.badge.on i{background:var(--red);box-shadow:0 0 10px var(--red)}
+.status{margin:6px 14px;padding:12px 14px;border-radius:12px;background:var(--panel);border:1px solid rgba(217,182,91,.25);min-height:64px}
+.status b{display:block;font-family:Cinzel,serif;font-size:13px;letter-spacing:.2em;color:var(--gold2);margin-bottom:4px}
+.status span{display:block;color:var(--ink);font-size:15px;line-height:1.35;overflow-wrap:anywhere}
+.row{display:flex;gap:10px;margin:8px 14px}
+button{flex:1;min-width:0;padding:14px 6px;border-radius:14px;border:2px solid var(--gold);background:linear-gradient(180deg,#2a1730,#170c1f);color:var(--gold2);font-family:Cinzel,serif;font-weight:700;font-size:12px;letter-spacing:.1em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;-webkit-tap-highlight-color:transparent}
+button:active{transform:scale(.98)} button.primary{font-size:18px;padding:22px 10px;border-color:var(--gold2);background:linear-gradient(180deg,#e8c56b,#a97b23);color:#2a0b1a}
+button.stop{background:linear-gradient(180deg,#8a2a2a,#4a1010);color:#ffd9d0;border-color:#c05050}
+button.sel{outline:3px solid var(--gold2);outline-offset:-3px}
+.hint{margin:6px 18px 14px;color:var(--muted);font-size:13px;line-height:1.4;text-align:center}
+.verdict{margin:6px 14px;padding:12px 14px;border-radius:12px;background:#efe6cf;color:#2a1a10;display:none}
+.verdict.on{display:block} .verdict b{font-family:Cinzel,serif;font-size:15px;color:#7a5a1a} .verdict .v{font-size:15px;line-height:1.35;margin-top:4px} .verdict .p{font-family:Cinzel,serif;font-weight:700;color:#8a6a2a;margin-top:6px}
+</style></head><body>
+<header><h1>✦ CLEO'S CARD TABLE ✦</h1><div class="sub">phone cam · princess cleo live</div></header>
+<div class="stage"><video id="v" autoplay muted playsinline></video><div class="badge" id="badge"><i></i>OFF AIR</div></div>
+<div class="status"><b id="st-title">READY</b><span id="st-text">Tap Start. Cleo opens the card table when she sees the phone. Hold each card still, a hand's width away, until she speaks.</span></div>
+<div class="verdict" id="verdict"><b id="vd-name"></b><div class="v" id="vd-text"></div><div class="p" id="vd-price"></div></div>
+<div class="row"><button class="primary" id="start">Start camera</button></div>
+<div class="row"><button id="mode-table">Card table</button><button id="mode-eagle">Eagle eye</button><button id="judge">Judge now</button></div>
+<div class="hint">Card table = she reads and prices cards. Eagle eye = close-up of her on the stream, no judging. Keep this page open while it's on.</div>
+<script>
+const WHIP='https://__LAN_IP__:8891/ripcam/whip', AUTH='Basic '+btoa('phone:__RIPCAM_PASSWORD__');
+let pc=null, stream=null, on=false, mode='auto';
+const $=id=>document.getElementById(id);
+async function start(){
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30}},audio:false});
+    $('v').srcObject=stream; pc=new RTCPeerConnection({iceServers:[]});
+    stream.getTracks().forEach(t=>pc.addTransceiver(t,{direction:'sendonly'}));
+    const offer=await pc.createOffer(); await pc.setLocalDescription(offer);
+    await new Promise(r=>{ if(pc.iceGatheringState==='complete') return r(); pc.onicegatheringstatechange=()=>pc.iceGatheringState==='complete'&&r(); setTimeout(r,1500); });
+    const res=await fetch(WHIP,{method:'POST',headers:{'Content-Type':'application/sdp','Authorization':AUTH},body:pc.localDescription.sdp});
+    if(!res.ok) throw new Error('relay said '+res.status);
+    await pc.setRemoteDescription({type:'answer',sdp:await res.text()}); on=true; ui();
+    pc.onconnectionstatechange=()=>{ if(['failed','disconnected','closed'].includes(pc.connectionState)&&on){ setStatus('RECONNECTING','The link dropped. Tap Start again.'); stop(); } };
+  }catch(e){ setStatus('COULD NOT START', e.message+(location.protocol!=='https:'?' (needs https)':'')); }
+}
+function stop(){ on=false; try{pc&&pc.close()}catch{} try{stream&&stream.getTracks().forEach(t=>t.stop())}catch{} $('v').srcObject=null; fetch('/cmd',{method:'POST',body:JSON.stringify({stop:true})}).catch(()=>{}); ui(); }
+function ui(){ const b=$('start'); b.textContent=on?'Stop':'Start camera'; b.classList.toggle('stop',on); $('badge').className='badge'+(on?' on':''); $('badge').innerHTML='<i></i>'+(on?'ON AIR':'OFF AIR'); if(!on) setStatus('READY','Tap Start. Cleo opens the card table when she sees the phone.'); }
+function setStatus(t,x){ $('st-title').textContent=t; $('st-text').textContent=x; }
+$('start').onclick=()=>on?stop():start();
+$('mode-table').onclick=()=>setMode('table'); $('mode-eagle').onclick=()=>setMode('eagle');
+function setMode(m){ mode=m; $('mode-table').classList.toggle('sel',m==='table'); $('mode-eagle').classList.toggle('sel',m==='eagle'); fetch('/cmd',{method:'POST',body:JSON.stringify({mode:m})}).catch(()=>{}); }
+$('judge').onclick=()=>{ fetch('/cmd',{method:'POST',body:JSON.stringify({judge:true})}); setStatus('JUDGING','Hold the card still…'); };
+let lastPull=0;
+async function poll(){ try{ const s=await (await fetch('/status',{cache:'no-store'})).json();
+  if(on){ const r=s.ripcam||{}; if(!r.live) setStatus('CONNECTING','The stream is on its way to Cleo (up to 30 s)…'); else setStatus(r.mode==='table'?'CARD TABLE OPEN':'EAGLE EYE', r.mode==='table'?'Hold a card under the camera, still, until she speaks. Boxes and packs too.':'You are live on the stream as a close-up. Switch to Card table to judge cards.'); }
+  const p=s.pull; if(p&&p.ts&&p.ts!==lastPull&&Date.now()/1000-p.ts<90){ lastPull=p.ts; $('vd-name').textContent=p.name||''; $('vd-text').textContent=p.verdict||''; $('vd-price').textContent=p.value?('the ledgers whisper · '+p.value):''; $('verdict').classList.add('on'); setTimeout(()=>$('verdict').classList.remove('on'),40000); }
+ }catch{} }
+setInterval(poll,3000); ui();
+</script></body></html>

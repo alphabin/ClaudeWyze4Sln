@@ -295,6 +295,13 @@ def ripcam_tick(rip_active, bot=None):
     """Every ~30 s: is the phone publishing, and which mode? Writes overlay/ripcam.json; moves the OBS source when the mode changes.
     Publishing the phone starts the card watch by itself (Card Table); stopping it ends the watch, unless a 'ripset' session is running."""
     live = ripcam_live()
+    try: cmd = json.load(open(f"{ROOT}/overlay/phone_cmd.json"))                      # the phone page's buttons
+    except Exception: cmd = {}
+    fresh = time.time() - cmd.get("ts", 0) < 90
+    if bot is not None and fresh and cmd.get("stop") and not getattr(bot, "_cmd_seen", 0) == cmd.get("ts"):
+        bot._cmd_seen = cmd.get("ts"); bot.rip_until = 0; bot.rip_auto = False; log("rip cam: stop from the phone")
+    if bot is not None and fresh and cmd.get("judge") and not getattr(bot, "_cmd_seen", 0) == cmd.get("ts"):
+        bot._cmd_seen = cmd.get("ts"); log("rip cam: judge-now from the phone"); bot.judge_next = True
     if bot is not None:
         if live and not getattr(bot, "rip_until", 0) > time.time():
             bot.rip_until = time.time() + 20 * 60; bot.rip_auto = True; threading.Thread(target=bot.rip_watch, daemon=True).start()
@@ -302,7 +309,10 @@ def ripcam_tick(rip_active, bot=None):
         elif not live and getattr(bot, "rip_auto", False) and getattr(bot, "rip_until", 0) > time.time():
             bot.rip_until = 0; bot.rip_auto = False; log("rip cam: phone stopped, table closed")
         elif live and getattr(bot, "rip_until", 0) > time.time(): bot.rip_until = max(bot.rip_until, time.time() + 20 * 60); rip_active = True   # keep the watch alive while the phone is up
-    mode = ("table" if rip_active else "eagle") if live else None
+    want = cmd.get("mode") if time.time() - cmd.get("ts", 0) < 6 * 3600 and cmd.get("mode") in ("table", "eagle") else None   # the phone's switch wins
+    if bot is not None and want == "eagle" and getattr(bot, "rip_auto", False): bot.rip_until = 0; bot.rip_auto = False   # eagle eye = no judging
+    if bot is not None and want == "table" and live and not getattr(bot, "rip_until", 0) > time.time(): bot.rip_until = time.time() + 20 * 60; bot.rip_auto = True; threading.Thread(target=bot.rip_watch, daemon=True).start()
+    mode = (want or ("table" if rip_active else "eagle")) if live else None
     if (live, mode) != (_ripcam["live"], _ripcam["mode"]):
         _ripcam.update(live=live, mode=mode); log(f"rip cam: {'live, ' + mode if live else 'off'}")
         if mode: ripcam_layout(mode)
@@ -1764,7 +1774,9 @@ class Bot:
                     if line: self.send(f"🎴 {line}"); threading.Thread(target=speak, args=(line, "rip"), daemon=True).start()
                     if CLIPS: threading.Timer(20, self.make_clip, args=(f"pull: {name}",)).start()
             except Exception as e: log("rip watch error:", e)
-            time.sleep(RIP_WATCH_EVERY if time.time() - last_activity < 600 else 30)   # nothing at the glass for 10 min: glance every 30 s
+            for _ in range(int((RIP_WATCH_EVERY if time.time() - last_activity < 600 else 30) * 2)):
+                if getattr(self, "judge_next", False): self.judge_next = False; last_activity = time.time(); break
+                time.sleep(0.5)
         log(f"rip watch ended, {len(seen)} cards seen"); self.rip_until = 0; RIP.d["watch_until"] = 0; RIP._save()
     def judge_card(self, name, number=""):
         """Judge a named card now (the broadcaster's correction, or a pull the eyes missed): price, verdict, voice, screen, clip."""
