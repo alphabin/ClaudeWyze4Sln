@@ -35,6 +35,12 @@ def signed_post(token, path, body, appinfo="wyze_web_2.3.1"):
     r = requests.post(API + path, data=s, headers=h, timeout=25)
     j = r.json()
     if str(j.get("code")) != "1":
+        if r.status_code == 401 or str(j.get("code")) in ("2001", "2002"):
+            if not getattr(signed_post, "_retrying", False) and refresh_auth("401 from " + path):
+                signed_post._retrying = True
+                try:
+                    token, _ = load_auth(); return signed_post(token, path, body, appinfo)
+                finally: signed_post._retrying = False
         raise RuntimeError(f"{path} -> HTTP {r.status_code} code={j.get('code')} msg={j.get('msg')}")
     return j["data"]
 
@@ -76,6 +82,22 @@ def unwrap(b64: str, token: str) -> str:
     return xxtea_decrypt(base64.b64decode(b64), token.encode()).decode("utf-8")
 
 # ---- main loop --------------------------------------------------------------------------
+def refresh_auth(reason=""):
+    """The Wyze access token expires after ~48 h. Refresh it with the refresh token (the bridge's own library) and rewrite
+    tokens/auth.pickle, which the bridge shares, so neither of us keeps using a dead token."""
+    try:
+        from wyzecam import api as wapi
+        auth = pickle.load(open(f"{TOKENS}/auth.pickle", "rb"))
+        new = wapi.refresh_token(auth)
+        pickle.dump(new, open(f"{TOKENS}/auth.pickle", "wb"))
+        log(f"access token refreshed ({reason})"); return True
+    except Exception as e:
+        log(f"token refresh FAILED ({reason}): {type(e).__name__} {str(e)[:120]}"); return False
+
+def auth_age_hours():
+    try: return (time.time() - os.path.getmtime(f"{TOKENS}/auth.pickle")) / 3600
+    except Exception: return 0
+
 def load_auth():
     auth = pickle.load(open(f"{TOKENS}/auth.pickle", "rb"))
     user = None
@@ -160,6 +182,7 @@ def main():
         except Exception:
             log("provisioner error:"); traceback.print_exc()
         time.sleep(RENEW_EVERY)
+        if auth_age_hours() > 36: refresh_auth('age > 36 h')              # never let the shared token reach its ~48 h expiry
 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--once":
