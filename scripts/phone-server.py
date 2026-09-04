@@ -16,6 +16,11 @@ class H(http.server.SimpleHTTPRequestHandler):
                 try: out[k] = json.load(open(f"{ROOT}/overlay/{f}"))
                 except Exception: out[k] = None
             return self._json(200, out)
+        if self.path.startswith("/pull-image"):
+            try:
+                img = json.load(open(f"{ROOT}/overlay/pull.json"))["image"]; data = open(f"{ROOT}/overlay/{img}", "rb").read()
+                self.send_response(200); self.send_header("Content-Type", "image/jpeg"); self.send_header("Content-Length", str(len(data))); self.send_header("Cache-Control", "no-store"); self.end_headers(); return self.wfile.write(data)
+            except Exception: return self._json(404, {"error": "no image"})
         if self.path == "/": self.path = "/index.html"
         return super().do_GET()
     def do_POST(self):

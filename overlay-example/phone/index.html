@@ -1,106 +1,119 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="theme-color" content="#120a1a">
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="theme-color" content="#000">
 <title>Cleo's Card Table</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap">
 <style>
-:root{--bg:#120a1a;--panel:#1d1126;--gold:#c9a24d;--gold2:#f2d27a;--ink:#f0e6d0;--muted:#a898b8;--red:#e0483c;--green:#5bd48a}
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{background:var(--bg);color:var(--ink);font-family:-apple-system,system-ui,sans-serif;-webkit-text-size-adjust:100%}
-body{display:flex;flex-direction:column;min-height:100dvh;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);overflow-x:hidden;max-width:100vw}
-header{padding:10px 14px 6px;text-align:center}
-h1{font-family:Cinzel,serif;font-weight:700;font-size:16px;letter-spacing:.2em;color:var(--gold2);white-space:nowrap}
-.sub{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-top:3px}
-.stage{position:relative;margin:6px 14px;border:2px solid var(--gold);border-radius:14px;overflow:hidden;background:#000;aspect-ratio:3/4;max-height:52dvh;box-shadow:0 12px 40px rgba(0,0,0,.6)}
-video{width:100%;height:100%;object-fit:contain;background:#000}
-.guide{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;opacity:0;transition:opacity .4s}.guide.on{opacity:1}
-.guide.flash{background:rgba(255,255,255,.55)}
-.badge{position:absolute;left:10px;top:10px;padding:4px 12px;border-radius:999px;background:rgba(10,8,20,.85);border:1px solid rgba(217,182,91,.5);color:var(--gold2);font-family:Cinzel,serif;font-size:11px;letter-spacing:.2em}
-.badge i{display:inline-block;width:8px;height:8px;border-radius:50%;background:#666;margin-right:7px}.badge.on i{background:var(--red);box-shadow:0 0 8px var(--red)}
-.status{margin:6px 14px;padding:10px 14px;border-radius:12px;background:var(--panel);border:1px solid rgba(201,162,77,.35)}
-.status b{display:block;font-family:Cinzel,serif;font-size:12px;letter-spacing:.2em;color:var(--gold2);margin-bottom:3px}
-.status span{display:block;font-size:15px;line-height:1.35;overflow-wrap:anywhere}
-.verdict{margin:0 14px;padding:12px 14px;border-radius:12px;background:linear-gradient(180deg,#2a1730,#170c1f);border:2px solid var(--gold);display:none}.verdict.on{display:block}
-.verdict b{font-family:Cinzel,serif;font-size:18px;color:var(--ink)}.verdict .v{font-size:15px;line-height:1.35;margin:6px 0}.verdict .p{font-family:Cinzel,serif;color:var(--gold2);letter-spacing:.06em;margin-top:6px}
-.chips{display:flex;gap:8px;margin-top:10px}.chips button{flex:1;padding:9px 6px;font-size:11px;border-radius:999px}
-.row{display:flex;gap:10px;margin:8px 14px}.row.seg{margin-top:14px}.row.seg button{font-size:11px;padding:11px 6px}
-.zoom{display:flex;align-items:center;gap:10px;margin:2px 22px 4px;font-size:12px;color:var(--muted)}.zoom input{flex:1;accent-color:#e8c56b}
-.hint b{color:var(--gold2)}
-button.snap{background:linear-gradient(180deg,#3a2350,#22132f);color:var(--gold2);border-color:var(--gold)}button.snap:disabled{opacity:.35}
-video{transform-origin:center;transition:transform .15s}
-button{flex:1;min-width:0;padding:14px 6px;border-radius:14px;border:2px solid var(--gold);background:linear-gradient(180deg,#2a1730,#170c1f);color:var(--gold2);font-family:Cinzel,serif;font-weight:700;font-size:12px;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;-webkit-tap-highlight-color:transparent}
-button.primary{padding:20px;font-size:17px;background:linear-gradient(180deg,#e8c56b,#a97b23);color:#2a0b1a;border-color:#6b4a12}
-button.stop{background:linear-gradient(180deg,#8a2a22,#4a1210);color:#ffd9d4;border-color:#5a1a14}
-button.sel{background:linear-gradient(180deg,#e8c56b,#a97b23);color:#2a0b1a}
-button:active{transform:scale(.97)}
-.hint{margin:4px 22px 14px;font-size:12px;line-height:1.4;color:var(--muted);text-align:center}
-</style></head><body>
-<header><h1>✦ CLEO'S CARD TABLE ✦</h1><div class="sub">phone cam · princess cleo live</div></header>
-<div class="stage"><video id="v" autoplay muted playsinline></video><div class="guide" id="guide"></div><div class="badge" id="badge"><i></i>OFF AIR</div></div>
-<div class="zoom"><span>1×</span><input type="range" id="zoom" min="1" max="4" step="0.1" value="1"><span id="zoom-v">zoom 1.0×</span></div>
-<div class="status"><b id="st-title">READY</b><span id="st-text">Tap Start camera. Then fill the picture with a card and tap Snap.</span></div>
-<div class="verdict" id="verdict"><b id="vd-name"></b><div class="v" id="vd-text"></div><div class="p" id="vd-price"></div><div class="chips"><button id="fix-no">Not a holo</button><button id="fix-yes">It is a holo</button></div></div>
-<div class="row"><button class="primary" id="start">Start camera</button></div>
-<div class="row"><button class="primary snap" id="judge">📸 Snap this card</button></div>
-<div class="row seg"><button id="live-toggle">Phone live on stream: OFF</button></div>
-<div class="hint">Normally only the cards you snap appear on the stream, with her verdict and price. Turn <b>Phone live on stream</b> on to show your phone picture live instead (a close-up of her, for example). While it is on, cards are not judged. Takes up to 30 s to switch.</div>
+:root{--gold:#c9a24d;--gold2:#f2d27a;--ink:#f0e6d0;--muted:#b7a9c4;--red:#e0483c}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+html,body{height:100%;background:#000;color:var(--ink);font-family:-apple-system,system-ui,sans-serif;overflow:hidden}
+#app{position:fixed;inset:0;display:flex;flex-direction:column}
+/* viewfinder */
+#stage{position:relative;flex:1;background:#000;overflow:hidden}
+video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;transform-origin:center;transition:transform .15s}
+#flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .25s}#flash.on{opacity:.7;transition:none}
+/* top bar */
+#top{position:absolute;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top) + 10px) 14px 10px;display:flex;align-items:center;gap:10px;background:linear-gradient(180deg,rgba(0,0,0,.7),transparent);z-index:3}
+#top h1{font-family:Cinzel,serif;font-size:13px;letter-spacing:.18em;color:var(--gold2);flex:1;white-space:nowrap}
+.badge{padding:5px 11px;border-radius:999px;background:rgba(10,8,20,.75);border:1px solid rgba(217,182,91,.5);color:var(--gold2);font-family:Cinzel,serif;font-size:10px;letter-spacing:.18em}
+.badge i{display:inline-block;width:7px;height:7px;border-radius:50%;background:#666;margin-right:6px}.badge.on i{background:var(--red);box-shadow:0 0 8px var(--red)}
+#livebtn{padding:6px 10px;border-radius:999px;border:1px solid rgba(217,182,91,.5);background:rgba(10,8,20,.75);color:var(--muted);font-size:11px}#livebtn.on{background:var(--red);color:#fff;border-color:var(--red)}
+/* toast */
+#toast{position:absolute;left:14px;right:14px;top:calc(env(safe-area-inset-top) + 58px);z-index:3;padding:10px 14px;border-radius:12px;background:rgba(12,8,20,.82);border:1px solid rgba(201,162,77,.4);backdrop-filter:blur(8px);transition:opacity .3s}
+#toast b{display:block;font-family:Cinzel,serif;font-size:11px;letter-spacing:.2em;color:var(--gold2);margin-bottom:2px}#toast span{font-size:14px;line-height:1.35}
+#toast.reading b:after{content:"";display:inline-block;width:8px;height:8px;margin-left:8px;border-radius:50%;border:2px solid var(--gold2);border-top-color:transparent;animation:spin .8s linear infinite;vertical-align:-1px}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* bottom controls */
+#ctl{position:absolute;left:0;right:0;bottom:0;z-index:3;padding:14px 20px calc(env(safe-area-inset-bottom) + 18px);display:flex;flex-direction:column;align-items:center;gap:16px;background:linear-gradient(0deg,rgba(0,0,0,.85),transparent)}
+#zooms{display:flex;gap:8px}#zooms button{width:44px;height:44px;border-radius:50%;border:1px solid rgba(255,255,255,.25);background:rgba(20,14,28,.7);color:#fff;font-size:13px;font-weight:600}#zooms button.sel{background:var(--gold2);color:#2a0b1a;border-color:var(--gold2)}
+#bar{display:flex;align-items:center;justify-content:space-between;width:100%;max-width:360px}
+#stop{width:56px;height:56px;border-radius:50%;border:2px solid rgba(255,255,255,.35);background:rgba(20,14,28,.7);color:#fff;font-size:12px}
+#shutter{width:84px;height:84px;border-radius:50%;border:5px solid #fff;background:radial-gradient(circle,#f2d27a 55%,#a97b23 100%);box-shadow:0 0 0 3px rgba(0,0,0,.6),0 10px 30px rgba(0,0,0,.6)}#shutter:active{transform:scale(.92)}#shutter:disabled{filter:grayscale(1);opacity:.4}
+#last{width:56px;height:56px;border-radius:12px;border:2px solid var(--gold);background:#111 center/cover;overflow:hidden}
+/* start screen */
+#start{position:absolute;inset:0;z-index:5;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:radial-gradient(ellipse at 50% 30%,#2a1730,#0b0710 70%);padding:30px;text-align:center}
+#start h2{font-family:Cinzel,serif;font-size:22px;letter-spacing:.2em;color:var(--gold2)}#start p{color:var(--muted);font-size:14px;line-height:1.5;max-width:300px}
+#go{padding:20px 40px;border-radius:999px;border:2px solid #6b4a12;background:linear-gradient(180deg,#e8c56b,#a97b23);color:#2a0b1a;font-family:Cinzel,serif;font-weight:700;font-size:16px;letter-spacing:.12em}
+#start.hide{display:none}
+/* verdict sheet */
+#sheet{position:absolute;left:0;right:0;bottom:0;z-index:4;transform:translateY(110%);transition:transform .35s cubic-bezier(.2,.8,.2,1);background:linear-gradient(180deg,#22132f,#12091a);border-top:2px solid var(--gold);border-radius:22px 22px 0 0;padding:14px 18px calc(env(safe-area-inset-bottom) + 18px)}
+#sheet.on{transform:none}
+#sheet .grip{width:44px;height:4px;border-radius:2px;background:rgba(255,255,255,.25);margin:0 auto 12px}
+#sheet .row{display:flex;gap:14px;align-items:flex-start}
+#sheet img{width:74px;height:104px;object-fit:cover;border-radius:6px;border:1px solid var(--gold);background:#000;flex:none}
+#sheet b{font-family:Cinzel,serif;font-size:19px;color:var(--ink);display:block}
+#sheet .p{font-family:Cinzel,serif;color:var(--gold2);font-size:15px;margin-top:4px}#sheet .v{font-size:14px;line-height:1.4;color:var(--ink);margin-top:8px}
+#sheet .chips{display:flex;gap:8px;margin-top:12px}#sheet .chips button{flex:1;padding:11px 6px;border-radius:999px;border:1px solid var(--gold);background:transparent;color:var(--gold2);font-size:12px}#sheet .chips button.x{border-color:rgba(255,255,255,.3);color:#fff}
+</style></head><body><div id="app">
+<div id="stage"><video id="v" autoplay muted playsinline></video><div id="flash"></div>
+  <div id="top"><h1>✦ CLEO'S CARD TABLE</h1><span class="badge" id="badge"><i></i>OFF</span><button id="livebtn">phone on stream</button></div>
+  <div id="toast"><b id="t1">READY</b><span id="t2">Fill the picture with a card and press the shutter.</span></div>
+  <div id="ctl"><div id="zooms"><button data-z="1" class="sel">1×</button><button data-z="2">2×</button><button data-z="3">3×</button></div>
+    <div id="bar"><button id="stop">stop</button><button id="shutter" aria-label="snap"></button><div id="last"></div></div></div>
+  <div id="sheet"><div class="grip"></div><div class="row"><img id="s-img" alt=""><div><b id="s-name"></b><div class="p" id="s-price"></div></div></div><div class="v" id="s-text"></div>
+    <div class="chips"><button id="fix-no">not a holo</button><button id="fix-yes">it is a holo</button><button id="close" class="x">next card</button></div></div>
+</div>
+<div id="start"><h2>CLEO'S CARD TABLE</h2><p>Your phone becomes her eyes. Snap each card: she names it, prices it and passes judgement on the stream.</p><button id="go">OPEN THE TABLE</button><p style="font-size:12px">Keep this page open while you rip.</p></div>
+</div>
 <canvas id="c" hidden></canvas>
 <script>
 const WHIP='https://__LAN_IP__:8891/ripcam/whip', AUTH='Basic '+btoa('phone:__RIPCAM_PASSWORD__');
 let pc=null, stream=null, on=false, mode='table', busy=0, lastSnap=0, prev=null, still=0, moved=false, lastShotSig=null, zoom=1, nativeZoom=false; const LOADED=Date.now()/1000; let lastPull=LOADED;
 const $=id=>document.getElementById(id);
+function toast(t,x,cls){ $('t1').textContent=t; $('t2').textContent=x; $('toast').className=cls||''; }
 async function start(){
   try{
     stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30}},audio:false});
-    $('v').srcObject=stream; $('v').onloadedmetadata=()=>{ const v=$('v'); document.querySelector('.stage').style.aspectRatio=v.videoWidth+'/'+v.videoHeight; }; pc=new RTCPeerConnection({iceServers:[]});
+    $('v').srcObject=stream; pc=new RTCPeerConnection({iceServers:[]});
     stream.getTracks().forEach(t=>pc.addTransceiver(t,{direction:'sendonly'}));
     const offer=await pc.createOffer(); await pc.setLocalDescription(offer);
     await new Promise(r=>{ if(pc.iceGatheringState==='complete') return r(); pc.onicegatheringstatechange=()=>pc.iceGatheringState==='complete'&&r(); setTimeout(r,1500); });
     const res=await fetch(WHIP,{method:'POST',headers:{'Content-Type':'application/sdp','Authorization':AUTH},body:pc.localDescription.sdp});
     if(!res.ok) throw new Error('relay said '+res.status);
-    await pc.setRemoteDescription({type:'answer',sdp:await res.text()}); on=true; ui(); setMode(mode,false);
+    await pc.setRemoteDescription({type:'answer',sdp:await res.text()}); on=true; $('start').classList.add('hide'); ui(); setMode('table');
     try{ if(navigator.wakeLock) navigator.wakeLock.request('screen').catch(()=>{}); }catch{}
-    try{ const cap=stream.getVideoTracks()[0].getCapabilities&&stream.getVideoTracks()[0].getCapabilities(); nativeZoom=!!(cap&&cap.zoom); if(nativeZoom){ $('zoom').min=Math.max(1,cap.zoom.min); $('zoom').max=Math.min(5,cap.zoom.max); } }catch{}
-    applyZoom();
-    pc.onconnectionstatechange=()=>{ if(['failed','disconnected','closed'].includes(pc.connectionState)&&on){ setStatus('RECONNECTING','The link dropped. Tap Start again.'); stop(); } };
-  }catch(e){ setStatus('COULD NOT START', e.message+(location.protocol!=='https:'?' (needs https)':'')); }
+    try{ const cap=stream.getVideoTracks()[0].getCapabilities&&stream.getVideoTracks()[0].getCapabilities(); nativeZoom=!!(cap&&cap.zoom&&cap.zoom.max>=2); }catch{}
+    pc.onconnectionstatechange=()=>{ if(['failed','disconnected','closed'].includes(pc.connectionState)&&on){ stop(); toast('LINK DROPPED','Open the table again.'); } };
+  }catch(e){ $('start').classList.remove('hide'); toast('COULD NOT START', e.message+(location.protocol!=='https:'?' (needs https)':'')); alert('Could not start: '+e.message); }
 }
-function applyZoom(){ zoom=parseFloat($('zoom').value); $('zoom-v').textContent='zoom '+zoom.toFixed(1)+'×';
-  if(nativeZoom&&stream){ stream.getVideoTracks()[0].applyConstraints({advanced:[{zoom}]}).catch(()=>{}); $('v').style.transform='none'; } else $('v').style.transform='scale('+zoom+')'; }
-$('zoom').oninput=applyZoom;
-function stop(){ on=false; try{pc&&pc.close()}catch{} try{stream&&stream.getTracks().forEach(t=>t.stop())}catch{} $('v').srcObject=null; fetch('/cmd',{method:'POST',body:JSON.stringify({stop:true})}).catch(()=>{}); ui(); }
-function ui(){ const b=$('start'); b.textContent=on?'Stop camera':'Start camera'; $('judge').disabled=!on||mode!=='table'; b.classList.toggle('stop',on); $('badge').className='badge'+(on?' on':''); $('badge').innerHTML='<i></i>'+(on?'ON AIR':'OFF AIR');  if(!on) setStatus('READY','Tap Start camera. Then fill the picture with a card and tap Snap.'); }
-function setStatus(t,x){ $('st-title').textContent=t; $('st-text').textContent=x; }
-$('start').onclick=()=>on?stop():start();
-$('live-toggle').onclick=()=>setMode(mode==='table'?'eagle':'table');
-function setMode(m,send=true){ mode=m; $('judge').disabled=!on||m!=='table'; $('verdict').classList.remove('on'); const t=$('live-toggle'); t.textContent='Phone live on stream: '+(m==='eagle'?'ON':'OFF'); t.classList.toggle('sel',m==='eagle'); if(send) fetch('/cmd',{method:'POST',body:JSON.stringify({mode:m})}).catch(()=>{}); }
-// ---- the snap: a full-size JPEG straight from the camera, posted to the Mac (sharper than any frame grabbed off the stream)
+function stop(){ on=false; try{pc&&pc.close()}catch{} try{stream&&stream.getTracks().forEach(t=>t.stop())}catch{} $('v').srcObject=null; fetch('/cmd',{method:'POST',body:JSON.stringify({stop:true})}).catch(()=>{}); $('start').classList.remove('hide'); $('sheet').classList.remove('on'); ui(); }
+function ui(){ $('badge').className='badge'+(on?' on':''); $('badge').innerHTML='<i></i>'+(on?'ON AIR':'OFF'); $('shutter').disabled=!on||mode!=='table'; }
+$('go').onclick=start; $('stop').onclick=stop;
+$('livebtn').onclick=()=>setMode(mode==='table'?'eagle':'table');
+function setMode(m){ mode=m; $('livebtn').classList.toggle('on',m==='eagle'); $('livebtn').textContent=m==='eagle'?'phone on stream: ON':'phone on stream'; ui(); $('sheet').classList.remove('on'); fetch('/cmd',{method:'POST',body:JSON.stringify({mode:m})}).catch(()=>{}); if(m==='eagle') toast('PHONE ON STREAM','Viewers see your phone live (about 30 s to switch). No judging until you turn it off.'); else toast('CARD TABLE','Fill the picture with a card and press the shutter.'); }
+// zoom: real camera zoom when the phone has it, otherwise the snapshot is cropped to what you see
+document.querySelectorAll('#zooms button').forEach(b=>b.onclick=()=>{ zoom=parseFloat(b.dataset.z); document.querySelectorAll('#zooms button').forEach(x=>x.classList.toggle('sel',x===b)); applyZoom(); });
+function applyZoom(){ if(nativeZoom&&stream){ stream.getVideoTracks()[0].applyConstraints({advanced:[{zoom}]}).catch(()=>{}); $('v').style.transform='none'; } else $('v').style.transform='scale('+zoom+')'; }
+// the snap: a full-size JPEG straight from the camera, posted to the Mac
 async function snap(why){
-  if(!on||busy) return; const v=$('v'); if(!v.videoWidth) return; busy=1; lastSnap=Date.now();
-  const c=$('c'); const z=nativeZoom?1:zoom; const sw=v.videoWidth/z, sh=v.videoHeight/z; c.width=Math.round(sw); c.height=Math.round(sh); c.getContext('2d').drawImage(v,(v.videoWidth-sw)/2,(v.videoHeight-sh)/2,sw,sh,0,0,c.width,c.height);   // what you see zoomed is what she gets
-  $('guide').classList.add('flash'); setTimeout(()=>$('guide').classList.remove('flash'),180); if(navigator.vibrate) navigator.vibrate(30);
-  setStatus('SNAP','Sent to Cleo. She is reading the card ('+why+')…');
-  c.toBlob(async b=>{ try{ const r=await fetch('/shot',{method:'POST',headers:{'Content-Type':'image/jpeg'},body:b}); if(!r.ok) setStatus('SNAP FAILED','The Mac said '+r.status); }catch(e){ setStatus('SNAP FAILED',e.message);} setTimeout(()=>busy=0,4000); },'image/jpeg',.92);
+  if(!on||busy||mode!=='table') return; const v=$('v'); if(!v.videoWidth) return; busy=1; lastSnap=Date.now();
+  const c=$('c'); const z=nativeZoom?1:zoom; const sw=v.videoWidth/z, sh=v.videoHeight/z; c.width=Math.round(sw); c.height=Math.round(sh); c.getContext('2d').drawImage(v,(v.videoWidth-sw)/2,(v.videoHeight-sh)/2,sw,sh,0,0,c.width,c.height);
+  $('flash').classList.add('on'); setTimeout(()=>$('flash').classList.remove('on'),40); if(navigator.vibrate) navigator.vibrate(30);
+  $('last').style.backgroundImage='url('+c.toDataURL('image/jpeg',.5)+')'; $('sheet').classList.remove('on');
+  toast('SENT','She has the card ('+why+'). About 12 seconds…','reading');
+  c.toBlob(async b=>{ try{ const r=await fetch('/shot',{method:'POST',headers:{'Content-Type':'image/jpeg'},body:b}); if(!r.ok) toast('SNAP FAILED','The Mac said '+r.status); }catch(e){ toast('SNAP FAILED',e.message);} setTimeout(()=>busy=0,4000); },'image/jpeg',.92);
 }
-$('judge').onclick=()=>{ if(!on){ setStatus('CAMERA IS OFF','Tap Start camera first.'); return; } if(mode!=='table'){ setStatus('PHONE IS LIVE','Turn "Phone live on stream" off to judge cards.'); return; } snap('your tap'); };
-// ---- auto-snap: watch a tiny copy of the picture; after movement, 1.2 s of stillness with something new in frame = snap
+$('shutter').onclick=()=>snap('shutter');
+// auto-snap: after movement, a short hold with something new in frame
 const mc=document.createElement('canvas'); mc.width=48; mc.height=36; const mx=mc.getContext('2d',{willReadFrequently:true});
 function sig(){ const v=$('v'); if(!v.videoWidth) return null; mx.drawImage(v,0,0,48,36); return mx.getImageData(0,0,48,36).data; }
 function diff(a,b){ if(!a||!b) return 0; let s=0; for(let i=0;i<a.length;i+=4) s+=Math.abs(a[i]-b[i])+Math.abs(a[i+1]-b[i+1])+Math.abs(a[i+2]-b[i+2]); return s/(a.length/4)/3; }
 setInterval(()=>{ if(!on||mode!=='table') return; const s=sig(); const d=diff(s,prev); prev=s; if(!s) return;
   if(d>14){ moved=true; still=0; return; }
-  if(d<7) still++; else still=0;                                             // a hand-held phone is never perfectly still
+  if(d<7) still++; else still=0;
   if(moved&&still>=4&&Date.now()-lastSnap>7000&&!busy&&diff(s,lastShotSig)>10){ moved=false; lastShotSig=s; snap('held steady'); }
 },240);
-// ---- corrections + status from the Mac
-$('fix-no').onclick=()=>fix(false); $('fix-yes').onclick=()=>fix(true);
-function fix(h){ fetch('/cmd',{method:'POST',body:JSON.stringify({holo:h})}).catch(()=>{}); setStatus('CORRECTED', h?'Told her it is a holo.':'Told her it is not a holo.'); }
+// corrections + what the Mac says
+$('fix-no').onclick=()=>fix(false); $('fix-yes').onclick=()=>fix(true); $('close').onclick=()=>{ $('sheet').classList.remove('on'); toast('CARD TABLE','Next card: fill the picture and press the shutter.'); };
+function fix(h){ fetch('/cmd',{method:'POST',body:JSON.stringify({holo:h})}).catch(()=>{}); toast('CORRECTED', h?'Told her it is a holo.':'Told her it is not a holo.'); $('sheet').classList.remove('on'); }
+let reading=false;
 async function poll(){ try{ const s=await (await fetch('/status',{cache:'no-store'})).json();
-  const p=s.pull; const mine=p&&p.ts&&p.ts>LOADED;                                  // only cards snapped since this page was opened
-  if(on){ const r=s.ripcam||{}; if(!r.live) setStatus('CONNECTING','Cleo is picking up the stream (up to 30 s)…');
-    else if(mine&&p.stage==='reading'&&Date.now()/1000-p.ts<90) setStatus('READING','She has the card. About 12 seconds…');
-    else if(mode==='table') setStatus('READY FOR A CARD','Fill the picture with the card, tap Snap (or hold still and it snaps by itself).');
-    else setStatus('PHONE LIVE ON STREAM','Viewers see your phone picture. Turn it off to judge cards.'); }
-  if(mine&&p.ts!==lastPull&&p.stage!=='reading'){ lastPull=p.ts; if(p.stage==='none'){ $('verdict').classList.remove('on'); return; }
-    $('vd-name').textContent=(p.name||'')+(p.holo?' ✦ holo':''); $('vd-text').textContent=p.verdict||''; $('vd-price').textContent=p.value?('the ledgers whisper · '+p.value):''; $('verdict').classList.add('on'); }
+  const p=s.pull; const mine=p&&p.ts&&p.ts>LOADED; const r=s.ripcam||{};
+  if(on&&!r.live&&!busy) toast('CONNECTING','Cleo is picking up the stream (up to 30 s)…','reading');
+  else if(on&&r.live&&$('t1').textContent==='CONNECTING') toast('CARD TABLE','Fill the picture with a card and press the shutter.');
+  if(mine&&p.stage==='reading'&&Date.now()/1000-p.ts<90&&!reading){ reading=true; toast('READING','She has the card. Give her a few seconds…','reading'); }
+  if(mine&&p.ts!==lastPull&&p.stage!=='reading'){ lastPull=p.ts; reading=false;
+    if(p.stage==='none'){ toast('NO CARD','She saw no card in that. Fill the picture and try again.'); return; }
+    $('s-img').src='/pull-image?'+p.ts; $('s-name').textContent=(p.name||'')+(p.holo?' ✦ holo':''); $('s-price').textContent=p.value?('the ledgers whisper · '+p.value):''; $('s-text').textContent=p.verdict||''; $('sheet').classList.add('on'); toast('JUDGED',p.name||'');
+  }
  }catch{} }
-setInterval(poll,2000); ui();
+setInterval(poll,1500); ui();
 </script></body></html>
