@@ -589,7 +589,7 @@
   let pullTs = 0;
   function pullPoll() { fetch('pull.json?' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(f => {
     if (!f || !f.ts || f.ts === pullTs || Date.now() / 1000 - f.ts > 60) return; pullTs = f.ts; const p = document.getElementById('pull');
-    document.getElementById('pull-img').src = f.image + '?' + f.ts; document.getElementById('pull-k').textContent = 'PULL ' + (f.n || 1) + ' · THE QUEEN JUDGES';
+    document.getElementById('pull-img').src = f.image + '?' + f.ts; document.getElementById('pull-k').textContent = f.kind ? ('THE QUEEN INSPECTS · ' + f.kind) : ('PULL ' + (f.n || 1) + ' · THE QUEEN JUDGES');
     document.getElementById('pull-nm').textContent = f.name || ''; document.getElementById('pull-vd').textContent = f.verdict || ''; document.getElementById('pull-holo').hidden = !f.holo; const pv = document.getElementById('pull-val'); pv.hidden = !f.value; pv.innerHTML = f.value ? esc(f.value) + '<small>the ledgers whisper · TCGplayer market</small>' : ''; p.classList.toggle('holo', !!f.holo); p.classList.add('on');
     setTimeout(() => { if (pullTs === f.ts) p.classList.remove('on'); }, 24000); }).catch(() => {}); }
   setInterval(pullPoll, 2000); pullPoll();

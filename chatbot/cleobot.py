@@ -181,10 +181,10 @@ def card_value(name, number=None):
         for attempt in range(3):                                                   # the free database throws the odd 502; try again, then without the number
             try:
                 with urllib.request.urlopen(urllib.request.Request(url, headers=hdr), timeout=15) as r: data = json.load(r).get("data") or []
-                if data or " number:" not in q: break
-                q = f'name:"{name}"'; url = "https://api.pokemontcg.io/v2/cards?q=" + urllib.parse.quote(q) + "&pageSize=12&orderBy=-set.releaseDate&select=name,number,set,rarity,tcgplayer"
+                if data or (" number:" not in q and "rarity" in q): break
+                q = f'name:"{name}"' + ("" if " number:" in q else " rarity:*Rare*"); url = "https://api.pokemontcg.io/v2/cards?q=" + urllib.parse.quote(q) + "&pageSize=12&orderBy=-set.releaseDate&select=name,number,set,rarity,tcgplayer"
             except urllib.error.HTTPError as e:
-                if e.code in (502, 503, 504, 429) and attempt < 2: time.sleep(2); continue
+                if e.code in (500, 502, 503, 504, 429) and attempt < 2: time.sleep(3); continue
                 raise
         vals = []
         for c in data:
@@ -195,6 +195,25 @@ def card_value(name, number=None):
             vals.sort(); res = (vals[0][0], vals[-1][0], vals[-1][1], vals[-1][2], len(data))
         _prices[key] = (time.time(), res); return res
     except Exception as e: log("card_value error:", type(e).__name__, str(e)[:60]); return None
+def set_info(name):
+    """The free database's set record (release date, size) for a printed set/product name, or None."""
+    try:
+        q = f'name:"{name}"'; url = "https://api.pokemontcg.io/v2/sets?q=" + urllib.parse.quote(q) + "&select=name,series,releaseDate,total,printedTotal"
+        d = []
+        for attempt in range(3):
+            try:
+                with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "snakecam-cleobot/1.0"}), timeout=15) as r: d = json.load(r).get("data") or []
+                break
+            except urllib.error.HTTPError as e:
+                if e.code in (500, 502, 503, 504, 429) and attempt < 2: time.sleep(3); continue
+                raise
+        if not d:
+            words = name.split()
+            if len(words) > 1:
+                url = "https://api.pokemontcg.io/v2/sets?q=" + urllib.parse.quote(f'name:"{" ".join(words[:2])}"') + "&select=name,series,releaseDate,total,printedTotal"
+                with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "snakecam-cleobot/1.0"}), timeout=15) as r: d = json.load(r).get("data") or []
+        return d[0] if d else None
+    except Exception as e: log("set_info error:", type(e).__name__); return None
 def value_words(v):
     if not v: return "the ledgers are silent on this one"
     lo, hi, st, rar, n = v
@@ -874,7 +893,8 @@ def describe_pull():
               f"\"card\": true/false (a single card held up, readable), \"name\": \"card name as printed, or null\", \"holo\": true/false (foil/holographic shine), "
               f"\"art\": \"five words on the artwork, or null\", \"hands\": true/false (human hands visible), \"cam\": \"hotcam\" or \"coolcam\" (which still shows the card), "
               f"\"box\": [left, top, width, height] as fractions 0-1 of that image around the card, or null, \"number\": \"collector number as printed e.g. 234/091, or null\", "
-              f"\"set\": \"set name if printed/readable, or null\"}}. Never invent a name, number or set you cannot read.")
+              f"\"set\": \"set name if printed/readable, or null\", \"product\": \"if a sealed product is held up (booster box, elite trainer box, tin, blister, booster pack): its printed name, or null\", "
+              f"\"product_type\": \"box|etb|tin|blister|pack|null\"}}. Never invent a name, number or set you cannot read.")
     if not _cli_lock.acquire(timeout=20): return None
     try:
         r = subprocess.run([CLI_BIN, "-p", prompt, "--model", CLI_MODEL, "--max-turns", "4", "--tools", "Read", "--output-format", "text",
@@ -1318,12 +1338,23 @@ class Bot:
     # ------------------------------------------------ Rip Night: she watches the pulls ----
     def rip_watch(self):
         """After 'ripset': look at the glass every ~8 s for up to RIP_WATCH_MINUTES; comment once per new card (spoken + chat), once when the pack appears."""
-        seen = set(); last_pack = 0; started = time.time(); log("rip watch started")
+        seen = set(); products = set(); last_pack = 0; started = time.time(); log("rip watch started")
         while time.time() < self.rip_until and time.time() - started < RIP_WATCH_MINUTES * 60:
             try:
                 d = describe_pull() or {}
                 if d.get("pack") and time.time() - last_pack > 300:
                     last_pack = time.time(); line = "The pack is at my glass. Crinkle it slowly, human — I judge the reveal, not the rush. 👑"; self.send(line); threading.Thread(target=speak, args=(line, "rip"), daemon=True).start()
+                prod = (d.get("product") or "").strip()
+                if prod and prod.lower() not in products and len(prod) < 80:
+                    products.add(prod.lower()); info = set_info(prod); kind = d.get("product_type") or "product"
+                    facts = f"Database: set {info['name']} ({info.get('series')}), released {info.get('releaseDate')}, {info.get('printedTotal') or info.get('total')} cards." if info else "The database has no record of that set name."
+                    line = llm_answer("court", "product", recent=self.recent, model=CLI_MODEL if LLM_BACKEND == "cli" else None, cache=False,
+                                      task=f"Your human holds up a sealed Pokémon {kind} to your glass: '{prod}'. {facts} In TWO or THREE sentences as the queen-seer: say what it is, "
+                                           f"what is inside such a product, and which one or two cards collectors chase from that set (from your own knowledge; if unsure, say the ledgers are hazy). "
+                                           f"Then command the human to open it. Nothing is for sale. No emoji, under 340 characters.")
+                    if line:
+                        self.send(f"🎴 {line}"); threading.Thread(target=speak, args=(line, "rip"), daemon=True).start()
+                        self.show_pull(d, prod, line, len(seen), None, kind=kind.upper() if kind else "PRODUCT")
                 name = (d.get("name") or "").strip()
                 if d.get("card") and name and name.lower() not in seen and len(name) < 60:
                     seen.add(name.lower())
@@ -1339,7 +1370,7 @@ class Bot:
             except Exception as e: log("rip watch error:", e)
             time.sleep(RIP_WATCH_EVERY)
         log(f"rip watch ended, {len(seen)} cards seen"); self.rip_until = 0
-    def show_pull(self, d, name, verdict, n, val=None):
+    def show_pull(self, d, name, verdict, n, val=None, kind=None):
         """Crop the card out of the still it was seen in and hand it to the overlay (overlay/pulls/<ts>.jpg + overlay/pull.json)."""
         import subprocess
         try:
@@ -1354,7 +1385,7 @@ class Bot:
             subprocess.run([CFG.get("CLEOBOT_FFMPEG", "/opt/homebrew/bin/ffmpeg"), "-loglevel", "error", "-y", "-i", src, "-vf", vf, "-q:v", "3", dst], check=True, timeout=20, capture_output=True)
             value = None
             if val: lo, hi, st, rar, k = val; value = (f"${hi:,.0f}" if (k == 1 or hi < lo * 1.6) else f"${lo:,.0f} – ${hi:,.0f}") + f" · {st}"
-            json.dump({"image": f"pulls/{ts}.jpg", "name": name, "holo": bool(d.get("holo")), "verdict": verdict, "n": n, "value": value, "number": d.get("number"), "ts": ts}, open(f"{ROOT}/overlay/pull.json", "w"))
+            json.dump({"image": f"pulls/{ts}.jpg", "name": name, "holo": bool(d.get("holo")), "verdict": verdict, "n": n, "value": value, "number": d.get("number"), "kind": kind, "ts": ts}, open(f"{ROOT}/overlay/pull.json", "w"))
             for f in os.listdir(f"{ROOT}/overlay/pulls"):
                 if time.time() - os.path.getmtime(f"{ROOT}/overlay/pulls/{f}") > 6 * 3600: os.remove(f"{ROOT}/overlay/pulls/{f}")
         except Exception as e: log("show_pull error:", type(e).__name__, str(e)[:80])
