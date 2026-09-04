@@ -581,7 +581,7 @@ def frame_her(max_nudges=3, step=12):
         cam_move("coolcam", f["nudge"], step); time.sleep(3)
     return f
 _patrol = {"on": False, "last": 0}
-PATROL_ON = CFG.get("CLEOBOT_PATROL", "1") != "0"
+PATROL_ON = CFG.get("CLEOBOT_PATROL", "1") != "0"; PATROL_ALWAYS = CFG.get("CLEOBOT_PATROL_ALWAYS", "0") == "1"   # ALWAYS: tour whenever the hot cam is dead, awake or not
 def patrol_session(bot=None, minutes=20, step=8, every=18):
     """One camera for two sides (the hot cam is dead, 2026-09-04): while she is awake, the cool cam drifts slowly edge to edge across the
     enclosure so viewers see the whole landscape. A look every ~3 min: seen -> stop, frame her, hold 4 min. Hub motion -> hand over to track_session."""
@@ -1672,7 +1672,7 @@ class Bot:
                     except Exception as e: log("apply_show error:", e)
                 if PATROL_ON and TRACK_ON and dead_cam() == "hot" and not _patrol["on"] and not _track["on"] and now - _patrol["last"] > 600:
                     try:
-                        m = ((hub() or {}).get("motion") or {}).get("cool", {}); awake = now - m.get("lastMove", 0) < 45 * 60 or current_show() in ("oracle", "night")
+                        m = ((hub() or {}).get("motion") or {}).get("cool", {}); awake = PATROL_ALWAYS or now - m.get("lastMove", 0) < 45 * 60 or current_show() in ("oracle", "night")
                         if awake: threading.Thread(target=patrol_session, args=(self,), daemon=True).start()
                     except Exception as e: log("patrol start error:", e)
                 if self.room_empty(): continue                                          # empty room: no idle chatter, no games
