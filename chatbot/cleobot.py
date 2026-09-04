@@ -1428,6 +1428,21 @@ class Bot:
             except Exception as e: log("rip watch error:", e)
             time.sleep(RIP_WATCH_EVERY if time.time() - last_activity < 600 else 30)   # nothing at the glass for 10 min: glance every 30 s
         log(f"rip watch ended, {len(seen)} cards seen"); self.rip_until = 0
+    def judge_card(self, name, number=""):
+        """Judge a named card now (the broadcaster's correction, or a pull the eyes missed): price, verdict, voice, screen, clip."""
+        try:
+            d = {"card": True, "name": name, "number": number or None}
+            try: d.update({k: v for k, v in (describe_pull() or {}).items() if k in ("holo", "art", "cam", "box")})   # borrow the shine/crop from the glass if a card is there
+            except Exception: pass
+            self.pull_count = getattr(self, "pull_count", 0) + 1
+            val = card_value(name, number or None); vw = value_words(val)
+            ctx = f"Card at your glass, named by your human: {name}{(' #' + number) if number else ''}. Foil/holo: {'yes' if d.get('holo') else 'unknown'}. Art: {d.get('art') or 'unclear'}. What the ledgers say (TCGplayer market): {vw}."
+            line = llm_answer("court", "pull", recent=self.recent, model=CLI_MODEL_TALK if LLM_BACKEND == "cli" else None, cache=False, vip=True,
+                              task=f"{ctx} Give your verdict in ONE or TWO sentences as the queen-seer: name the card, judge it, reveal its worth as a seer would ('the ledgers whisper...'), quoting the figure plainly. Nothing is for sale. No viewer name, no emoji. Under 260 characters.")
+            self.show_pull(d, name, line or "", self.pull_count, val)
+            if line: self.send(f"🎴 {line}"); threading.Thread(target=speak, args=(line, "rip"), daemon=True).start()
+            if CLIPS: threading.Timer(20, self.make_clip, args=(f"pull: {name}",)).start()
+        except Exception as e: log("judge_card error:", e)
     def show_pull(self, d, name, verdict, n, val=None, kind=None):
         """Crop the card out of the still it was seen in and hand it to the overlay (overlay/pulls/<ts>.jpg + overlay/pull.json)."""
         import subprocess
@@ -1595,6 +1610,10 @@ class Bot:
         elif bare_command(t):                                             # "temps", "weather", "cleo status" ...
             reply = COMMANDS[bare_command(t)](); path = "command"
         elif RESOURCE_Q.search(t): reply = cmd_resources(t); path = "resources"     # "where can I learn more?" -> allowlisted links
+        elif user == CHANNEL and re.match(r"^\W*pull\s+\S", low):                     # broadcaster correction: "pull Umbreon VMAX 215/203" -> judge THIS card now
+            m = re.match(r"^\W*pull\s+(.+?)(?:\s+(\d{1,3}\s*/\s*\d{1,3}))?\s*$", t.strip(), re.I); path = "pull-manual"
+            cname, cnum = (m.group(1).strip(), (m.group(2) or "").replace(" ", "")) if m else ("", "")
+            if cname: threading.Thread(target=self.judge_card, args=(cname, cnum), daemon=True).start(); reply = f"By your word: {cname}{(' ' + cnum) if cnum else ''}. Let me look."
         elif low.strip("! .") in ("ripstop", "ripdone") and user == CHANNEL:
             self.rip_until = 0; RIP.d["show_until"] = 0; RIP._save(); threading.Thread(target=self.apply_show, daemon=True).start(); reply = "The rip is concluded. My verdicts stand. 👑"; path = "ripstop"
         elif low.strip("! .") == "ripset":                                    # broadcaster only: reset the vote, announce the rip

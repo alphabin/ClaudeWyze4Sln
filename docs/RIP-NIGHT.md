@@ -8,6 +8,7 @@ Everything below is what happens, what to do, and what can go wrong.
 |---|---|
 | `ripset` | Resets RIP votes, flips the category to **Pokémon Trading Card Game** for 2 h, starts **30 min of watching**. She announces it, spoken. |
 | `ripset` again | Adds another 30 min (any time, even mid-session). |
+| `pull <name> [<number>]` | You name the card ("pull Umbreon VMAX 215/203"): she prices and judges it now, on screen, spoken, clipped. Use it when she misreads or misses one. |
 | `ripstop` / `ripdone` | Ends the session now, reverts the category to the normal block. |
 | (nothing) | After **10 quiet minutes** (no hands, cards, packs at the glass) she only glances every 30 s; after **40 quiet minutes** she ends the session herself. |
 
@@ -49,7 +50,7 @@ We do **not** scrape eBay/TCGplayer pages: both serve automated browsers a bot-c
 `CLEOBOT_VOICE_ON` (1) · `CLEOBOT_PIPER_VOICE` (en_GB-alba-medium) · `CLEOBOT_VISION=0` disables all camera looks.
 
 ## Known limits
-- Name/number reads through glass will sometimes be wrong; a wrong number gives a wrong exact price. Say the card name in chat if she misreads (a future step: let the broadcaster correct her with `pull <name> <number>`).
+- Name/number reads through glass will sometimes be wrong; a wrong number gives a wrong exact price. Correct her with `pull <name> <number>` from the channel account.
 - The vision call is 5–10 s per look; with 6 s spacing she comments 10–15 s after you hold a card up.
 - Chase-card lore is model memory, not the price book.
 - The price book is TCGplayer market, not eBay sold comps; graded cards are not in it.
