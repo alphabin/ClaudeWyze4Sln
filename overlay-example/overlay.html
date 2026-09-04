@@ -345,7 +345,7 @@
     phases: { dawn: [5, 8], day: [8, 17], dusk: [17, 20], night: [20, 5] },     // fallback hours; real sun times come from the weather service
     facts: [],   // loaded from facts.json (shared with the chat bot)
   };
-  const WEATHER = { lat: 33.9319, lon: -117.9462 };
+  const WEATHER = { lat: LATITUDE, lon: LONGITUDE };
 
   // ---- scenery: a procedural savanna edge (trees, vines, mist) that recolours with the time of day ----
   const SCENE = {
