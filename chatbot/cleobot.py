@@ -46,6 +46,9 @@ AI-first (CLEOBOT_AI_FIRST=1): while at least CLEOBOT_AI_FIRST_FLOOR (0.25) of t
   Moon Interlude (CLEOBOT_INTERLUDE_HOURS, 2): in the oracle/night blocks with someone watching and chat quiet, she writes a haiku about the
   moment (overlay/interlude.json); the overlay dims to moonlight and brushes the lines in while ambience.html plays a generative Japanese
   piece (koto, shakuhachi, taiko, wind chimes; hirajōshi scale, ~70 s). 'haiku' / 'poem' in chat asks for one (room: 10 min apart).
+  Pan/tilt (cool cam, Pan V4, over its Agora command channel — discovered 2026-09-03): broadcaster/mods say 'cam left|right|up|down [step]',
+  'cam home' (undoes the moves), 'cam find' (vision says where she is, the camera nudges toward her). CLEOBOT_TRACK=1: when the hub sees
+  cool-side motion, one find-and-nudge cycle every CLEOBOT_TRACK_MINUTES (10). The Pan V3 (hot side) has no such channel: app-only.
   Rip Night eyes: 'ripset' (broadcaster) also starts rip_watch(): a still every CLEOBOT_RIP_WATCH_EVERY (6) s for CLEOBOT_RIP_WATCH_MINUTES (30), ripset again adds another 30;
   after 10 quiet min (no hands/cards/packs) she glances every 30 s, after 40 quiet min the session ends by itself; 'ripset' again extends it;
   described as JSON by the vision call (pack / card / name / holo / art); one spoken + chat verdict per new card, a line when the pack
@@ -268,6 +271,60 @@ def value_words(v):
     if n == 1 or hi < lo * 1.6: return f"about ${hi:,.0f} on the market ({st}, {rar})"
     return f"anywhere from ${lo:,.0f} to ${hi:,.0f} depending on the printing — the {st} {rar} version is the ${hi:,.0f} one"
 RIP_CAM = CFG.get("CLEOBOT_RIP_CAM", "coolcam")                          # the camera the cards are held up to (1080p on the relay)
+# ---------- pan/tilt over the camera's own command channel (Pan V4 via Agora data stream; discovered 2026-09-03) ----------
+CAM_PORTS = {"coolcam": int(CFG.get("CLEOBOT_COOLCAM_CDP", "9224")), "hotcam": int(CFG.get("CLEOBOT_HOTCAM_CDP", "9225"))}
+_cam_pos = {"coolcam": [0, 0], "hotcam": [0, 0]}                              # a step ledger so 'home' can undo moves
+def cam_move(cam, direction, step=10, speed=5):
+    """Nudge a camera: direction left|right|up|down, step in the camera's units (10 ≈ a small nudge, 20 clearly visible). Returns True on the camera's ack."""
+    port = CAM_PORTS.get(cam)
+    if not port or direction not in ("left", "right", "up", "down"): return False
+    step = max(1, min(60, int(step)))
+    try:
+        pg = [p for p in json.load(urllib.request.urlopen(f"http://localhost:{port}/json", timeout=5)) if p["type"] == "page"][0]
+        d = websocket.create_connection(pg["webSocketDebuggerUrl"], timeout=10)
+        cmd = json.dumps([{"cmd": "run_action", "action": "camera-position::move-position", "params": {"direction": direction, "speed": speed, "step": step}}])
+        expr = ("(async()=>{window._acks=[];if(!window._ackhook){client.on('stream-message',(u,data)=>{try{window._acks.push(new TextDecoder().decode(data))}catch(e){}});window._ackhook=1}"
+                f"sendCmd({cmd});for(let i=0;i<16;i++){{await new Promise(r=>setTimeout(r,250));if(window._acks.some(a=>a.includes('move-position')))break}}return JSON.stringify(window._acks)}})()")
+        d.send(json.dumps({"id": 1, "method": "Runtime.evaluate", "params": {"awaitPromise": True, "returnByValue": True, "expression": expr}}))
+        while True:
+            m = json.loads(d.recv())
+            if m.get("id") == 1: acks = m["result"]["result"].get("value") or "[]"; break
+        ok = bool(re.search(r'result\\?":\s*1', acks))                          # the ack comes back JSON-escaped
+        if ok:
+            dx = {"left": -step, "right": step}.get(direction, 0); dy = {"up": step, "down": -step}.get(direction, 0)
+            _cam_pos[cam][0] += dx; _cam_pos[cam][1] += dy
+        log(f"cam {cam} {direction} {step}: {'ok' if ok else 'refused'}"); return ok
+    except Exception as e: log("cam_move error:", type(e).__name__, str(e)[:60]); return False
+def cam_home(cam):
+    """Undo the ledger: move back by what we moved."""
+    x, y = _cam_pos.get(cam, [0, 0]); ok = True
+    if x: ok &= cam_move(cam, "left" if x > 0 else "right", abs(x))
+    if y: ok &= cam_move(cam, "down" if y > 0 else "up", abs(y))
+    _cam_pos[cam] = [0, 0]; return ok
+TRACK_ON = CFG.get("CLEOBOT_TRACK", "1") != "0"; TRACK_MINUTES = float(CFG.get("CLEOBOT_TRACK_MINUTES", "10"))   # vision-guided 'keep her in frame' on the cool cam
+def where_is_she():
+    """SECURITY BOUNDARY like describe_cams: Read tool on one still, no chat text. Returns 'center'|'left'|'right'|'up'|'down'|'none'."""
+    import subprocess
+    if LLM_BACKEND != "cli" or not grab_frames(cams=("coolcam",), width=1280): return None
+    prompt = ("Use the Read tool on exactly this file and nothing else: frames/coolcam.jpg. It is a still from a camera inside a ball python's terrarium. "
+              "Where is the snake in the frame? Reply with ONE word: center (well framed), left, right, up, down (she is visible but off toward that edge, or partly cut off there), "
+              "or none (no snake visible). Nothing else.")
+    os.chdir(f"{HERE}/cli-workdir")
+    try: out = cli_call([CLI_BIN, "-p", prompt, "--model", CLI_MODEL, "--max-turns", "4", "--tools", "Read", "--no-session-persistence",
+                         "--system-prompt", "You answer with one word. You only read the file named in the prompt."], timeout=60)
+    except Exception as e: log("where_is_she error:", type(e).__name__); return None
+    w = re.sub(r"[^a-z]", "", (out or "").lower().split()[0] if (out or "").split() else "")
+    return w if w in ("center", "left", "right", "up", "down", "none") else None
+def track_once(step=12, max_nudges=3):
+    """Nudge the cool cam toward her until she is centred (or give up and go home). Returns the final word."""
+    w = None
+    for i in range(max_nudges):
+        w = where_is_she(); log(f"track: she is {w}")
+        if w in (None, "center"): return w
+        if w == "none": break
+        cam_move("coolcam", w, step); time.sleep(3)
+    if w == "none" and any(_cam_pos["coolcam"]): cam_home("coolcam")
+    return w
 RIP_WATCH_MINUTES = float(CFG.get("CLEOBOT_RIP_WATCH_MINUTES", "30")); RIP_WATCH_EVERY = float(CFG.get("CLEOBOT_RIP_WATCH_EVERY", "1.5"))   # Rip Night eyes: up to 3 h, idle-aware
 RANKS = [(30, "Royal Advisor"), (15, "Duke or Duchess"), (7, "Knight"), (3, "Courtier"), (1, "Visitor")]
 def rank(visits): return next(name for n, name in RANKS if visits >= n) if visits >= 1 else "Visitor"
@@ -1268,6 +1325,11 @@ class Bot:
                 if getattr(self, "rip_until", 0) > now: continue                            # Rip Night: no idle lines, looks, games, notices, interludes
                 if CLIPS and self.ws: self.clip_out(now)                                 # clips cost no tokens: always catch her
                 if PROACTIVE: self.maybe_out_line(now)                                  # she's moving: look and say so, even to an empty room (it's the good stuff)
+                if TRACK_ON and now - getattr(self, "last_track", 0) > TRACK_MINUTES * 60 and bg_ok() and not getattr(self, "rip_until", 0) > now:
+                    try:
+                        mo = (hub() or {}).get("motion") or {}
+                        if (mo.get("cool") or {}).get("moving"): self.last_track = now; threading.Thread(target=track_once, daemon=True).start()
+                    except Exception as e: log("track error:", e)
                 if self.room_empty(): continue                                          # empty room: no idle chatter, no games
                 self.maybe_notice(now); self.maybe_interlude(now)
                 if AMBIENT_MINUTES <= 0: continue
@@ -1656,6 +1718,11 @@ class Bot:
         elif bare_command(t):                                             # "temps", "weather", "cleo status" ...
             reply = COMMANDS[bare_command(t)](); path = "command"
         elif RESOURCE_Q.search(t): reply = cmd_resources(t); path = "resources"     # "where can I learn more?" -> allowlisted links
+        elif re.match(r"^\W*(cool|hot)?\s*cam\s+(left|right|up|down|home|find)(\s+\d{1,2})?\W*$", low) and (user == CHANNEL or (tags or {}).get("mod") == "1"):
+            m = re.match(r"^\W*(cool|hot)?\s*cam\s+(left|right|up|down|home|find)(?:\s+(\d{1,2}))?", low); cam = "hotcam" if m.group(1) == "hot" else "coolcam"; path = "cam"
+            if m.group(2) == "home": ok = cam_home(cam); reply = "Back to my usual view." if ok else "The camera did not answer."
+            elif m.group(2) == "find": w = track_once(); reply = {"center": "There. Framed, as a queen should be.", "none": "I am not in that camera's world right now. Try the other side."}.get(w, "I looked and nudged; judge for yourself.")
+            else: ok = cam_move(cam, m.group(2), int(m.group(3) or 10)); reply = f"{'Cool' if cam == 'coolcam' else 'Hot'} side, {m.group(2)}. Mind my nap." if ok else "The camera did not answer."
         elif user == CHANNEL and re.match(r"^\W*pull\s+\S", low):                     # broadcaster correction: "pull Umbreon VMAX 215/203" -> judge THIS card now
             m = re.match(r"^\W*pull\s+(.+?)(?:\s+(\d{1,3}\s*/\s*\d{1,3}))?\s*$", t.strip(), re.I); path = "pull-manual"
             cname, cnum = (m.group(1).strip(), (m.group(2) or "").replace(" ", "")) if m else ("", "")

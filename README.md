@@ -70,7 +70,7 @@ flowchart LR
 ## Known limits
 
 - The whole video path is cloud-dependent (camera → Wyze/Agora → your Mac). A Wyze password change, a new API key or a web-app rewrite can break it; the constants are documented in WRITEUP.md.
-- Pan/tilt is not controllable from here (the bridge's control channel doesn't reach the cameras from inside a NAT'd Docker VM; Agora carries video, not PTZ). Use the Wyze app, and `campause.sh` to release a camera for a few minutes.
+- Pan/tilt: the **Pan V4** takes pan/tilt over its Agora command channel (`cam left/right/up/down`, `cam find` in chat; see WRITEUP §7b). The **Pan V3** does not; use the Wyze app for it, and `campause.sh` to release a camera for a few minutes.
 - OBS's built-in browser cannot decode H.265, hence the headless-Chrome relay.
 - Twitch Affiliate needs an average of 3 viewers; a 24/7 stream with empty nights lowers that average.
 

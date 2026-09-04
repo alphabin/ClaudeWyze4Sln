@@ -151,7 +151,27 @@ it and republishes H.264 into a local mediamtx over WHIP; everything else pulls 
 - The provisioner renews the RTC token every 45 min (`RENEW_EVERY`), and the page asks for a fresh session on
   every reconnect.
 
-## 8. Troubleshooting
+## 7b. Pan/tilt over the lake channel (Pan V4) — found 2026-09-03
+
+The Agora data stream that carries `set_property camera::resolution` also carries pan/tilt. The camera acknowledges every
+command (`*_ack` with `result`: 1 = done, 2 = unknown), which is how the names were found: sending guesses and reading the acks.
+
+    client.sendStreamMessage(new TextEncoder().encode(JSON.stringify(
+      [{"cmd":"run_action","action":"camera-position::move-position","params":{"direction":"left","speed":5,"step":10}}])))
+    // ack: {"cmd":"run_action_ack","action":"camera-position::move-position","result":1,"ts":...}
+    // direction: left | right | up | down   step: 1–60 (10 = a small nudge, 20 clearly visible)   speed: 5 works
+    // also seen: "camera-position::stop-move-position"
+
+Verified by measuring the picture: left 20 then right 20 returns to the starting frame (difference 0.7 vs a noise floor of 0.3).
+Params like `{"direction":"left"}` alone, `{"horizontal":..}`, `{"pan":..}` are refused (result 2); `direction` + `speed` + `step` are all required.
+`get_property` on `camera-position::*` names returns nothing, so position readback is not available; keep your own step ledger to go "home".
+The **Pan V3** (Kinesis path) does **not** accept any of this on its data channel ("Json interface not supported" for every interface
+name tried); its pan/tilt remains TUTK-only (the bridge's `rotary_*` commands) or the Wyze app.
+
+In this kit: `chatbot/cleobot.py` `cam_move()` / `cam_home()` (via the decoder page's debug port), chat commands `cam left|right|up|down [step]`,
+`cam home`, `cam find` (a vision call says where the snake is; the camera nudges toward her), and an automatic find-and-nudge when the sensor hub reports motion.
+
+
 
 | Symptom | Cause | Fix |
 |---|---|---|
