@@ -40,8 +40,8 @@ button:active{transform:scale(.97)}
 <div class="verdict" id="verdict"><b id="vd-name"></b><div class="v" id="vd-text"></div><div class="p" id="vd-price"></div><div class="chips"><button id="fix-no">Not a holo</button><button id="fix-yes">It is a holo</button></div></div>
 <div class="row"><button class="primary" id="start">Start camera</button></div>
 <div class="row"><button class="primary snap" id="judge">📸 Snap this card</button></div>
-<div class="row seg"><button id="mode-table" class="sel">Cards</button><button id="mode-eagle">Snake close-up</button></div>
-<div class="hint"><b>Cards:</b> the stream shows each card you snap, with her verdict and price. She also snaps by herself when a card sits still in the frame.<br><b>Snake close-up:</b> your phone is shown live on the stream as a close-up of her. No cards.</div>
+<div class="row seg"><button id="live-toggle">Phone live on stream: OFF</button></div>
+<div class="hint">Normally only the cards you snap appear on the stream, with her verdict and price. Turn <b>Phone live on stream</b> on to show your phone picture live instead (a close-up of her, for example). While it is on, cards are not judged. Takes up to 30 s to switch.</div>
 <canvas id="c" hidden></canvas>
 <script>
 const WHIP='https://__LAN_IP__:8891/ripcam/whip', AUTH='Basic '+btoa('phone:__RIPCAM_PASSWORD__');
@@ -70,8 +70,8 @@ function stop(){ on=false; try{pc&&pc.close()}catch{} try{stream&&stream.getTrac
 function ui(){ const b=$('start'); b.textContent=on?'Stop camera':'Start camera'; $('judge').disabled=!on||mode!=='table'; b.classList.toggle('stop',on); $('badge').className='badge'+(on?' on':''); $('badge').innerHTML='<i></i>'+(on?'ON AIR':'OFF AIR');  if(!on) setStatus('READY','Tap Start camera. Then fill the picture with a card and tap Snap.'); }
 function setStatus(t,x){ $('st-title').textContent=t; $('st-text').textContent=x; }
 $('start').onclick=()=>on?stop():start();
-$('mode-table').onclick=()=>setMode('table'); $('mode-eagle').onclick=()=>setMode('eagle');
-function setMode(m,send=true){ mode=m; $('judge').disabled=!on||m!=='table'; $('verdict').classList.remove('on'); $('mode-table').classList.toggle('sel',m==='table'); $('mode-eagle').classList.toggle('sel',m==='eagle'); if(send) fetch('/cmd',{method:'POST',body:JSON.stringify({mode:m})}).catch(()=>{}); }
+$('live-toggle').onclick=()=>setMode(mode==='table'?'eagle':'table');
+function setMode(m,send=true){ mode=m; $('judge').disabled=!on||m!=='table'; $('verdict').classList.remove('on'); const t=$('live-toggle'); t.textContent='Phone live on stream: '+(m==='eagle'?'ON':'OFF'); t.classList.toggle('sel',m==='eagle'); if(send) fetch('/cmd',{method:'POST',body:JSON.stringify({mode:m})}).catch(()=>{}); }
 // ---- the snap: a full-size JPEG straight from the camera, posted to the Mac (sharper than any frame grabbed off the stream)
 async function snap(why){
   if(!on||busy) return; const v=$('v'); if(!v.videoWidth) return; busy=1; lastSnap=Date.now();
@@ -80,7 +80,7 @@ async function snap(why){
   setStatus('SNAP','Sent to Cleo. She is reading the card ('+why+')…');
   c.toBlob(async b=>{ try{ const r=await fetch('/shot',{method:'POST',headers:{'Content-Type':'image/jpeg'},body:b}); if(!r.ok) setStatus('SNAP FAILED','The Mac said '+r.status); }catch(e){ setStatus('SNAP FAILED',e.message);} setTimeout(()=>busy=0,4000); },'image/jpeg',.92);
 }
-$('judge').onclick=()=>{ if(!on){ setStatus('CAMERA IS OFF','Tap Start camera first.'); return; } if(mode!=='table'){ setMode('table'); } snap('your tap'); };
+$('judge').onclick=()=>{ if(!on){ setStatus('CAMERA IS OFF','Tap Start camera first.'); return; } if(mode!=='table'){ setStatus('PHONE IS LIVE','Turn "Phone live on stream" off to judge cards.'); return; } snap('your tap'); };
 // ---- auto-snap: watch a tiny copy of the picture; after movement, 1.2 s of stillness with something new in frame = snap
 const mc=document.createElement('canvas'); mc.width=48; mc.height=36; const mx=mc.getContext('2d',{willReadFrequently:true});
 function sig(){ const v=$('v'); if(!v.videoWidth) return null; mx.drawImage(v,0,0,48,36); return mx.getImageData(0,0,48,36).data; }
@@ -98,7 +98,7 @@ async function poll(){ try{ const s=await (await fetch('/status',{cache:'no-stor
   if(on){ const r=s.ripcam||{}; if(!r.live) setStatus('CONNECTING','Cleo is picking up the stream (up to 30 s)…');
     else if(mine&&p.stage==='reading'&&Date.now()/1000-p.ts<90) setStatus('READING','She has the card. About 12 seconds…');
     else if(mode==='table') setStatus('READY FOR A CARD','Fill the picture with the card, tap Snap (or hold still and it snaps by itself).');
-    else setStatus('SNAKE CLOSE-UP','Your phone is live on the stream. Switch to Cards to judge cards.'); }
+    else setStatus('PHONE LIVE ON STREAM','Viewers see your phone picture. Turn it off to judge cards.'); }
   if(mine&&p.ts!==lastPull&&p.stage!=='reading'){ lastPull=p.ts; if(p.stage==='none'){ $('verdict').classList.remove('on'); return; }
     $('vd-name').textContent=(p.name||'')+(p.holo?' ✦ holo':''); $('vd-text').textContent=p.verdict||''; $('vd-price').textContent=p.value?('the ledgers whisper · '+p.value):''; $('verdict').classList.add('on'); }
  }catch{} }
