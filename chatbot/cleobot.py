@@ -336,18 +336,32 @@ def track_session(motion_fn):
                 w = where_is_she(); log(f"track: head is {w}")
                 recent = [t for t in _track["nudges"] if time.time() - t < 600]; _track["nudges"] = recent
                 if w in ("left", "right", "up", "down") and len(recent) < 8: cam_move("coolcam", w, TRACK_STEP); _track["nudges"].append(time.time())
+                elif w in ("none", "body") and quiet < 120: search_for_her()                    # she's moving somewhere the camera isn't looking
             time.sleep(TRACK_EVERY)
     except Exception as e: log("track session error:", e)
     finally: _track["on"] = False; log("track session ended")
+SEARCH_MINUTES = float(CFG.get("CLEOBOT_SEARCH_MINUTES", "15"))
+_search = {"last": 0}
+def search_for_her():
+    """She is not in frame: sweep the cool cam in a bounded pattern (left, right, up, down from home), looking after each move;
+    stop at the first sighting and leave the camera there; otherwise return home. At most one sweep per SEARCH_MINUTES."""
+    if time.time() - _search["last"] < SEARCH_MINUTES * 60: return None
+    _search["last"] = time.time(); log("search: sweeping for her")
+    if any(_cam_pos["coolcam"]): cam_home("coolcam"); time.sleep(2)
+    for direction, step in (("left", 22), ("right", 44), ("left", 22), ("up", 12), ("down", 24), ("up", 12)):   # ends back at home if nothing is found
+        cam_move("coolcam", direction, step); time.sleep(3)
+        w = where_is_she(); log(f"search: after {direction} {step}: {w}")
+        if w in ("center", "left", "right", "up", "down"):
+            log("search: found her"); return w
+    _cam_pos["coolcam"] = [0, 0]; return "none"
 def track_once(step=12, max_nudges=3):
     """Nudge the cool cam toward her until she is centred (or give up and go home). Returns the final word."""
-    w = None
+    w = where_is_she(); log(f"track: head is {w}")
+    if w in ("none", "body"):                                                          # not in frame: go and look for her
+        w = search_for_her() or w
     for i in range(max_nudges):
-        w = where_is_she(); log(f"track: she is {w}")
-        if w in (None, "center"): return w
-        if w == "none": break
-        cam_move("coolcam", w, step); time.sleep(3)
-    if w == "none" and any(_cam_pos["coolcam"]): cam_home("coolcam")
+        if w in (None, "center", "none", "body"): break
+        cam_move("coolcam", w, step); time.sleep(3); w = where_is_she(); log(f"track: head is {w}")
     return w
 RIP_WATCH_MINUTES = float(CFG.get("CLEOBOT_RIP_WATCH_MINUTES", "30")); RIP_WATCH_EVERY = float(CFG.get("CLEOBOT_RIP_WATCH_EVERY", "1.5"))   # Rip Night eyes: up to 3 h, idle-aware
 RANKS = [(30, "Royal Advisor"), (15, "Duke or Duchess"), (7, "Knight"), (3, "Courtier"), (1, "Visitor")]

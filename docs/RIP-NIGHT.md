@@ -9,7 +9,7 @@ Everything below is what happens, what to do, and what can go wrong.
 | `ripset` | Resets RIP votes, flips the category to **Pokémon Trading Card Game** for 2 h, starts **30 min of watching**. She announces it, spoken. |
 | `ripset` again | Adds another 30 min (any time, even mid-session). |
 | `pull <name> [<number>]` | You name the card ("pull Umbreon VMAX 215/203"): she prices and judges it now, on screen, spoken, clipped. Use it when she misreads or misses one. |
-| `cam left/right/up/down [step]`, `cam home`, `cam find` | Aim the cool cam (Pan V4) from chat, broadcaster/mods only. `cam find` uses vision to centre her. Handy to aim at your rip spot, then `cam home`. |
+| `cam left/right/up/down [step]`, `cam home`, `cam find` / `cam face` | Aim the cool cam (Pan V4) from chat, broadcaster/mods only. `cam find` looks for her head; if she's not in frame it sweeps (left, right, up, down, home) and locks on when it sees her. Handy to aim at your rip spot, then `cam home`. |
 | `ripstop` / `ripdone` | Ends the session now, reverts the category to the normal block. |
 | (nothing) | After **10 quiet minutes** (no hands, cards, packs at the glass) she only glances every 30 s; after **40 quiet minutes** she ends the session herself. |
 

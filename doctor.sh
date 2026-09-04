@@ -223,6 +223,7 @@ if command -v lsof >/dev/null; then
   if [ -z "$EXPOSED" ]; then pass "LAN exposure" "no project port listens on *"; else
     case "$EXPOSED" in *4455*) warn "LAN exposure" "$EXPOSED" "obs-websocket cannot bind loopback: keep auth_required on (OBS_WS_PASSWORD) and block 4455 in the macOS firewall";; *) fail "LAN exposure" "$EXPOSED" "bind 127.0.0.1 (docker-compose ports, mediamtx.yml) and restart the service";; esac; fi
 fi
+A=$(find "$ROOT/tokens" -name auth.pickle -mmin +2400 2>/dev/null); if [ -n "$A" ]; then warn "Wyze token age" "auth.pickle older than 40 h" "the provisioner refreshes it; if the cool cam dies with access-token errors: mv tokens/auth.pickle tokens/stale/ && docker restart wyze-bridge lake-provisioner"; else pass "Wyze token age" "fresh"; fi
 if [ -d "$ROOT/.git" ]; then
   T=$(git -C "$ROOT" ls-files 2>/dev/null | grep -E '(^|/)(\.env|token\.json|court\.json|seen\.json|rip\.json|private_guard\.py)$|(^|/)tokens/' | tr '\n' ' ')
   if [ -z "$T" ]; then pass "secrets not tracked" "ok"; else fail "secrets tracked by git" "$T" "git rm --cached <file>; they are in .gitignore"; fi
