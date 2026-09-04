@@ -271,7 +271,13 @@ def value_words(v):
     lo, hi, st, rar, n = v
     if n == 1 or hi < lo * 1.6: return f"about ${hi:,.0f} on the market ({st}, {rar})"
     return f"anywhere from ${lo:,.0f} to ${hi:,.0f} depending on the printing — the {st} {rar} version is the ${hi:,.0f} one"
-RIP_CAM = CFG.get("CLEOBOT_RIP_CAM", "coolcam")                          # the camera the cards are held up to (1080p on the relay)
+RIP_CAM = CFG.get("CLEOBOT_RIP_CAM", "coolcam")                          # the terrarium camera the cards are held up to (1080p on the relay)
+RIPCAM_RTSP = CFG.get("CLEOBOT_RIPCAM_RTSP", "rtsp://127.0.0.1:8556/ripcam")   # the companion phone camera, when it is publishing
+def ripcam_live():
+    """True when the phone is publishing to the rip-cam relay (a quick RTSP probe)."""
+    import subprocess
+    try: return subprocess.run([FFMPEG, "-loglevel", "error", "-rtsp_transport", "tcp", "-i", RIPCAM_RTSP, "-frames:v", "1", "-f", "null", "-"], capture_output=True, timeout=6).returncode == 0
+    except Exception: return False
 # ---------- pan/tilt over the camera's own command channel (Pan V4 via Agora data stream; discovered 2026-09-03) ----------
 CAM_PORTS = {"coolcam": int(CFG.get("CLEOBOT_COOLCAM_CDP", "9224")), "hotcam": int(CFG.get("CLEOBOT_HOTCAM_CDP", "9225"))}
 _cam_pos = {"coolcam": [0, 0], "hotcam": [0, 0]}                              # a step ledger so 'home' can undo moves
@@ -320,7 +326,7 @@ def where_is_she():
     except Exception as e: log("where_is_she error:", type(e).__name__); return None
     w = re.sub(r"[^a-z]", "", (out or "").lower().split()[0] if (out or "").split() else "")
     return w if w in ("center", "left", "right", "up", "down", "none", "body") else None
-TRACK_STEP = int(CFG.get("CLEOBOT_TRACK_STEP", "8")); TRACK_EVERY = float(CFG.get("CLEOBOT_TRACK_EVERY", "75")); TRACK_HOME_AFTER = float(CFG.get("CLEOBOT_TRACK_HOME_MINUTES", "20"))
+PRESENCE_MINUTES = float(CFG.get("CLEOBOT_PRESENCE_MINUTES", "30")); TRACK_STEP = int(CFG.get("CLEOBOT_TRACK_STEP", "8")); TRACK_EVERY = float(CFG.get("CLEOBOT_TRACK_EVERY", "75")); TRACK_HOME_AFTER = float(CFG.get("CLEOBOT_TRACK_HOME_MINUTES", "20"))
 _track = {"on": False, "last_motion": 0, "nudges": []}
 def track_session(motion_fn):
     """Follow her head while the hub keeps seeing cool-side motion: a look every TRACK_EVERY s, one small nudge when her head is off-centre
@@ -1189,6 +1195,7 @@ def describe_cams():
     finally: _cli_lock.release()
     if out: _llm["n"] += 1; _llm["nd"] += 1
     return out
+_rip_src = {"phone": False}
 def describe_pull():
     """Rip Night eyes: SECURITY BOUNDARY like describe_cams — Read tool on the stills only, no chat text. Returns dict or None."""
     import subprocess
@@ -1196,14 +1203,18 @@ def describe_pull():
     d = f"{HERE}/cli-workdir/frames"; os.makedirs(d, exist_ok=True)
     for f in os.listdir(d):
         if f.startswith("rip_"): os.remove(f"{d}/{f}")
+    src = RIPCAM_RTSP if ripcam_live() else f"{RTSP}/{RIP_CAM}"                 # the phone's close-up beats the glass every time
+    if src == RIPCAM_RTSP and not _rip_src.get("phone"): log("rip eyes: using the phone rip cam"); _rip_src["phone"] = True
+    elif src != RIPCAM_RTSP and _rip_src.get("phone"): log("rip eyes: phone cam gone, back to the cool cam"); _rip_src["phone"] = False
     for i in (1, 2):      # a burst: two separate stills ~0.6 s apart, so one catches the card sharp and still (three was ~16 s per look)
-        try: subprocess.run([FFMPEG, "-loglevel", "error", "-y", "-rtsp_transport", "tcp", "-i", f"{RTSP}/{RIP_CAM}", "-frames:v", "1", "-vf", "scale=1600:-1", "-q:v", "3", f"{d}/rip_{i}.jpg"], capture_output=True, timeout=12)
+        try: subprocess.run([FFMPEG, "-loglevel", "error", "-y", "-rtsp_transport", "tcp", "-i", src, "-frames:v", "1", "-vf", "scale=1600:-1", "-q:v", "3", f"{d}/rip_{i}.jpg"], capture_output=True, timeout=12)
         except Exception as e: log("rip burst error:", str(e)[:60])
         time.sleep(0.4)
     shots = sorted(f for f in os.listdir(d) if f.startswith("rip_"))[:2]
     if not shots: return None
     files = ", ".join(f"frames/{f}" for f in shots)
-    prompt = (f"Use the Read tool on exactly these files and nothing else: {files}. They are {len(shots)} stills taken a moment apart by a camera inside a snake terrarium looking out through the glass; "
+    where = "a phone camera held over the table" if _rip_src.get("phone") else "a camera inside a snake terrarium looking out through the glass"
+    prompt = (f"Use the Read tool on exactly these files and nothing else: {files}. They are {len(shots)} stills taken a moment apart by {where}; "
               f"a person may be holding a card up. Use whichever still is sharpest (motion blur differs between them). A person may be holding a "
               f"Pokémon trading card or a booster pack up to the glass. Reply ONLY with JSON: {{\"pack\": true/false (a sealed or torn booster pack visible), "
               f"\"card\": true/false (a single card held up), \"name\": \"card name as printed; if the print is blurred but the Pokémon is clearly recognisable from the artwork, its name; else null\", \"guess\": true/false (name came from the artwork, not the print), \"holo\": true/false (foil/holographic shine), "
@@ -1499,6 +1510,15 @@ class Bot:
                 if getattr(self, "rip_until", 0) > now: continue                            # Rip Night: no idle lines, looks, games, notices, interludes
                 if CLIPS and self.ws: self.clip_out(now)                                 # clips cost no tokens: always catch her
                 if PROACTIVE: self.maybe_out_line(now)                                  # she's moving: look and say so, even to an empty room (it's the good stuff)
+                # presence check: in the evening blocks, if she has not been seen in frame for a while, go look at her spots (bounded)
+                if TRACK_ON and not _track["on"] and not getattr(self, "rip_until", 0) > now and current_show() in ("oracle", "night") \
+                        and now - getattr(self, "last_presence", 0) > PRESENCE_MINUTES * 60 and bg_ok():
+                    self.last_presence = now
+                    def presence():
+                        w = where_is_she(); log(f"presence: head is {w}")
+                        if w in ("center", "left", "right", "up", "down", "body"): remember_sighting(w); frame_her() if w != "body" else None
+                        elif w == "none": search_for_her()
+                    threading.Thread(target=presence, daemon=True).start()
                 if TRACK_ON and not _track["on"] and not getattr(self, "rip_until", 0) > now:
                     try:
                         moving = lambda: bool(((hub() or {}).get("motion") or {}).get("cool", {}).get("moving"))
