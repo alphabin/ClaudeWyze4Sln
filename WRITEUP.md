@@ -165,8 +165,10 @@ command (`*_ack` with `result`: 1 = done, 2 = unknown), which is how the names w
 Verified by measuring the picture: left 20 then right 20 returns to the starting frame (difference 0.7 vs a noise floor of 0.3).
 Params like `{"direction":"left"}` alone, `{"horizontal":..}`, `{"pan":..}` are refused (result 2); `direction` + `speed` + `step` are all required.
 `get_property` on `camera-position::*` names returns nothing, so position readback is not available; keep your own step ledger to go "home".
-The **Pan V3** (Kinesis path) does **not** accept any of this on its data channel ("Json interface not supported" for every interface
-name tried); its pan/tilt remains TUTK-only (the bridge's `rotary_*` commands) or the Wyze app.
+The **Pan V3** (Kinesis path) does **not** accept any of this: a sweep of 1,560 interface/function combinations on its data channel found only
+`resolutions` (query), `resolution` (switch) and `playback` (SD-card playback: needs `startTime_json`/`count_json`). Its pan/tilt remains TUTK-only
+(the bridge's `rotary_*` / `cruise_points` commands, issue #835) or the Wyze app. TUTK from a Docker VM behind NAT times out (`IOTC_ER_TIMEOUT`);
+the fix is bridged networking so the camera can reach the bridge directly (Colima: `colima start --network-address --network-mode bridged --network-interface en0`, needs sudo once).
 
 In this kit: `chatbot/cleobot.py` `cam_move()` / `cam_home()` (via the decoder page's debug port), chat commands `cam left|right|up|down [step]`,
 `cam home`, `cam find` (a vision call says where the snake is; the camera nudges toward her), and an automatic find-and-nudge when the sensor hub reports motion.
