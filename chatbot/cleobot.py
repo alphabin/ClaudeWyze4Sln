@@ -141,7 +141,9 @@ def current_show(now=None):
     if n.hour >= 23 or n.hour < 6: return "night"
     return "court"
 INTERLUDE_HOURS = float(CFG.get("CLEOBOT_INTERLUDE_HOURS", "2"))          # Moon Interlude: a haiku + koto piece, this often when people are watching (oracle/night blocks)
-VOICE = CFG.get("CLEOBOT_VOICE", "Moira"); VOICE_RATE = CFG.get("CLEOBOT_VOICE_RATE", "145"); VOICE_ON = CFG.get("CLEOBOT_VOICE_ON", "1") != "0"   # macOS `say` voice for readings, fortunes, haikus
+VOICE = CFG.get("CLEOBOT_VOICE", "Moira"); VOICE_RATE = CFG.get("CLEOBOT_VOICE_RATE", "145"); VOICE_ON = CFG.get("CLEOBOT_VOICE_ON", "1") != "0"   # fallback: macOS `say`
+PIPER = CFG.get("CLEOBOT_PIPER", f"{ROOT}/tts/.venv/bin/piper"); PIPER_VOICE = CFG.get("CLEOBOT_PIPER_VOICE", "en_GB-alba-medium")           # free neural voice (Piper), used when installed
+PIPER_LEN = CFG.get("CLEOBOT_PIPER_LENGTH", "1.08"); PIPER_PAUSE = CFG.get("CLEOBOT_PIPER_PAUSE", "0.35")                                          # a little slower and more breath between sentences
 def speak(text, kind):
     """Synthesize the Oracle's voice (macOS say -> aac) into overlay/voice/<ts>.m4a and point overlay/voice.json at it; ambience.html plays it."""
     if not VOICE_ON or not text: return None
@@ -150,8 +152,13 @@ def speak(text, kind):
         ts = int(time.time() * 1000); d = f"{ROOT}/overlay/voice"; os.makedirs(d, exist_ok=True)
         cl = re.sub(r"[\U0001F000-\U0001FFFF☾🌸🃏🔮👑🐍⟲·]", " ", text); cl = re.sub(r"\s+", " ", cl).strip()
         aiff = f"{d}/{ts}.aiff"; m4a = f"{d}/{ts}.m4a"
-        subprocess.run(["say", "-v", VOICE, "-r", VOICE_RATE, "-o", aiff, cl], check=True, timeout=60, capture_output=True)
-        subprocess.run([CFG.get("CLEOBOT_FFMPEG", "/opt/homebrew/bin/ffmpeg"), "-loglevel", "error", "-y", "-i", aiff, "-c:a", "aac", "-b:a", "96k", m4a], check=True, timeout=60, capture_output=True); os.remove(aiff)
+        model = f"{ROOT}/tts/voices/{PIPER_VOICE}.onnx"
+        if os.path.exists(PIPER) and os.path.exists(model):                       # neural voice, generated locally in about a second
+            wav = f"{d}/{ts}.wav"
+            subprocess.run([PIPER, "-m", model, "-f", wav, "--length-scale", PIPER_LEN, "--sentence-silence", PIPER_PAUSE], input=cl, text=True, check=True, timeout=90, capture_output=True); src = wav
+        else:
+            subprocess.run(["say", "-v", VOICE, "-r", VOICE_RATE, "-o", aiff, cl], check=True, timeout=60, capture_output=True); src = aiff
+        subprocess.run([CFG.get("CLEOBOT_FFMPEG", "/opt/homebrew/bin/ffmpeg"), "-loglevel", "error", "-y", "-i", src, "-c:a", "aac", "-b:a", "96k", m4a], check=True, timeout=60, capture_output=True); os.remove(src)
         json.dump({"file": f"voice/{ts}.m4a", "kind": kind, "ts": ts // 1000}, open(f"{ROOT}/overlay/voice.json", "w"))
         for f in os.listdir(d):
             if f.endswith(".m4a") and time.time() - os.path.getmtime(f"{d}/{f}") > 3600: os.remove(f"{d}/{f}")

@@ -16,3 +16,7 @@ chatbot/cli-workdir/
 sensors/SnakeSensors.app/
 .doctor-*.tmp
 chatbot/private_guard.py
+tts/.venv/
+tts/voices/*.onnx
+tts/*.m4a
+tts/*.wav
