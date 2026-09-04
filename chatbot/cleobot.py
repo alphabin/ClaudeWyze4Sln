@@ -168,8 +168,44 @@ def speak(text, kind):
             if f.endswith(".m4a") and time.time() - os.path.getmtime(f"{d}/{f}") > 3600: os.remove(f"{d}/{f}")
         return m4a
     except Exception as e: log("voice error:", type(e).__name__, str(e)[:80]); return None
-_prices = {}
+_prices = {}; _index = {"mtime": 0, "rows": [], "refreshing": False}
+def price_index():
+    """chatbot/prices.json from scripts/build-prices.py (tcgcsv.com daily dump of TCGplayer market prices). Rebuilt in the background when older than 24 h."""
+    f = f"{HERE}/prices.json"
+    try:
+        mt = os.path.getmtime(f)
+        if mt != _index["mtime"]: _index.update(mtime=mt, rows=json.load(open(f)).get("rows", []))
+        if time.time() - mt > 86400 and not _index["refreshing"]:
+            _index["refreshing"] = True
+            def build():
+                import subprocess
+                try: subprocess.run([sys.executable, f"{ROOT}/scripts/build-prices.py"], timeout=900, capture_output=True); log("price index rebuilt")
+                except Exception as e: log("price index rebuild failed:", e)
+                finally: _index["refreshing"] = False
+            threading.Thread(target=build, daemon=True).start()
+    except FileNotFoundError: pass
+    return _index["rows"]
+def _norm(t): return re.sub(r"[^a-z0-9 ]", "", (t or "").lower()).strip()
+def index_lookup(name, number=None, sealed=False):
+    """(low, high, best_set, best_rarity, n_matches) from the local index, or None."""
+    rows = price_index(); nn = _norm(name); num = (number or "").split("/")[0].strip().lstrip("0")
+    if not rows or not nn: return None
+    hits = [r for r in rows if _norm(r["n"]) == nn and bool(r.get("sealed")) == sealed] or [r for r in rows if nn in _norm(r["n"]) and bool(r.get("sealed")) == sealed]
+    full = (number or "").replace(" ", "").lstrip("0")
+    if num:
+        exact = [r for r in hits if r["num"].replace(" ", "").lstrip("0") == full] or [r for r in hits if r["num"].split("/")[0].strip().lstrip("0") == num]   # "215/203" beats "215"
+        hits = exact or hits
+    if not hits: return None
+    hits.sort(key=lambda r: r["m"]); lo, hi = hits[0]["m"], hits[-1]["m"]
+    pool = [r for r in hits if not re.search(r"common|promo", (r.get("r") or "").lower())] if not num and not sealed else hits   # a name alone: judge by the real chase printings
+    b = (pool or hits)[-1]
+    return (lo, (pool or hits)[-1]["m"], b["set"], b.get("r") or b.get("sub") or "", len(hits))
 def card_value(name, number=None):
+    v = index_lookup(name, number)
+    if v: return v
+    return card_value_api(name, number)
+def product_value(name): return index_lookup(name, None, sealed=True)
+def card_value_api(name, number=None):
     """TCGplayer market price via the free pokemontcg.io database. Returns (low, high, best_set, best_rarity, n_matches) or None."""
     key = (name.lower(), (number or "").split("/")[0].strip())
     if key in _prices and time.time() - _prices[key][0] < 6 * 3600: return _prices[key][1]
@@ -1352,13 +1388,14 @@ class Bot:
                 if prod and prod.lower() not in products and len(prod) < 80:
                     products.add(prod.lower()); info = set_info(prod); kind = d.get("product_type") or "product"
                     facts = f"Database: set {info['name']} ({info.get('series')}), released {info.get('releaseDate')}, {info.get('printedTotal') or info.get('total')} cards." if info else "The database has no record of that set name."
+                    pv = product_value(prod); facts += f" Sealed market price: {value_words(pv)}." if pv else ""
                     line = llm_answer("court", "product", recent=self.recent, model=CLI_MODEL if LLM_BACKEND == "cli" else None, cache=False,
                                       task=f"Your human holds up a sealed Pokémon {kind} to your glass: '{prod}'. {facts} In TWO or THREE sentences as the queen-seer: say what it is, "
                                            f"what is inside such a product, and which one or two cards collectors chase from that set (from your own knowledge; if unsure, say the ledgers are hazy). "
                                            f"Then command the human to open it. Nothing is for sale. No emoji, under 340 characters.")
                     if line:
                         self.send(f"🎴 {line}"); threading.Thread(target=speak, args=(line, "rip"), daemon=True).start()
-                        self.show_pull(d, prod, line, len(seen), None, kind=kind.upper() if kind else "PRODUCT")
+                        self.show_pull(d, prod, line, len(seen), pv, kind=kind.upper() if kind else "PRODUCT")
                 name = (d.get("name") or "").strip()
                 if d.get("card") and name and name.lower() not in seen and len(name) < 60:
                     seen.add(name.lower())

@@ -22,3 +22,4 @@ tts/*.m4a
 tts/*.wav
 overlay/pulls/
 overlay/voice/
+chatbot/prices.json
