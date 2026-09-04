@@ -556,9 +556,9 @@
     document.querySelector('#haiku .hk').textContent = day ? '🌸 BLOSSOM INTERLUDE · A HAIKU FROM THE COURT' : '☾ MOON INTERLUDE · A HAIKU FROM THE COURT'; document.querySelector('#haiku .kanji').textContent = day ? '花' : '月';
     if (day && !document.getElementById('blooms').childElementCount) { const g = document.getElementById('blooms'); const pts = [[300,250],[340,215],[400,185],[470,190],[520,180],[560,178],[600,200],[640,205],[690,260],[520,400],[560,392],[640,388],[700,420],[740,445],[790,350],[760,360],[820,520],[220,180],[260,160],[300,148],[340,150],[180,140],[120,100]];
       let html = ''; for (const [x, y] of pts) for (let k = 0; k < 9; k++) { const r = 7 + Math.random() * 9, cls = ['', 'b', 'c'][k % 3]; html += `<circle class="bloom ${cls}" cx="${(x + (Math.random() - .5) * 70).toFixed(0)}" cy="${(y + (Math.random() - .5) * 50).toFixed(0)}" r="${r.toFixed(1)}" opacity="${(0.75 + Math.random() * 0.25).toFixed(2)}"/>`; } g.innerHTML = html; }
-    moon.classList.add('on'); petals(true); setTimeout(() => box.classList.add('on'), 3500);
-    [0, 1, 2].forEach(i => setTimeout(() => document.getElementById('hk' + i).classList.add('on'), 5000 + i * 6000));
-    setTimeout(() => { if (interludeTs === f.ts) { box.classList.remove('on'); moon.classList.remove('on'); petals(false); } }, 44000);
+    moon.classList.add('on'); petals(true); setTimeout(() => box.classList.add('on'), 2500);
+    [0, 1, 2].forEach(i => setTimeout(() => document.getElementById('hk' + i).classList.add('on'), 3500 + i * 5000));
+    setTimeout(() => { if (interludeTs === f.ts) { box.classList.remove('on'); moon.classList.remove('on'); petals(false); } }, 30000);
   }).catch(() => {}); }
   // falling petals: slow, swaying, lit by the moon; runs only during the interlude
   const petC = document.getElementById('petals'), petX = petC.getContext('2d'); let petOn = false, petRaf = 0, PET = [], petalTint = [246, 222, 214];

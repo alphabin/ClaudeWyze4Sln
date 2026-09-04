@@ -143,7 +143,7 @@ def current_show(now=None):
     if sset and n >= sset.replace(second=0) and n.hour < 23: return "oracle"
     if n.hour >= 23 or n.hour < 6: return "night"
     return "court"
-INTERLUDE_HOURS = float(CFG.get("CLEOBOT_INTERLUDE_HOURS", "2"))          # Moon Interlude: a haiku + koto piece, this often when people are watching (oracle/night blocks)
+INTERLUDE_HOURS = float(CFG.get("CLEOBOT_INTERLUDE_HOURS", "4")); INTERLUDE_PER_DAY = int(CFG.get("CLEOBOT_INTERLUDE_PER_DAY", "3"))          # Moon Interlude: a haiku + koto piece, this often when people are watching (oracle/night blocks)
 VOICE = CFG.get("CLEOBOT_VOICE", "Moira"); VOICE_RATE = CFG.get("CLEOBOT_VOICE_RATE", "145"); VOICE_ON = CFG.get("CLEOBOT_VOICE_ON", "1") != "0"   # fallback: macOS `say`
 PIPER = CFG.get("CLEOBOT_PIPER", f"{ROOT}/tts/.venv/bin/piper"); PIPER_VOICE = CFG.get("CLEOBOT_PIPER_VOICE", "en_GB-alba-medium")           # free neural voice (Piper), used when installed
 PIPER_LEN = CFG.get("CLEOBOT_PIPER_LENGTH", "1.08"); PIPER_PAUSE = CFG.get("CLEOBOT_PIPER_PAUSE", "0.35")                                          # a little slower and more breath between sentences
@@ -1017,6 +1017,7 @@ class Bot:
         self.last_goal_poll = 0; self.subs_disabled = False
         self.ambient_hour = 0; self.ambient_n = 0; self.ambient_streak = 0; self.last_rip_nudge = 0
         self.game = None; self.last_vote = time.time(); self.last_quiz = time.time() + 600
+        self.last_interlude = time.time(); self.interludes_today = (int(time.time() // 86400), 0)   # a restart never makes an interlude "due"
         self.last_notice = time.time(); self.notice_i = 0
         self.clips = {"hour": 0, "n": 0, "day": 0, "nd": 0, "last_request": 0, "disabled": False}; self.moving_since = 0
     def send(self, text):
@@ -1395,11 +1396,13 @@ class Bot:
         return ("🌸 " if daylight else "☾ ") + " / ".join(lines)
     def maybe_interlude(self, now):
         gap = INTERLUDE_HOURS * 3600 * (1.5 if current_show() == "court" else 1)        # a little rarer by day
-        if now - getattr(self, "last_interlude", 0) < gap or int(_llm["viewers"]) < 1 or self.game: return
+        day = int(now // 86400)
+        if self.interludes_today[0] != day: self.interludes_today = (day, 0)
+        if self.interludes_today[1] >= INTERLUDE_PER_DAY or now - getattr(self, "last_interlude", 0) < gap or int(_llm["viewers"]) < 1 or self.game: return
         if now - self.last_human < 240 or not bg_ok(): return                   # never over a live conversation
         line = self.interlude(None, "scheduled")
         if line:
-            self.send(line)
+            self.interludes_today = (day, self.interludes_today[1] + 1); self.send(line)
             if CLIPS: threading.Timer(38, self.keep_haiku, args=(None,)).start()
     def maybe_notice(self, now):
         """One short feature notice every NOTICE_HOURS when at least one person is watching and chat has been quiet 5 min. Rotates, zero tokens."""
