@@ -168,7 +168,7 @@ Params like `{"direction":"left"}` alone, `{"horizontal":..}`, `{"pan":..}` are 
 The **Pan V3** (Kinesis path) does **not** accept any of this: a sweep of 1,560 interface/function combinations on its data channel found only
 `resolutions` (query), `resolution` (switch) and `playback` (SD-card playback: needs `startTime_json`/`count_json`). Its pan/tilt remains TUTK-only
 (the bridge's `rotary_*` / `cruise_points` commands, issue #835) or the Wyze app. TUTK from a Docker VM behind NAT times out (`IOTC_ER_TIMEOUT`);
-the fix is bridged networking so the camera can reach the bridge directly (Colima: `colima start --network-address --network-mode bridged --network-interface en0`, needs sudo once).
+we then put the bridge on a VM that sits directly on the Wi-Fi (Colima profile with `--vm-type qemu --network-mode bridged`, container in host network mode, no NAT anywhere, same subnet as the camera) and it STILL times out on `IOTC_Connect_ByUIDEx`, in both `NET_MODE=ANY` and `NET_MODE=LAN`. The camera (HL_PAN3, firmware 4.50.17.10, p2p type 3, DTLS) simply no longer answers third-party TUTK connections — the same lock-down the community reported for Pan V3 firmware 4.50.5+ since early 2025 (bridge issues #1432, #1466). Conclusion: on current firmware the Pan V3's pan/tilt is reachable only from the Wyze app. Video still works via Kinesis WebRTC (this kit's `cam.html`).
 
 In this kit: `chatbot/cleobot.py` `cam_move()` / `cam_home()` (via the decoder page's debug port), chat commands `cam left|right|up|down [step]`,
 `cam home`, `cam find` (a vision call says where the snake is; the camera nudges toward her), and an automatic find-and-nudge when the sensor hub reports motion.
