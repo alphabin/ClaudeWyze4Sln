@@ -84,12 +84,12 @@ document.querySelectorAll('#zooms button').forEach(b=>b.onclick=()=>{ zoom=parse
 function applyZoom(){ if(nativeZoom&&stream){ stream.getVideoTracks()[0].applyConstraints({advanced:[{zoom}]}).catch(()=>{}); $('v').style.transform='none'; } else $('v').style.transform='scale('+zoom+')'; }
 // the snap: a full-size JPEG straight from the camera, posted to the Mac
 async function snap(why){
-  if(!on||busy||mode!=='table') return; const v=$('v'); if(!v.videoWidth) return; busy=1; lastSnap=Date.now();
+  if(!on||mode!=='table'||Date.now()-lastSnap<1200) return; const v=$('v'); if(!v.videoWidth) return; lastSnap=Date.now();
   const c=$('c'); const z=nativeZoom?1:zoom; const sw=v.videoWidth/z, sh=v.videoHeight/z; c.width=Math.round(sw); c.height=Math.round(sh); c.getContext('2d').drawImage(v,(v.videoWidth-sw)/2,(v.videoHeight-sh)/2,sw,sh,0,0,c.width,c.height);
   $('flash').classList.add('on'); setTimeout(()=>$('flash').classList.remove('on'),40); if(navigator.vibrate) navigator.vibrate(30);
   $('last').style.backgroundImage='url('+c.toDataURL('image/jpeg',.5)+')'; $('sheet').classList.remove('on');
   toast('SENT','She has the card ('+why+'). About 12 seconds…','reading');
-  c.toBlob(async b=>{ try{ const r=await fetch('/shot',{method:'POST',headers:{'Content-Type':'image/jpeg'},body:b}); if(!r.ok) toast('SNAP FAILED','The Mac said '+r.status); }catch(e){ toast('SNAP FAILED',e.message);} setTimeout(()=>busy=0,4000); },'image/jpeg',.92);
+  c.toBlob(async b=>{ try{ const r=await fetch('/shot',{method:'POST',headers:{'Content-Type':'image/jpeg'},body:b}); if(!r.ok) toast('SNAP FAILED','The Mac said '+r.status); else { const j=await r.json(); if(j.queued>1) toast('QUEUED',j.queued+' cards waiting. She takes them in order, about 12 s each.','reading'); } }catch(e){ toast('SNAP FAILED',e.message);} },'image/jpeg',.92);
 }
 $('shutter').onclick=()=>snap('shutter');
 // auto-snap: after movement, a short hold with something new in frame
@@ -99,7 +99,7 @@ function diff(a,b){ if(!a||!b) return 0; let s=0; for(let i=0;i<a.length;i+=4) s
 setInterval(()=>{ if(!on||mode!=='table') return; const s=sig(); const d=diff(s,prev); prev=s; if(!s) return;
   if(d>14){ moved=true; still=0; return; }
   if(d<7) still++; else still=0;
-  if(moved&&still>=4&&Date.now()-lastSnap>7000&&!busy&&diff(s,lastShotSig)>10){ moved=false; lastShotSig=s; snap('held steady'); }
+  if(moved&&still>=4&&Date.now()-lastSnap>5000&&diff(s,lastShotSig)>10){ moved=false; lastShotSig=s; snap('held steady'); }
 },240);
 // corrections + what the Mac says
 $('fix-no').onclick=()=>fix(false); $('fix-yes').onclick=()=>fix(true); $('close').onclick=()=>{ $('sheet').classList.remove('on'); toast('CARD TABLE','Next card: fill the picture and press the shutter.'); };
@@ -107,9 +107,9 @@ function fix(h){ fetch('/cmd',{method:'POST',body:JSON.stringify({holo:h})}).cat
 let reading=false;
 async function poll(){ try{ const s=await (await fetch('/status',{cache:'no-store'})).json();
   const p=s.pull; const mine=p&&p.ts&&p.ts>LOADED; const r=s.ripcam||{};
-  if(on&&!r.live&&!busy) toast('CONNECTING','Cleo is picking up the stream (up to 30 s)…','reading');
+  if(on&&!r.live) toast('CONNECTING','Cleo is picking up the stream (up to 30 s)…','reading');
   else if(on&&r.live&&$('t1').textContent==='CONNECTING') toast('CARD TABLE','Fill the picture with a card and press the shutter.');
-  if(mine&&p.stage==='reading'&&Date.now()/1000-p.ts<90&&!reading){ reading=true; toast('READING','She has the card. Give her a few seconds…','reading'); }
+  if(mine&&p.stage==='reading'&&Date.now()/1000-p.ts<90&&!reading){ reading=true; toast('READING',(s.queue>0?s.queue+' more waiting. ':'')+'She has the card. Give her a few seconds…','reading'); }
   if(mine&&p.ts!==lastPull&&p.stage!=='reading'){ lastPull=p.ts; reading=false;
     if(p.stage==='none'){ toast('NO CARD','She saw no card in that. Fill the picture and try again.'); return; }
     $('s-img').src='/pull-image?'+p.ts; $('s-name').textContent=(p.name||'')+(p.holo?' ✦ holo':''); $('s-price').textContent=p.value?('the ledgers whisper · '+p.value):''; $('s-text').textContent=p.verdict||''; $('sheet').classList.add('on'); toast('JUDGED',p.name||'');

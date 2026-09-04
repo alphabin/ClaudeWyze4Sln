@@ -317,7 +317,7 @@ def ripcam_tick(rip_active, bot=None):
     if bot is not None and fresh and cmd.get("holo") is not None and not getattr(bot, "_cmd_seen", 0) == cmd.get("ts"):
         bot._cmd_seen = cmd.get("ts"); bot.fix_holo(bool(cmd.get("holo")))
     if bot is not None:
-        if live and not getattr(bot, "rip_until", 0) > time.time():
+        if (live or shot_queue_next()) and not getattr(bot, "rip_until", 0) > time.time():
             bot.rip_until = time.time() + 20 * 60; bot.rip_auto = True; threading.Thread(target=bot.rip_watch, daemon=True).start()
             bot.send("The card table is open. Show me what you pulled — hold it still and I will judge it. 👑"); rip_active = True
         elif not live and getattr(bot, "rip_auto", False) and getattr(bot, "rip_until", 0) > time.time():
@@ -337,6 +337,18 @@ def ripcam_tick(rip_active, bot=None):
         try:
             x, y, w, h = ripcam_box(mode) if mode else (0, 0, 0, 0); json.dump({"live": live, "mode": mode, "x": x, "y": y, "w": w, "h": h, "portrait": _ripcam.get("portrait", False), "ts": int(time.time())}, open(f"{ROOT}/overlay/ripcam.json", "w"))
         except Exception as e: log("ripcam.json error:", e)
+def shot_queue_next():
+    """Oldest snapshot waiting in overlay/shots/ (the phone page posts one file per snap), or None. Stale ones (>10 min) are dropped."""
+    d = f"{ROOT}/overlay/shots"
+    try: fs = sorted(f for f in os.listdir(d) if f.endswith(".jpg"))
+    except Exception: return None
+    for f in fs:
+        if time.time() - os.path.getmtime(f"{d}/{f}") > 600:
+            try: os.remove(f"{d}/{f}")
+            except Exception: pass
+            continue
+        return f"{d}/{f}"
+    return None
 def ripcam_live():
     """True when the phone is publishing to the rip-cam relay (a quick RTSP probe)."""
     import subprocess
@@ -1767,10 +1779,13 @@ class Bot:
         while time.time() < self.rip_until and time.time() - started < RIP_WATCH_MINUTES * 60:
             try:
                 if not bg_ok(): time.sleep(2); continue                                   # a viewer is waiting for a reply: let that go first
-                shot = getattr(self, "judge_shot", None); self.judge_shot = None; phone = _ripcam.get("live") or getattr(self, "rip_auto", False) or ripcam_live()
+                shot = shot_queue_next(); phone = _ripcam.get("live") or getattr(self, "rip_auto", False) or ripcam_live()
                 if phone and not shot: time.sleep(1); continue                                   # phone live: she looks only at what the phone snaps
                 if shot: self.show_pull({"shot": shot}, "", "", getattr(self, "pull_count", 0) + 1, stage="reading")     # the card is on screen while she reads it
                 t0 = time.time(); d = describe_pull(shot=shot, verdict=True) or {}                   # her verdict rides along in the same call: no second CLI call, nothing to hang on
+                if shot:
+                    try: os.remove(shot)
+                    except Exception: pass
                 log("rip look %.0fs: %s" % (time.time() - t0, json.dumps({k: d.get(k) for k in ("hands", "pack", "card", "name", "number", "holo", "product", "cam") if d.get(k) is not None}, ensure_ascii=False)[:160] or "nothing"))
                 if d.get("hands") or d.get("card") or d.get("pack") or d.get("product"): last_activity = time.time()
                 idle = time.time() - last_activity
@@ -1823,11 +1838,7 @@ class Bot:
             except Exception as e: log("rip watch error:", e)
             wait = (RIP_WATCH_EVERY if time.time() - last_activity < 600 else 30) if not _ripcam.get("live") else 3600   # phone live: no polling at all — she looks when the phone snaps
             for _ in range(int(wait * 2)):
-                try:                                                                        # read the phone's snap straight from the file: the main loop only looks every ~30 s
-                    c = json.load(open(f"{ROOT}/overlay/phone_cmd.json"))
-                    if c.get("judge") and c.get("shot") and time.time() - c.get("ts", 0) < 90 and getattr(self, "_cmd_seen", 0) != c.get("ts"):
-                        self._cmd_seen = c.get("ts"); self.judge_shot = c.get("shot"); self.judge_next = True; log("rip cam: snap from the phone")
-                except Exception: pass
+                if shot_queue_next(): last_activity = time.time(); break                            # the phone's snaps wait in overlay/shots/, judged in order
                 if getattr(self, "judge_next", False): self.judge_next = False; last_activity = time.time(); break
                 if time.time() > self.rip_until: break
                 time.sleep(0.5)
