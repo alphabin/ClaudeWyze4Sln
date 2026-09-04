@@ -1823,6 +1823,11 @@ class Bot:
             except Exception as e: log("rip watch error:", e)
             wait = (RIP_WATCH_EVERY if time.time() - last_activity < 600 else 30) if not _ripcam.get("live") else 3600   # phone live: no polling at all — she looks when the phone snaps
             for _ in range(int(wait * 2)):
+                try:                                                                        # read the phone's snap straight from the file: the main loop only looks every ~30 s
+                    c = json.load(open(f"{ROOT}/overlay/phone_cmd.json"))
+                    if c.get("judge") and c.get("shot") and time.time() - c.get("ts", 0) < 90 and getattr(self, "_cmd_seen", 0) != c.get("ts"):
+                        self._cmd_seen = c.get("ts"); self.judge_shot = c.get("shot"); self.judge_next = True; log("rip cam: snap from the phone")
+                except Exception: pass
                 if getattr(self, "judge_next", False): self.judge_next = False; last_activity = time.time(); break
                 if time.time() > self.rip_until: break
                 time.sleep(0.5)
