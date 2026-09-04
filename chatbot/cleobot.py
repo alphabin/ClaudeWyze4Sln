@@ -167,6 +167,39 @@ def speak(text, kind):
             if f.endswith(".m4a") and time.time() - os.path.getmtime(f"{d}/{f}") > 3600: os.remove(f"{d}/{f}")
         return m4a
     except Exception as e: log("voice error:", type(e).__name__, str(e)[:80]); return None
+_prices = {}
+def card_value(name, number=None):
+    """TCGplayer market price via the free pokemontcg.io database. Returns (low, high, best_set, best_rarity, n_matches) or None."""
+    key = (name.lower(), (number or "").split("/")[0].strip())
+    if key in _prices and time.time() - _prices[key][0] < 6 * 3600: return _prices[key][1]
+    try:
+        q = f'name:"{name}"' + (f" number:{key[1]}" if key[1].isdigit() else "")
+        url = "https://api.pokemontcg.io/v2/cards?q=" + urllib.parse.quote(q) + "&pageSize=12&orderBy=-set.releaseDate&select=name,number,set,rarity,tcgplayer"
+        hdr = {"User-Agent": "snakecam-cleobot/1.0"}
+        if CFG.get("POKEMONTCG_API_KEY"): hdr["X-Api-Key"] = CFG["POKEMONTCG_API_KEY"]
+        data = []
+        for attempt in range(3):                                                   # the free database throws the odd 502; try again, then without the number
+            try:
+                with urllib.request.urlopen(urllib.request.Request(url, headers=hdr), timeout=15) as r: data = json.load(r).get("data") or []
+                if data or " number:" not in q: break
+                q = f'name:"{name}"'; url = "https://api.pokemontcg.io/v2/cards?q=" + urllib.parse.quote(q) + "&pageSize=12&orderBy=-set.releaseDate&select=name,number,set,rarity,tcgplayer"
+            except urllib.error.HTTPError as e:
+                if e.code in (502, 503, 504, 429) and attempt < 2: time.sleep(2); continue
+                raise
+        vals = []
+        for c in data:
+            for kind, pr in ((c.get("tcgplayer") or {}).get("prices") or {}).items():
+                if pr.get("market"): vals.append((pr["market"], c["set"]["name"], c.get("rarity") or kind))
+        if not vals: res = None
+        else:
+            vals.sort(); res = (vals[0][0], vals[-1][0], vals[-1][1], vals[-1][2], len(data))
+        _prices[key] = (time.time(), res); return res
+    except Exception as e: log("card_value error:", type(e).__name__, str(e)[:60]); return None
+def value_words(v):
+    if not v: return "the ledgers are silent on this one"
+    lo, hi, st, rar, n = v
+    if n == 1 or hi < lo * 1.6: return f"about ${hi:,.0f} on the market ({st}, {rar})"
+    return f"anywhere from ${lo:,.0f} to ${hi:,.0f} depending on the printing — the {st} {rar} version is the ${hi:,.0f} one"
 RIP_WATCH_MINUTES = float(CFG.get("CLEOBOT_RIP_WATCH_MINUTES", "30")); RIP_WATCH_EVERY = float(CFG.get("CLEOBOT_RIP_WATCH_EVERY", "8"))   # Rip Night eyes
 RANKS = [(30, "Royal Advisor"), (15, "Duke or Duchess"), (7, "Knight"), (3, "Courtier"), (1, "Visitor")]
 def rank(visits): return next(name for n, name in RANKS if visits >= n) if visits >= 1 else "Visitor"
@@ -723,8 +756,8 @@ def _system_prompt():
             "The owner sometimes opens Pokémon card packs on camera for fun; you love watching and judge the pulls (sparkle is good). The deal "
             f"('Royal decree'): {DEAL} First Partner packs are on the menu. Winners are drawn by the owner, live on stream. Hard rules: never ask for or accept addresses, emails, phone numbers or any "
             "personal details in chat — 'the winner's address goes to my human privately, never in chat'; never promise a specific card or value; "
-            "if asked about buying or selling say 'just for fun, nothing for sale'; never mention prices, marketplaces, or any business or other "
-            "project of the owner's. "
+            "if asked about buying or selling say 'just for fun, nothing for sale'; never mention prices or marketplaces EXCEPT when judging a card just "
+            "pulled on Rip Night, where you may quote the market figure you were given, as a seer would; never any business or other project of the owner's. "
             "You also run a Zoltar-style fortune machine and a tarot table on the stream: if a viewer seems to want a prediction, invite them to ask 'will I ever…' "
             "or say 'tarot' for a three-card reading turned over live. When you are hidden and someone is bored, offer these. "
             "Pointing people to help: you may cite at most ONE of these resources, verbatim, only when it genuinely helps; never any other URL; "
@@ -840,7 +873,8 @@ def describe_pull():
               f"Pokémon trading card or a booster pack up to the glass. Reply ONLY with JSON: {{\"pack\": true/false (a sealed or torn booster pack visible), "
               f"\"card\": true/false (a single card held up, readable), \"name\": \"card name as printed, or null\", \"holo\": true/false (foil/holographic shine), "
               f"\"art\": \"five words on the artwork, or null\", \"hands\": true/false (human hands visible), \"cam\": \"hotcam\" or \"coolcam\" (which still shows the card), "
-              f"\"box\": [left, top, width, height] as fractions 0-1 of that image around the card, or null}}. Never invent a name you cannot read.")
+              f"\"box\": [left, top, width, height] as fractions 0-1 of that image around the card, or null, \"number\": \"collector number as printed e.g. 234/091, or null\", "
+              f"\"set\": \"set name if printed/readable, or null\"}}. Never invent a name, number or set you cannot read.")
     if not _cli_lock.acquire(timeout=20): return None
     try:
         r = subprocess.run([CLI_BIN, "-p", prompt, "--model", CLI_MODEL, "--max-turns", "4", "--tools", "Read", "--output-format", "text",
@@ -1293,17 +1327,19 @@ class Bot:
                 name = (d.get("name") or "").strip()
                 if d.get("card") and name and name.lower() not in seen and len(name) < 60:
                     seen.add(name.lower())
-                    ctx = f"Card just pulled and held to your glass: {name}. Foil/holo: {'yes' if d.get('holo') else 'no'}. Art: {d.get('art') or 'unclear'}. Pull number {len(seen)} of this rip."
+                    val = card_value(name, d.get("number")); vw = value_words(val)
+                    ctx = f"Card just pulled and held to your glass: {name}{(' #' + d['number']) if d.get('number') else ''}. Foil/holo: {'yes' if d.get('holo') else 'no'}. Art: {d.get('art') or 'unclear'}. Pull number {len(seen)} of this rip. What the ledgers say (TCGplayer market): {vw}."
                     line = llm_answer("court", "pull", recent=self.recent, model=CLI_MODEL_TALK if LLM_BACKEND == "cli" else None, cache=False,
-                                      task=f"{ctx} Give your verdict on this pull in ONE line as the queen: name the card, judge the art and the shine, a slow blink for a holo, "
-                                           f"a regal dismissal for a dud. Never mention value, price, rarity tiers or the market. No viewer name, no emoji.")
-                    self.show_pull(d, name, line or "", len(seen))
+                                      task=f"{ctx} Give your verdict on this pull in ONE or TWO sentences as the queen with her clairvoyant Oracle air: name the card, judge the art and the shine, "
+                                           f"then reveal its worth the way a seer reads tea leaves ('the ledgers whisper...', 'I see...'), quoting the market figure above plainly. "
+                                           f"A slow blink for a holo, a regal dismissal for a dud (say so if it is worth pennies). Nothing is for sale here. No viewer name, no emoji. Under 260 characters.")
+                    self.show_pull(d, name, line or "", len(seen), val)
                     if line: self.send(f"🎴 {line}"); threading.Thread(target=speak, args=(line, "rip"), daemon=True).start()
                     if CLIPS: threading.Timer(20, self.make_clip, args=(f"pull: {name}",)).start()
             except Exception as e: log("rip watch error:", e)
             time.sleep(RIP_WATCH_EVERY)
         log(f"rip watch ended, {len(seen)} cards seen"); self.rip_until = 0
-    def show_pull(self, d, name, verdict, n):
+    def show_pull(self, d, name, verdict, n, val=None):
         """Crop the card out of the still it was seen in and hand it to the overlay (overlay/pulls/<ts>.jpg + overlay/pull.json)."""
         import subprocess
         try:
@@ -1316,7 +1352,9 @@ class Bot:
                 vf = f"crop=iw*{w:.3f}:ih*{h:.3f}:iw*{l:.3f}:ih*{t:.3f},scale=-2:600"
             else: vf = "scale=-2:600"
             subprocess.run([CFG.get("CLEOBOT_FFMPEG", "/opt/homebrew/bin/ffmpeg"), "-loglevel", "error", "-y", "-i", src, "-vf", vf, "-q:v", "3", dst], check=True, timeout=20, capture_output=True)
-            json.dump({"image": f"pulls/{ts}.jpg", "name": name, "holo": bool(d.get("holo")), "verdict": verdict, "n": n, "ts": ts}, open(f"{ROOT}/overlay/pull.json", "w"))
+            value = None
+            if val: lo, hi, st, rar, k = val; value = (f"${hi:,.0f}" if (k == 1 or hi < lo * 1.6) else f"${lo:,.0f} – ${hi:,.0f}") + f" · {st}"
+            json.dump({"image": f"pulls/{ts}.jpg", "name": name, "holo": bool(d.get("holo")), "verdict": verdict, "n": n, "value": value, "number": d.get("number"), "ts": ts}, open(f"{ROOT}/overlay/pull.json", "w"))
             for f in os.listdir(f"{ROOT}/overlay/pulls"):
                 if time.time() - os.path.getmtime(f"{ROOT}/overlay/pulls/{f}") > 6 * 3600: os.remove(f"{ROOT}/overlay/pulls/{f}")
         except Exception as e: log("show_pull error:", type(e).__name__, str(e)[:80])
