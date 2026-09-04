@@ -1781,7 +1781,7 @@ class Bot:
                 if not bg_ok(): time.sleep(2); continue                                   # a viewer is waiting for a reply: let that go first
                 shot = shot_queue_next(); phone = _ripcam.get("live") or getattr(self, "rip_auto", False) or ripcam_live()
                 if phone and not shot: time.sleep(1); continue                                   # phone live: she looks only at what the phone snaps
-                if shot: self.show_pull({"shot": shot}, "", "", getattr(self, "pull_count", 0) + 1, stage="reading")     # the card is on screen while she reads it
+                if shot and self.presenting_idle(): self.show_pull({"shot": shot}, "", "", getattr(self, "pull_count", 0) + 1, stage="reading")     # the card is on screen while she reads it (unless a verdict is still being shown)
                 t0 = time.time(); d = describe_pull(shot=shot, verdict=True) or {}                   # her verdict rides along in the same call: no second CLI call, nothing to hang on
                 if shot:
                     try: os.remove(shot)
@@ -1817,9 +1817,7 @@ class Bot:
                     if True:                                                                             # one call did it all (or a plain line): never a second CLI call here
                         line = str(d["verdict"]).replace("{worth}", vw) if d.get("verdict") else f"{name}. {(d.get('art') or 'The art is what it is').rstrip('.')}. {'A slow blink for the shine.' if d.get('holo') else 'No foil, plain paper.'} The ledgers whisper: {vw}."
                         if "{worth}" in line: line = line.replace("{worth}", vw)
-                        self.show_pull(d, name, line, len(seen), val)
-                        self.send(f"🎴 {line}"); threading.Thread(target=speak, args=(line, "rip"), daemon=True).start()
-                        if CLIPS: threading.Timer(20, self.make_clip, args=(f"pull: {name}",)).start()
+                        self.present_pull(d, name, line, len(seen), val)                            # screen + chat + voice + clip, one card at a time
                         self.last_pull = {"name": name, "d": d, "val": val, "n": len(seen)}; continue
                     ctx = f"Card just pulled and held to your glass: {name}{(' #' + d['number']) if d.get('number') else ''}{' (the print was blurred; you recognised it from the artwork — say so lightly, e.g. if my eyes serve)' if d.get('guess') else ''}. Foil/holo: {'yes' if d.get('holo') else 'no'}. Art: {d.get('art') or 'unclear'}. Pull number {len(seen)} of this rip. What the ledgers say (TCGplayer market): {vw}."
                     line = llm_answer("court", "pull", recent=self.recent, model=CLI_MODEL_TALK if LLM_BACKEND == "cli" else None, cache=False, vip=True,
@@ -1858,6 +1856,25 @@ class Bot:
             if line: self.send(f"🎴 {line}"); threading.Thread(target=speak, args=(line, "rip"), daemon=True).start()
             if CLIPS: threading.Timer(20, self.make_clip, args=(f"pull: {name}",)).start()
         except Exception as e: log("judge_card error:", e)
+    def presenting_idle(self):
+        q = getattr(self, "_present_q", None); return (q is None or q.empty()) and not getattr(self, "_presenting", False) and time.time() > _speech_until["t"]
+    def present_pull(self, d, name, line, n, val):
+        """Queue a judged card for the stream: each one gets the screen and her voice to itself (the eyes may run ahead of the mouth)."""
+        import queue
+        if not hasattr(self, "_present_q"):
+            self._present_q = queue.Queue()
+            def run():
+                while True:
+                    d, name, line, n, val = self._present_q.get(); self._presenting = True
+                    try:
+                        t0 = time.time(); self.show_pull(d, name, line, n, val); self.send(f"🎴 {line}")
+                        speak(line, "rip")                                                     # blocks until it is her turn, then sets _speech_until
+                        if CLIPS: threading.Timer(20, self.make_clip, args=(f"pull: {name}",)).start()
+                        while time.time() < max(_speech_until["t"] + 1.5, t0 + 9): time.sleep(0.3)   # the card stays up until she has finished saying it
+                    except Exception as e: log("present error:", e)
+                    finally: self._presenting = False
+            threading.Thread(target=run, daemon=True).start()
+        self._present_q.put((d, name, line, n, val)); log(f"rip: queued for the screen: {name} ({self._present_q.qsize()} waiting)")
     def fix_holo(self, holo):
         """The broadcaster taps 'not a holo' / 'it is a holo' on the phone: correct the screen and say so."""
         try:
