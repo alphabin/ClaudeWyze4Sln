@@ -41,12 +41,12 @@ We do **not** scrape eBay/TCGplayer pages: both serve automated browsers a bot-c
 
 ## Physical setup that makes it work
 - Use the **cool-side camera** (the 4K one; the still she reads is 1080p). The hot side is 360p and cannot read text.
-- Card **flat against the glass**, centred, held still for 2–3 s. Foils: tilt slightly so the shine is visible, then flat.
+- Card **flat against the glass**, centred, and **keep it there until she speaks** (a look takes ~8 s; she looks back-to-back, so 10–12 s covers it). Foils: tilt slightly so the shine is visible, then flat.
 - Light from the front, not behind the card. Avoid the IR night mode if you can (rip while the room is lit).
 - One card at a time. A fanned hand of cards reads as "no card".
 
 ## Tuning knobs (.env)
-`CLEOBOT_RIP_WATCH_MINUTES` (30) · `CLEOBOT_RIP_WATCH_EVERY` (6 s) · `CLEOBOT_CLIPS_PER_HOUR` (6, ×4 during a rip) ·
+`CLEOBOT_RIP_WATCH_MINUTES` (30) · `CLEOBOT_RIP_WATCH_EVERY` (1.5 s between looks; each look itself takes ~8 s) · `CLEOBOT_CLIPS_PER_HOUR` (6, ×4 during a rip) ·
 `CLEOBOT_VOICE_ON` (1) · `CLEOBOT_PIPER_VOICE` (en_GB-alba-medium) · `CLEOBOT_VISION=0` disables all camera looks.
 
 ## Known limits

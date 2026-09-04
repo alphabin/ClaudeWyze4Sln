@@ -267,7 +267,7 @@ def value_words(v):
     lo, hi, st, rar, n = v
     if n == 1 or hi < lo * 1.6: return f"about ${hi:,.0f} on the market ({st}, {rar})"
     return f"anywhere from ${lo:,.0f} to ${hi:,.0f} depending on the printing — the {st} {rar} version is the ${hi:,.0f} one"
-RIP_WATCH_MINUTES = float(CFG.get("CLEOBOT_RIP_WATCH_MINUTES", "30")); RIP_WATCH_EVERY = float(CFG.get("CLEOBOT_RIP_WATCH_EVERY", "6"))   # Rip Night eyes: up to 3 h, idle-aware
+RIP_WATCH_MINUTES = float(CFG.get("CLEOBOT_RIP_WATCH_MINUTES", "30")); RIP_WATCH_EVERY = float(CFG.get("CLEOBOT_RIP_WATCH_EVERY", "1.5"))   # Rip Night eyes: up to 3 h, idle-aware
 RANKS = [(30, "Royal Advisor"), (15, "Duke or Duchess"), (7, "Knight"), (3, "Courtier"), (1, "Visitor")]
 def rank(visits): return next(name for n, name in RANKS if visits >= n) if visits >= 1 else "Visitor"
 if CFG.get("ANTHROPIC_API_KEY"): os.environ["ANTHROPIC_API_KEY"] = CFG["ANTHROPIC_API_KEY"]
@@ -1392,7 +1392,8 @@ class Bot:
         while time.time() < self.rip_until and time.time() - started < RIP_WATCH_MINUTES * 60:
             try:
                 if not bg_ok(): time.sleep(2); continue                                   # a viewer is waiting for a reply: let that go first
-                d = describe_pull() or {}
+                t0 = time.time(); d = describe_pull() or {}
+                log("rip look %.0fs: %s" % (time.time() - t0, json.dumps({k: d.get(k) for k in ("hands", "pack", "card", "name", "number", "holo", "product", "cam") if d.get(k) is not None}, ensure_ascii=False)[:160] or "nothing"))
                 if d.get("hands") or d.get("card") or d.get("pack") or d.get("product"): last_activity = time.time()
                 idle = time.time() - last_activity
                 if idle > 40 * 60: self.send("The glass has been empty a while — the rip is concluded. Say 'ripset' when the next packs arrive. 👑"); break
@@ -1618,7 +1619,7 @@ class Bot:
             self.rip_until = 0; RIP.d["show_until"] = 0; RIP._save(); threading.Thread(target=self.apply_show, daemon=True).start(); reply = "The rip is concluded. My verdicts stand. 👑"; path = "ripstop"
         elif low.strip("! .") == "ripset":                                    # broadcaster only: reset the vote, announce the rip
             if user == CHANNEL:
-                reply = RIP.reset() + " I'm watching the glass — hold each card up to the cool side and I'll judge it."; path = "ripset"; threading.Thread(target=speak, args=(reply, "rip"), daemon=True).start()
+                reply = RIP.reset() + " I'm watching the glass — hold each card flat to the cool side and KEEP IT THERE until I speak (about ten seconds)."; path = "ripset"; threading.Thread(target=speak, args=(reply, "rip"), daemon=True).start()
                 running = getattr(self, "rip_until", 0) > time.time(); self.rip_until = time.time() + RIP_WATCH_MINUTES * 60
                 if not running: threading.Thread(target=self.rip_watch, daemon=True).start()
                 RIP.d["show_until"] = time.time() + 7200; RIP._save(); threading.Thread(target=self.apply_show, daemon=True).start()
