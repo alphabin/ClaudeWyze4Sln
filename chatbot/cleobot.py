@@ -46,7 +46,8 @@ AI-first (CLEOBOT_AI_FIRST=1): while at least CLEOBOT_AI_FIRST_FLOOR (0.25) of t
   Moon Interlude (CLEOBOT_INTERLUDE_HOURS, 2): in the oracle/night blocks with someone watching and chat quiet, she writes a haiku about the
   moment (overlay/interlude.json); the overlay dims to moonlight and brushes the lines in while ambience.html plays a generative Japanese
   piece (koto, shakuhachi, taiko, wind chimes; hirajōshi scale, ~70 s). 'haiku' / 'poem' in chat asks for one (room: 10 min apart).
-  Rip Night eyes: 'ripset' (broadcaster) also starts rip_watch(): a still every CLEOBOT_RIP_WATCH_EVERY (8) s for CLEOBOT_RIP_WATCH_MINUTES (30),
+  Rip Night eyes: 'ripset' (broadcaster) also starts rip_watch(): a still every CLEOBOT_RIP_WATCH_EVERY (6) s for up to CLEOBOT_RIP_WATCH_MINUTES (180);
+  after 10 quiet min (no hands/cards/packs) she glances every 30 s, after 40 quiet min the session ends by itself; 'ripset' again extends it;
   described as JSON by the vision call (pack / card / name / holo / art); one spoken + chat verdict per new card, a line when the pack
   appears, a clip 20 s after each card. 'ripstop' ends it. Hold cards flat to the cool-side glass (the 1080p feed).
   Vision (CLEOBOT_VISION=1, cli backend): she can look at her own cameras — one still per camera from the relay (CLEOBOT_RTSP, ffmpeg) read
@@ -219,7 +220,7 @@ def value_words(v):
     lo, hi, st, rar, n = v
     if n == 1 or hi < lo * 1.6: return f"about ${hi:,.0f} on the market ({st}, {rar})"
     return f"anywhere from ${lo:,.0f} to ${hi:,.0f} depending on the printing — the {st} {rar} version is the ${hi:,.0f} one"
-RIP_WATCH_MINUTES = float(CFG.get("CLEOBOT_RIP_WATCH_MINUTES", "30")); RIP_WATCH_EVERY = float(CFG.get("CLEOBOT_RIP_WATCH_EVERY", "8"))   # Rip Night eyes
+RIP_WATCH_MINUTES = float(CFG.get("CLEOBOT_RIP_WATCH_MINUTES", "180")); RIP_WATCH_EVERY = float(CFG.get("CLEOBOT_RIP_WATCH_EVERY", "6"))   # Rip Night eyes: up to 3 h, idle-aware
 RANKS = [(30, "Royal Advisor"), (15, "Duke or Duchess"), (7, "Knight"), (3, "Courtier"), (1, "Visitor")]
 def rank(visits): return next(name for n, name in RANKS if visits >= n) if visits >= 1 else "Visitor"
 if CFG.get("ANTHROPIC_API_KEY"): os.environ["ANTHROPIC_API_KEY"] = CFG["ANTHROPIC_API_KEY"]
@@ -1338,10 +1339,13 @@ class Bot:
     # ------------------------------------------------ Rip Night: she watches the pulls ----
     def rip_watch(self):
         """After 'ripset': look at the glass every ~8 s for up to RIP_WATCH_MINUTES; comment once per new card (spoken + chat), once when the pack appears."""
-        seen = set(); products = set(); last_pack = 0; started = time.time(); log("rip watch started")
+        seen = set(); products = set(); last_pack = 0; started = time.time(); last_activity = time.time(); log("rip watch started")
         while time.time() < self.rip_until and time.time() - started < RIP_WATCH_MINUTES * 60:
             try:
                 d = describe_pull() or {}
+                if d.get("hands") or d.get("card") or d.get("pack") or d.get("product"): last_activity = time.time()
+                idle = time.time() - last_activity
+                if idle > 40 * 60: self.send("The glass has been empty a while — the rip is concluded. Say 'ripset' when the next packs arrive. 👑"); break
                 if d.get("pack") and time.time() - last_pack > 300:
                     last_pack = time.time(); line = "The pack is at my glass. Crinkle it slowly, human — I judge the reveal, not the rush. 👑"; self.send(line); threading.Thread(target=speak, args=(line, "rip"), daemon=True).start()
                 prod = (d.get("product") or "").strip()
@@ -1368,7 +1372,7 @@ class Bot:
                     if line: self.send(f"🎴 {line}"); threading.Thread(target=speak, args=(line, "rip"), daemon=True).start()
                     if CLIPS: threading.Timer(20, self.make_clip, args=(f"pull: {name}",)).start()
             except Exception as e: log("rip watch error:", e)
-            time.sleep(RIP_WATCH_EVERY)
+            time.sleep(RIP_WATCH_EVERY if time.time() - last_activity < 600 else 30)   # nothing at the glass for 10 min: glance every 30 s
         log(f"rip watch ended, {len(seen)} cards seen"); self.rip_until = 0
     def show_pull(self, d, name, verdict, n, val=None, kind=None):
         """Crop the card out of the still it was seen in and hand it to the overlay (overlay/pulls/<ts>.jpg + overlay/pull.json)."""
@@ -1542,7 +1546,8 @@ class Bot:
         elif low.strip("! .") == "ripset":                                    # broadcaster only: reset the vote, announce the rip
             if user == CHANNEL:
                 reply = RIP.reset() + " I'm watching the glass — hold each card up to the cool side and I'll judge it."; path = "ripset"; threading.Thread(target=speak, args=(reply, "rip"), daemon=True).start()
-                if not getattr(self, "rip_until", 0): self.rip_until = time.time() + RIP_WATCH_MINUTES * 60; threading.Thread(target=self.rip_watch, daemon=True).start()
+                running = getattr(self, "rip_until", 0) > time.time(); self.rip_until = time.time() + RIP_WATCH_MINUTES * 60
+                if not running: threading.Thread(target=self.rip_watch, daemon=True).start()
                 RIP.d["show_until"] = time.time() + 7200; RIP._save(); threading.Thread(target=self.apply_show, daemon=True).start()
             else: reply = "Only my human may start a set rip. You may, however, say RIP to vote. 👑"; path = "ripset-denied"
         elif re.fullmatch(r"\W*(clip|clip it|clip that|!clip)\W*", low):     # anyone may ask for a clip, every CLIP_REQUEST_MINUTES
