@@ -1,0 +1,40 @@
+# Companion "rip cam": the phone publishes its camera here over WHIP (https, self-signed). Reads are loopback-only (bot stills, OBS PiP).
+logLevel: info
+logDestinations: [stdout]
+api: no
+metrics: no
+pprof: no
+playback: no
+rtsp: yes
+rtspAddress: 127.0.0.1:8556
+rtspTransports: [tcp]
+rtspEncryption: "no"
+rtmp: no
+hls: no
+srt: no
+webrtc: yes
+webrtcAddress: :8891
+webrtcEncryption: yes
+webrtcServerKey: __ROOT__/relay/ripcam/certs/server.key
+webrtcServerCert: __ROOT__/relay/ripcam/certs/server.crt
+webrtcAllowOrigin: "*"
+webrtcLocalUDPAddress: :8191
+webrtcLocalTCPAddress: :8191
+webrtcIPsFromInterfaces: yes
+webrtcAdditionalHosts: [__LAN_IP__, 127.0.0.1]
+webrtcICEServers2: []
+authMethod: internal
+authInternalUsers:
+  - user: any
+    pass:
+    ips: ['127.0.0.1', '::1']
+    permissions: [{action: publish}, {action: read}, {action: playback}]
+  - user: phone
+    pass: __RIPCAM_PASSWORD__
+    ips: []
+    permissions: [{action: publish, path: ripcam}, {action: read, path: ripcam}]
+pathDefaults:
+  source: publisher
+paths:
+  ripcam:
+moq: no

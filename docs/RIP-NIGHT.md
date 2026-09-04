@@ -33,6 +33,18 @@ Viewers can say `RIP` to vote/hype at any time; that is separate from watching.
 - Voice lines are queued: verdicts never talk over each other.
 - Price talk is allowed **only** here. Elsewhere she still refuses to talk value, and "nothing for sale" always stands.
 
+## Companion phone cam (the fix for blurry cards)
+A phone held over the cards beats the terrarium camera through glass. A second, tiny relay (`relay/ripcam/mediamtx.yml`, launchd
+`com.snakecam.ripcam-relay`) accepts the phone's camera over WHIP on `https://<mac-lan-ip>:8891` (self-signed certificate, user `phone`,
+password `RIPCAM_PASSWORD` in `.env`) and re-serves it on loopback as `rtsp://127.0.0.1:8556/ripcam`.
+- **Phone:** open `https://<mac-lan-ip>:8891/ripcam/publish`, accept the certificate once, log in as `phone`, pick the rear camera, tap Publish.
+  Keep the page open (screen on); Publish again if it drops.
+- **Bot:** the rip eyes use the phone stream automatically whenever it is live (log line "using the phone rip cam"), and fall back to the cool cam.
+- **OBS:** a "Rip Cam" media source (rtsp 8556) sits top-right as a picture-in-picture, transparent until the phone publishes — it doubles as a
+  close-up cam when she's by the glass.
+- Setup on a new Mac: `openssl req -x509 -newkey rsa:2048 -nodes -keyout relay/ripcam/certs/server.key -out relay/ripcam/certs/server.crt -days 3650 -subj /CN=snakecam-ripcam -addext "subjectAltName=IP:<lan-ip>,DNS:localhost"`,
+  fill `__RIPCAM_PASSWORD__`, `__LAN_IP__`, `__ROOT__` in the yml, install the plist. Security: only the WHIP port is on the LAN, publish needs the password, reads are loopback-only.
+
 ## Prices
 `chatbot/prices.json` is built by `scripts/build-prices.py` from tcgcsv.com, a free daily dump of **TCGplayer market prices** for every
 Pokémon set (≈30k products, sealed included). The bot rebuilds it in the background when it is older than 24 h. Lookup order:
