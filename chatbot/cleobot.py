@@ -1767,10 +1767,10 @@ class Bot:
         while time.time() < self.rip_until and time.time() - started < RIP_WATCH_MINUTES * 60:
             try:
                 if not bg_ok(): time.sleep(2); continue                                   # a viewer is waiting for a reply: let that go first
-                shot = getattr(self, "judge_shot", None); self.judge_shot = None; phone = _ripcam.get("live")
+                shot = getattr(self, "judge_shot", None); self.judge_shot = None; phone = _ripcam.get("live") or getattr(self, "rip_auto", False) or ripcam_live()
                 if phone and not shot: time.sleep(1); continue                                   # phone live: she looks only at what the phone snaps
                 if shot: self.show_pull({"shot": shot}, "", "", getattr(self, "pull_count", 0) + 1, stage="reading")     # the card is on screen while she reads it
-                t0 = time.time(); d = describe_pull(shot=shot, verdict=bool(shot or phone)) or {}
+                t0 = time.time(); d = describe_pull(shot=shot, verdict=True) or {}                   # her verdict rides along in the same call: no second CLI call, nothing to hang on
                 log("rip look %.0fs: %s" % (time.time() - t0, json.dumps({k: d.get(k) for k in ("hands", "pack", "card", "name", "number", "holo", "product", "cam") if d.get(k) is not None}, ensure_ascii=False)[:160] or "nothing"))
                 if d.get("hands") or d.get("card") or d.get("pack") or d.get("product"): last_activity = time.time()
                 idle = time.time() - last_activity
@@ -1799,7 +1799,7 @@ class Bot:
                 if d.get("card") and name and key not in seen and len(name) < 60 and not any(key[:10] == k[:10] and abs(len(key) - len(k)) <= 2 for k in seen):   # "Charizard ex" vs "Charizard EX"
                     seen.add(key); seen_at[key] = time.time(); self.pull_count = len(seen)
                     val = card_value(name, d.get("number")); vw = value_words(val)
-                    if shot or phone or d.get("verdict"):                                                 # one call did it all (or a plain line): never a second CLI call here
+                    if True:                                                                             # one call did it all (or a plain line): never a second CLI call here
                         line = str(d["verdict"]).replace("{worth}", vw) if d.get("verdict") else f"{name}. {(d.get('art') or 'The art is what it is').rstrip('.')}. {'A slow blink for the shine.' if d.get('holo') else 'No foil, plain paper.'} The ledgers whisper: {vw}."
                         if "{worth}" in line: line = line.replace("{worth}", vw)
                         self.show_pull(d, name, line, len(seen), val)
