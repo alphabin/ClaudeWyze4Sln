@@ -61,7 +61,8 @@ def solo_layout(dead):
     reel = items.get("Highlights")                                                     # the dead camera's slot plays her highlight reel (overlay/reel.mp4)
     if reel:
         x = CAMS[dead][2] if dead else 0
-        reqs += [("SetSceneItemEnabled", {"sceneName": scene, "sceneItemId": reel, "sceneItemEnabled": bool(dead)}),
+        reqs += [("SetSceneItemIndex", {"sceneName": scene, "sceneItemId": reel, "sceneItemIndex": 0}),                 # under the overlay, so its label chip shows
+                 ("SetSceneItemEnabled", {"sceneName": scene, "sceneItemId": reel, "sceneItemEnabled": bool(dead)}),
                  ("SetSceneItemTransform", {"sceneName": scene, "sceneItemId": reel, "sceneItemTransform": {"positionX": x, "positionY": 270, "boundsType": "OBS_BOUNDS_SCALE_INNER", "boundsWidth": 960, "boundsHeight": 540, "boundsAlignment": 0}})]
     obs(reqs); json.dump({"dead": dead, "reel": bool(reel and dead and os.path.exists(f"{ROOT}/overlay/reel.mp4")), "ts": int(time.time())}, open(f"{ROOT}/overlay/cams.json", "w"))
 _reel = {"building": False}

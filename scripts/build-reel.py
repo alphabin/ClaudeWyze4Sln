@@ -22,6 +22,6 @@ for old in glob.glob(f"{D}/src/*.mp4"):                         # keep the folde
 if not have: print("nothing downloaded"); sys.exit(1)
 lst = f"{D}/list.txt"; open(lst, "w").write("".join(f"file '{f}'\n" for f in have))
 tmp = f"{D}/reel.tmp.mp4"; out = f"{ROOT}/overlay/reel.mp4"
-subprocess.run(["/opt/homebrew/bin/ffmpeg", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", lst, "-an", "-vf", "crop=iw*0.43:ih*0.43:iw*0.535:ih*0.285,scale=960:540,fps=30",
+subprocess.run(["/opt/homebrew/bin/ffmpeg", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", lst, "-an", "-vf", "crop=iw*0.40:ih*0.40:iw*0.55:ih*0.31,scale=960:540,fps=30",
                 "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-pix_fmt", "yuv420p", "-movflags", "+faststart", tmp], check=True)
 os.replace(tmp, out); print(f"reel: {len(have)} clips -> {out}")
