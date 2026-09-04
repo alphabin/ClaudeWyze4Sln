@@ -299,8 +299,10 @@ def cam_move(cam, direction, step=10, speed=5):
 def cam_home(cam):
     """Undo the ledger: move back by what we moved."""
     x, y = _cam_pos.get(cam, [0, 0]); ok = True
-    if x: ok &= cam_move(cam, "left" if x > 0 else "right", abs(x))
-    if y: ok &= cam_move(cam, "down" if y > 0 else "up", abs(y))
+    while x:                                                                       # the camera takes at most 60 per command: chunk the way back
+        c = min(60, abs(x)); ok &= cam_move(cam, "left" if x > 0 else "right", c); x = x - c if x > 0 else x + c; time.sleep(0.6)
+    while y:
+        c = min(60, abs(y)); ok &= cam_move(cam, "down" if y > 0 else "up", c); y = y - c if y > 0 else y + c; time.sleep(0.6)
     _cam_pos[cam] = [0, 0]; return ok
 TRACK_ON = CFG.get("CLEOBOT_TRACK", "1") != "0"; TRACK_MINUTES = float(CFG.get("CLEOBOT_TRACK_MINUTES", "10"))   # vision-guided 'keep her in frame' on the cool cam
 def where_is_she():
@@ -340,6 +342,82 @@ def track_session(motion_fn):
             time.sleep(TRACK_EVERY)
     except Exception as e: log("track session error:", e)
     finally: _track["on"] = False; log("track session ended")
+def describe_spot():
+    """SECURITY BOUNDARY like describe_cams: Read tool on one still, fixed prompt. JSON: {landmarks:[...], snake: none|body|head, head_pos: ...}"""
+    import subprocess
+    if LLM_BACKEND != "cli" or not grab_frames(cams=("coolcam",), width=1280): return None
+    prompt = ("Use the Read tool on exactly this file and nothing else: frames/coolcam.jpg. A still from a camera inside a ball python's terrarium. Reply ONLY with JSON: "
+              "{\"landmarks\": [up to 4 short labels of what fills the frame, e.g. \"cork bark tunnel\", \"climbing branch\", \"water bowl\", \"pothos leaves\", \"glass/room\", \"substrate\", \"hide\"], "
+              "\"snake\": \"none\" | \"body\" | \"head\", \"head_pos\": \"center|left|right|up|down|null\", \"note\": \"one short phrase\"}")
+    os.chdir(f"{HERE}/cli-workdir")
+    try: txt = cli_call([CLI_BIN, "-p", prompt, "--model", CLI_MODEL, "--max-turns", "4", "--tools", "Read", "--no-session-persistence", "--system-prompt", "You describe images factually and reply only with JSON. You only read the file named in the prompt."], timeout=60)
+    except Exception as e: log("describe_spot error:", type(e).__name__); return None
+    m = re.search(r"\{.*\}", txt or "", re.S)
+    try: return json.loads(m.group(0)) if m else None
+    except Exception: return None
+def frame_sig():
+    """A tiny grayscale of the cool cam's current frame, for 'did the picture change' comparisons."""
+    import subprocess
+    r = subprocess.run([FFMPEG, "-loglevel", "error", "-y", "-rtsp_transport", "tcp", "-i", f"{RTSP}/coolcam", "-frames:v", "1", "-vf", "scale=64:36,format=gray", "-f", "rawvideo", "-"], capture_output=True, timeout=20)
+    return r.stdout
+def frame_diff(a, b):
+    n = min(len(a), len(b)); return sum(abs(a[i] - b[i]) for i in range(n)) / max(1, n) if n else 0
+def cam_explore(step=40, max_steps=36, edge=3.0, wrap=6.0):
+    """The island walk, adapted to a camera that pans all the way round: pan LEFT until the picture matches home again (a full turn) or the
+    motor stops changing it; tilt UP and DOWN until the picture stops changing (real edges). Returns {pan_turn, up, down} in step units."""
+    if any(_cam_pos["coolcam"]): cam_home("coolcam"); time.sleep(2)
+    ext = {}; home = frame_sig()
+    travelled = 0; prev = home
+    for i in range(max_steps):                                                     # pan: look for the wrap
+        cam_move("coolcam", "left", step); time.sleep(2.5); cur = frame_sig(); d = frame_diff(prev, cur); dh = frame_diff(home, cur); prev = cur; travelled += step
+        log(f"explore: left +{step} -> change {d:.1f}, vs home {dh:.1f}")
+        if d < edge: log(f"explore: pan edge at {travelled}"); ext["pan_edge"] = travelled; break
+        if i >= 3 and dh < wrap: log(f"explore: full turn at {travelled}"); ext["pan_turn"] = travelled; _cam_pos["coolcam"][0] = 0; break   # we are home again
+    if "pan_turn" not in ext: cam_home("coolcam"); time.sleep(2)
+    for direction in ("up", "down"):
+        travelled = 0; prev = frame_sig()
+        for i in range(max_steps):
+            cam_move("coolcam", direction, step); time.sleep(2.5); cur = frame_sig(); d = frame_diff(prev, cur); prev = cur
+            log(f"explore: {direction} +{step} -> change {d:.1f}")
+            if d < edge: break
+            travelled += step
+        ext[direction] = travelled; log(f"explore: {direction} edge at {travelled}")
+        cam_home("coolcam"); time.sleep(2)
+    try: json.dump({"ts": int(time.time()), "extents": ext, "step": step}, open(f"{ROOT}/overlay/extents.json", "w"))
+    except Exception: pass
+    return ext
+def cam_tour(pans=None, tilts=None):
+    """Map the cool cam's world: visit a grid of pan/tilt positions from home, describe each, save overlay/map.json (+ thumbnails), return home."""
+    import shutil
+    if pans is None or tilts is None:                                                # explore first, then grid the real range
+        try: ext = json.load(open(f"{ROOT}/overlay/extents.json"))["extents"]
+        except Exception: ext = cam_explore()
+        def rng(neg, pos, every):
+            lo, hi = -int(neg), int(pos); vals = list(range(0, hi + 1, every)) + [v for v in range(-every, lo - 1, -every)]
+            return tuple(sorted(set(max(lo, min(hi, v)) for v in vals + [lo, hi])))
+        pans = pans or rng(ext.get("left", 60), ext.get("right", 60), 40); tilts = tilts or rng(ext.get("down", 0), ext.get("up", 60), 30)
+        log(f"tour: extents {ext} -> pans {pans} tilts {tilts}")
+    if any(_cam_pos["coolcam"]): cam_home("coolcam"); time.sleep(2)
+    spots = []; os.makedirs(f"{ROOT}/overlay/map", exist_ok=True); log("tour: mapping the land")
+    for tilt in tilts:
+        for pan in (pans if (tilts.index(tilt) % 2 == 0) else tuple(reversed(pans))):          # serpentine path, fewer big moves
+            x, y = _cam_pos["coolcam"]
+            if pan != x: cam_move("coolcam", "right" if pan > x else "left", abs(pan - x))
+            if tilt != y: cam_move("coolcam", "up" if tilt > y else "down", abs(tilt - y))
+            time.sleep(2.5); d = describe_spot() or {}
+            try: shutil.copy(f"{HERE}/cli-workdir/frames/coolcam.jpg", f"{ROOT}/overlay/map/p{pan:+d}_t{tilt:+d}.jpg")
+            except Exception: pass
+            spots.append({"pan": pan, "tilt": tilt, "landmarks": d.get("landmarks") or [], "snake": d.get("snake") or "none", "note": d.get("note") or ""})
+            log(f"tour: pan {pan:+d} tilt {tilt:+d}: {', '.join((d.get('landmarks') or [])[:3])} | snake {d.get('snake')}")
+    cam_home("coolcam")
+    try: ext = json.load(open(f"{ROOT}/overlay/extents.json"))["extents"]
+    except Exception: ext = None
+    json.dump({"ts": int(time.time()), "extents": ext, "spots": spots}, open(f"{ROOT}/overlay/map.json", "w")); log("tour: map saved, camera home"); return spots
+def map_spots(keyword=None):
+    try: m = json.load(open(f"{ROOT}/overlay/map.json"))
+    except Exception: return []
+    sp = m.get("spots", [])
+    return [x for x in sp if not keyword or any(keyword in l.lower() for l in x.get("landmarks", []))]
 SEARCH_MINUTES = float(CFG.get("CLEOBOT_SEARCH_MINUTES", "15"))
 _search = {"last": 0}
 def search_for_her():
@@ -348,11 +426,20 @@ def search_for_her():
     if time.time() - _search["last"] < SEARCH_MINUTES * 60: return None
     _search["last"] = time.time(); log("search: sweeping for her")
     if any(_cam_pos["coolcam"]): cam_home("coolcam"); time.sleep(2)
-    for direction, step in (("left", 22), ("right", 44), ("left", 22), ("up", 12), ("down", 24), ("up", 12)):   # ends back at home if nothing is found
+    def refine():
+        """We see her body but not her head: try a few small moves around this spot to bring the head in; stay on the body if it never shows."""
+        for direction, step in (("up", 10), ("right", 12), ("left", 24), ("right", 12), ("down", 10)):
+            cam_move("coolcam", direction, step); time.sleep(3); w = where_is_she(); log(f"search/refine: after {direction} {step}: {w}")
+            if w in ("center", "left", "right", "up", "down"): return w
+        return "body"
+    for direction, step in (("left", 22), ("right", 44), ("left", 22), ("up", 12), ("up", 12), ("down", 36), ("up", 12)):   # ends back at home if nothing is found
         cam_move("coolcam", direction, step); time.sleep(3)
         w = where_is_she(); log(f"search: after {direction} {step}: {w}")
-        if w in ("center", "left", "right", "up", "down"):
-            log("search: found her"); return w
+        if w in ("center", "left", "right", "up", "down"): log("search: found her"); return w
+        if w == "body":
+            log("search: her body is here, looking for the head"); w2 = refine()
+            if w2 != "body": log("search: found her"); return w2
+            log("search: staying on her body"); return "body"
     _cam_pos["coolcam"] = [0, 0]; return "none"
 def track_once(step=12, max_nudges=3):
     """Nudge the cool cam toward her until she is centred (or give up and go home). Returns the final word."""
@@ -1756,9 +1843,10 @@ class Bot:
         elif bare_command(t):                                             # "temps", "weather", "cleo status" ...
             reply = COMMANDS[bare_command(t)](); path = "command"
         elif RESOURCE_Q.search(t): reply = cmd_resources(t); path = "resources"     # "where can I learn more?" -> allowlisted links
-        elif re.match(r"^\W*(cool|hot)?\s*cam\s+(left|right|up|down|home|find|face)(\s+\d{1,2})?\W*$", low) and (user == CHANNEL or (tags or {}).get("mod") == "1"):
-            m = re.match(r"^\W*(cool|hot)?\s*cam\s+(left|right|up|down|home|find|face)(?:\s+(\d{1,2}))?", low); cam = "hotcam" if m.group(1) == "hot" else "coolcam"; path = "cam"
+        elif re.match(r"^\W*(cool|hot)?\s*cam\s+(left|right|up|down|home|find|face|tour|map)(\s+\d{1,2})?\W*$", low) and (user == CHANNEL or (tags or {}).get("mod") == "1"):
+            m = re.match(r"^\W*(cool|hot)?\s*cam\s+(left|right|up|down|home|find|face|tour|map)(?:\s+(\d{1,2}))?", low); cam = "hotcam" if m.group(1) == "hot" else "coolcam"; path = "cam"
             if m.group(2) == "home": ok = cam_home(cam); reply = "Back to my usual view." if ok else "The camera did not answer."
+            elif m.group(2) in ("tour", "map") and user == CHANNEL: threading.Thread(target=cam_tour, daemon=True).start(); reply = "Surveying my realm. Four minutes; do not disturb the cartographer."
             elif m.group(2) in ("find", "face"): w = track_once(); reply = {"center": "There. My face, framed, as a queen's should be.", "none": "I am not in that camera's world right now. Try the other side.", "body": "You have my coils; my face keeps its own counsel."}.get(w, "I looked and nudged; judge for yourself.")
             else: ok = cam_move(cam, m.group(2), int(m.group(3) or 10)); reply = f"{'Cool' if cam == 'coolcam' else 'Hot'} side, {m.group(2)}. Mind my nap." if ok else "The camera did not answer."
         elif user == CHANNEL and re.match(r"^\W*pull\s+\S", low):                     # broadcaster correction: "pull Umbreon VMAX 215/203" -> judge THIS card now
