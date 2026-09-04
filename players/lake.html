@@ -68,12 +68,15 @@ async function start() {
     if (u.uid !== sess.device_uid) return;
     try {
       await client.subscribe(u, mediaType);
+      if (mediaType === 'video') { try { await client.setStreamFallbackOption(u.uid, 0); await client.setRemoteVideoStreamType(u.uid, 0); dbg('pinned high stream, no fallback'); } catch (e) { dbg('pin high stream', e.message); } }   // never let the SDK swap us to the 360p low stream
       if (mediaType === 'video') {
         u.videoTrack.play(stage, { fit: 'cover' });
         playing = true; clearInterval(checkTimer); say('');
         // the web viewer asks for 360p; keep asking for ours until the picture actually arrives at that size
         const want = { '360p': 360, 'SD': 480, 'HD': 1080, '2k': 1440 }[RES] || 1080; clearInterval(resTimer); let asks = 0;
-        resTimer = setInterval(() => { const el = stage.querySelector('video'); const h = el ? el.videoHeight : 0; if (h >= want || asks > 40) { if (h) dbg('resolution', el.videoWidth + 'x' + h); clearInterval(resTimer); return; } setRes(RES); asks++; dbg('asked for', RES, 'have', h + 'p'); }, 4000);
+        resTimer = setInterval(() => { const el = stage.querySelector('video'); const h = el ? el.videoHeight : 0;
+          if (h >= want) { if (!window._atTarget) dbg('resolution', el.videoWidth + 'x' + h); window._atTarget = true; asks = 0; return; }   // keep the timer: if another viewer (the Wyze app) drags the camera to 360p, ask again once they leave
+          window._atTarget = false; if (asks < 40 || asks % 5 === 0) { setRes(RES); dbg('asked for', RES, 'have', h + 'p', 'others', (client && client.remoteUsers || []).filter(u => u.uid !== 1 && u.uid !== 3).length); } asks++; }, 4000);
         if (WHIP) forward(u.videoTrack.getMediaStreamTrack());   // relay mode: re-publish into the local relay
       }
       if (mediaType === 'audio') { u.audioTrack.play(); }
@@ -120,8 +123,12 @@ async function forward(track) {
     params.encodings = [{ maxBitrate: 6_000_000, maxFramerate: 30, scaleResolutionDownBy: tall > 1080 ? tall / 1080 : 1 }];   // relay at 1080p
     params.degradationPreference = 'maintain-resolution';   // under load drop frames, never shrink the picture (it never grows back)
     // the camera may switch size after we start: keep the relay at 1080p and the bitrate up
-    clearInterval(fwdSize); fwdSize = setInterval(async () => { if (!fpc || sender.track !== track) return; const th = track.getSettings().height || 0, p = sender.getParameters(); if (!p.encodings || !p.encodings.length) return;
-      const want = th > 1080 ? th / 1080 : 1; if (Math.abs((p.encodings[0].scaleResolutionDownBy || 1) - want) > 0.01) { p.encodings[0].scaleResolutionDownBy = want; try { await sender.setParameters(p); dbg('relay scale', want.toFixed(2), 'for', th + 'p'); } catch (e) { dbg('scale', e.message); } } }, 3000);
+    // the reported height flickers (360p readings between 2160p ones); re-scaling the encoder on every flicker starved the relay to 1 fps.
+    // Use the largest height seen in the last 90 s and only act on readings of 720p or more, held for two ticks.
+    let seenH = [], pend = null; clearInterval(fwdSize); fwdSize = setInterval(async () => { if (!fpc || sender.track !== track) return; const th = track.getSettings().height || 0, p = sender.getParameters(); if (!p.encodings || !p.encodings.length) return;
+      const now = Date.now(); if (th >= 720) seenH.push([now, th]); seenH = seenH.filter(([t]) => now - t < 90000); const maxH = seenH.reduce((m, [, h]) => Math.max(m, h), 0) || th;
+      const want = maxH > 1080 ? maxH / 1080 : 1; const cur = p.encodings[0].scaleResolutionDownBy || 1;
+      if (Math.abs(cur - want) > 0.01) { if (pend === want) { p.encodings[0].scaleResolutionDownBy = want; try { await sender.setParameters(p); dbg('relay scale', want.toFixed(2), 'for', maxH + 'p'); } catch (e) { dbg('scale', e.message); } pend = null; } else pend = want; } else pend = null; }, 3000);
     try { await sender.setParameters(params); } catch {}
     fpc.onconnectionstatechange = () => { dbg('whip', fpc.connectionState); if (['failed', 'closed'].includes(fpc.connectionState)) setTimeout(() => forward(track), 3000); };
     const offer = await fpc.createOffer(); await fpc.setLocalDescription(offer);

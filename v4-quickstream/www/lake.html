@@ -1,5 +1,5 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><title>v4-quickstream lake player</title>
+<html><head><meta charset="utf-8"><title>snakecam lake player</title>
 <style>
   html,body{margin:0;width:100%;height:100%;background:#000;overflow:hidden}
   #stage{position:absolute;inset:0;background:#000}
@@ -7,17 +7,16 @@
   #msg{position:absolute;left:0;right:0;bottom:8px;text-align:center;color:#888;font:14px -apple-system,sans-serif;
        text-shadow:0 1px 3px #000;pointer-events:none}
 </style>
-<!-- Agora Web SDK NG 4.24.0 (same version Wyze's web viewer bundles), served by the bridge from www/agora-rtc-sdk.js (run get-agora-sdk.sh once) -->
+<!-- Agora Web SDK NG 4.24.0 (same version Wyze's web viewer bundles), served by the bridge from overlay/agora-rtc-sdk.js -->
 <script src="agora-rtc-sdk.js"></script>
 </head><body>
 <div id="stage"></div><div id="msg"></div>
 <script>
-// Wyze "lake" camera (Pan V4) -> Agora channel -> this page (headless Chrome) -> WHIP -> mediamtx -> RTSP/WebRTC.
-// Copied from ../players/lake.html; the snakecam-only motion reporter is removed and BRIDGE is defined.
-// Usage: lake.html?cam=<cam>&res=2k&codec=h265&whip=http://localhost:8890/<cam>/whip   (session JSON from provision.py at lake/<cam>.json)
+// Wyze "lake" camera -> Agora channel -> this page -> OBS Browser Source.
+// Usage: lake.html?cam=snake-cam-cool   (session JSON written by lake/provision.py, served by the bridge at /static/lake/<cam>.json)
 const q = new URLSearchParams(location.search);
-const BRIDGE = location.origin;   // this page is served by the bridge, whose /api/<cam>/power/restart is used for self-heal
-const CAM = q.get('cam'), RES = q.get('res') || '2k';          // 360p | SD | HD | 2k
+const CAM = q.get('cam'), RES = q.get('res') || '2k';
+const BRIDGE = location.origin.startsWith('http') ? location.origin : 'http://localhost:5050';   // the bridge that serves this page; its power API reboots the camera          // 360p | SD | HD | 2k
 const WHIP = q.get('whip');   // relay mode: e.g. &whip=http://localhost:8890/coolcam/whip -> re-publish the decoded video into the local relay (mediamtx)
 const msg = document.getElementById('msg'), stage = document.getElementById('stage');
 const say = t => { msg.textContent = t; console.log('[lake]', t); };
@@ -69,12 +68,15 @@ async function start() {
     if (u.uid !== sess.device_uid) return;
     try {
       await client.subscribe(u, mediaType);
+      if (mediaType === 'video') { try { await client.setStreamFallbackOption(u.uid, 0); await client.setRemoteVideoStreamType(u.uid, 0); dbg('pinned high stream, no fallback'); } catch (e) { dbg('pin high stream', e.message); } }   // never let the SDK swap us to the 360p low stream
       if (mediaType === 'video') {
         u.videoTrack.play(stage, { fit: 'cover' });
         playing = true; clearInterval(checkTimer); say('');
         // the web viewer asks for 360p; keep asking for ours until the picture actually arrives at that size
         const want = { '360p': 360, 'SD': 480, 'HD': 1080, '2k': 1440 }[RES] || 1080; clearInterval(resTimer); let asks = 0;
-        resTimer = setInterval(() => { const el = stage.querySelector('video'); const h = el ? el.videoHeight : 0; if (h >= want || asks > 40) { if (h) dbg('resolution', el.videoWidth + 'x' + h); clearInterval(resTimer); return; } setRes(RES); asks++; dbg('asked for', RES, 'have', h + 'p'); }, 4000);
+        resTimer = setInterval(() => { const el = stage.querySelector('video'); const h = el ? el.videoHeight : 0;
+          if (h >= want) { if (!window._atTarget) dbg('resolution', el.videoWidth + 'x' + h); window._atTarget = true; asks = 0; return; }   // keep the timer: if another viewer (the Wyze app) drags the camera to 360p, ask again once they leave
+          window._atTarget = false; if (asks < 40 || asks % 5 === 0) { setRes(RES); dbg('asked for', RES, 'have', h + 'p', 'others', (client && client.remoteUsers || []).filter(u => u.uid !== 1 && u.uid !== 3).length); } asks++; }, 4000);
         if (WHIP) forward(u.videoTrack.getMediaStreamTrack());   // relay mode: re-publish into the local relay
       }
       if (mediaType === 'audio') { u.audioTrack.play(); }
@@ -121,8 +123,12 @@ async function forward(track) {
     params.encodings = [{ maxBitrate: 6_000_000, maxFramerate: 30, scaleResolutionDownBy: tall > 1080 ? tall / 1080 : 1 }];   // relay at 1080p
     params.degradationPreference = 'maintain-resolution';   // under load drop frames, never shrink the picture (it never grows back)
     // the camera may switch size after we start: keep the relay at 1080p and the bitrate up
-    clearInterval(fwdSize); fwdSize = setInterval(async () => { if (!fpc || sender.track !== track) return; const th = track.getSettings().height || 0, p = sender.getParameters(); if (!p.encodings || !p.encodings.length) return;
-      const want = th > 1080 ? th / 1080 : 1; if (Math.abs((p.encodings[0].scaleResolutionDownBy || 1) - want) > 0.01) { p.encodings[0].scaleResolutionDownBy = want; try { await sender.setParameters(p); dbg('relay scale', want.toFixed(2), 'for', th + 'p'); } catch (e) { dbg('scale', e.message); } } }, 3000);
+    // the reported height flickers (360p readings between 2160p ones); re-scaling the encoder on every flicker starved the relay to 1 fps.
+    // Use the largest height seen in the last 90 s and only act on readings of 720p or more, held for two ticks.
+    let seenH = [], pend = null; clearInterval(fwdSize); fwdSize = setInterval(async () => { if (!fpc || sender.track !== track) return; const th = track.getSettings().height || 0, p = sender.getParameters(); if (!p.encodings || !p.encodings.length) return;
+      const now = Date.now(); if (th >= 720) seenH.push([now, th]); seenH = seenH.filter(([t]) => now - t < 90000); const maxH = seenH.reduce((m, [, h]) => Math.max(m, h), 0) || th;
+      const want = maxH > 1080 ? maxH / 1080 : 1; const cur = p.encodings[0].scaleResolutionDownBy || 1;
+      if (Math.abs(cur - want) > 0.01) { if (pend === want) { p.encodings[0].scaleResolutionDownBy = want; try { await sender.setParameters(p); dbg('relay scale', want.toFixed(2), 'for', maxH + 'p'); } catch (e) { dbg('scale', e.message); } pend = null; } else pend = want; } else pend = null; }, 3000);
     try { await sender.setParameters(params); } catch {}
     fpc.onconnectionstatechange = () => { dbg('whip', fpc.connectionState); if (['failed', 'closed'].includes(fpc.connectionState)) setTimeout(() => forward(track), 3000); };
     const offer = await fpc.createOffer(); await fpc.setLocalDescription(offer);
@@ -150,4 +156,29 @@ function stalled() { stalls++; dbg('stall', stalls);
   return false; }
 function retry(why) { say(why + ' — retrying'); dbg('retry:', why); clearTimeout(restartTimer); restartTimer = setTimeout(start, 6000); }
 start();
+const CAMKEY = (new URLSearchParams(location.search).get('cam') || '').includes('hot') ? 'hot' : 'cool';
+// ---- motion report v3: a slowly-updated background model per block; movement is a localized, persistent
+// difference from that background. Global changes (pan/tilt, exposure or infrared switching) alter nearly
+// every block at once, so they reset the background and are ignored. Something that passes the glass for a
+// second fades out of the hub's streak; a snake that keeps crawling stays different from the background.
+(() => {
+  const HUB = 'http://127.0.0.1:5090/motion', W = 64, H = 36, BW = 8, BH = 6, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d', { willReadFrequently: true }); let bg = null; const t0 = Date.now(), ALPHA = 0.04;   // background follows the scene with a ~12 s time constant at 2 samples/s
+  setInterval(() => {
+    const v = document.querySelector('video'); if (!v || v.readyState < 2 || !v.videoWidth || Date.now() - t0 < 8000) return;
+    try { g.drawImage(v, 0, 0, W, H); } catch { return; }
+    const d = g.getImageData(0, 0, W, H).data, cur = new Float32Array(W * H); let mean = 0;
+    for (let i = 0, j = 0; i < d.length; i += 4, j++) { cur[j] = (d[i] * 3 + d[i+1] * 6 + d[i+2]) / 10; mean += cur[j]; }
+    mean /= cur.length; for (let j = 0; j < cur.length; j++) cur[j] -= mean;                       // remove global brightness
+    if (!bg) { bg = cur; return; }
+    const bx = W / BW, by = H / BH, blocks = []; let changed = 0;
+    for (let y = 0; y < BH; y++) for (let x = 0; x < BW; x++) { let s = 0, n = 0;
+      for (let yy = y * by; yy < (y + 1) * by; yy++) for (let xx = x * bx; xx < (x + 1) * bx; xx++) { const j = yy * W + xx; s += Math.abs(cur[j] - bg[j]); n++; }
+      const b = s / n; blocks.push(b); if (b > 10) changed++; }
+    const global = changed / blocks.length > 0.5;
+    if (global) bg = cur; else for (let j = 0; j < cur.length; j++) bg[j] += ALPHA * (cur[j] - bg[j]);
+    blocks.sort((a, b) => b - a); const local = (blocks[0] + blocks[1] + blocks[2]) / 3;
+    fetch(HUB, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cam: CAMKEY, score: global ? 0 : +local.toFixed(2), global }), keepalive: true }).catch(() => {});
+  }, 500);
+})();
 </script></body></html>
