@@ -334,11 +334,12 @@ def track_session(motion_fn):
             if quiet > TRACK_HOME_AFTER * 60:
                 if any(_cam_pos["coolcam"]): cam_home("coolcam"); log("track: she settled, camera home")
                 break
-            if bg_ok() and quiet < 300:
-                w = where_is_she(); log(f"track: head is {w}")
+            if bg_ok() and quiet < 300 and time.time() - _track.get("last_look", 0) > TRACK_EVERY:
+                _track["last_look"] = time.time(); w = where_is_she(); log(f"track: head is {w}")
+                if w in ("center", "left", "right", "up", "down", "body"): remember_sighting(w)
                 recent = [t for t in _track["nudges"] if time.time() - t < 600]; _track["nudges"] = recent
                 if w in ("left", "right", "up", "down") and len(recent) < 8: cam_move("coolcam", w, TRACK_STEP); _track["nudges"].append(time.time())
-                elif w in ("none", "body") and quiet < 120: search_for_her()                    # she's moving somewhere the camera isn't looking
+                elif w == "none" and quiet < 120 and time.time() - _search["last"] > SEARCH_MINUTES * 60: search_for_her()   # the camera's own tracking lost her: go to her spots
             time.sleep(TRACK_EVERY)
     except Exception as e: log("track session error:", e)
     finally: _track["on"] = False; log("track session ended")
@@ -420,11 +421,39 @@ def map_spots(keyword=None):
     return [x for x in sp if not keyword or any(keyword in l.lower() for l in x.get("landmarks", []))]
 SEARCH_MINUTES = float(CFG.get("CLEOBOT_SEARCH_MINUTES", "15"))
 _search = {"last": 0}
+def remember_sighting(w):
+    """Log where the camera was when the vision saw her, so searches check her favourite spots first."""
+    try:
+        f = f"{ROOT}/overlay/sightings.json"
+        try: d = json.load(open(f))
+        except Exception: d = []
+        d.append({"pan": _cam_pos["coolcam"][0], "tilt": _cam_pos["coolcam"][1], "w": w, "ts": int(time.time())}); d = d[-400:]
+        json.dump(d, open(f, "w"))
+    except Exception as e: log("sighting log error:", e)
+def favourite_spots(n=3):
+    """Her most-seen camera positions (rounded to 40-step cells), most recent weighted, home first."""
+    try: d = json.load(open(f"{ROOT}/overlay/sightings.json"))
+    except Exception: return [(0, 0)]
+    cells = {}
+    for x in d[-200:]:
+        k = (int(round(x["pan"] / 40.0) * 40), int(round(x["tilt"] / 40.0) * 40)); cells[k] = cells.get(k, 0) + (2 if time.time() - x["ts"] < 86400 else 1)
+    best = sorted(cells, key=lambda k: -cells[k])[:n]
+    return [(0, 0)] + [c for c in best if c != (0, 0)]
+def goto_spot(pan, tilt):
+    x, y = _cam_pos["coolcam"]
+    for d, n in (("right" if pan > x else "left", abs(pan - x)), ("up" if tilt > y else "down", abs(tilt - y))):
+        while n: c = min(60, n); cam_move("coolcam", d, c); n -= c; time.sleep(0.4)
+    time.sleep(2.5)
 def search_for_her():
     """She is not in frame: sweep the cool cam in a bounded pattern (left, right, up, down from home), looking after each move;
     stop at the first sighting and leave the camera there; otherwise return home. At most one sweep per SEARCH_MINUTES."""
     if time.time() - _search["last"] < SEARCH_MINUTES * 60: return None
-    _search["last"] = time.time(); log("search: sweeping for her")
+    _search["last"] = time.time(); log("search: checking her favourite spots first")
+    for pan, tilt in favourite_spots():                                             # where she usually is (home = the hide/log view)
+        goto_spot(pan, tilt); w = where_is_she(); log(f"search: favourite spot ({pan},{tilt}): {w}")
+        if w in ("center", "left", "right", "up", "down"): remember_sighting(w); log("search: found her at a favourite spot"); return w
+        if w == "body": remember_sighting(w); log("search: her body at a favourite spot, staying"); return "body"
+    log("search: sweeping for her")
     if any(_cam_pos["coolcam"]): cam_home("coolcam"); time.sleep(2)
     def refine():
         """We see her body but not her head: try a few small moves around this spot to bring the head in; stay on the body if it never shows."""
@@ -435,7 +464,7 @@ def search_for_her():
     for direction, step in (("left", 22), ("right", 44), ("left", 22), ("up", 12), ("up", 12), ("down", 36), ("up", 12)):   # ends back at home if nothing is found
         cam_move("coolcam", direction, step); time.sleep(3)
         w = where_is_she(); log(f"search: after {direction} {step}: {w}")
-        if w in ("center", "left", "right", "up", "down"): log("search: found her"); return w
+        if w in ("center", "left", "right", "up", "down"): remember_sighting(w); log("search: found her"); return w
         if w == "body":
             log("search: her body is here, looking for the head"); w2 = refine()
             if w2 != "body": log("search: found her"); return w2
