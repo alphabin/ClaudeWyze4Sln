@@ -573,6 +573,35 @@ def frame_her(max_nudges=3, step=12):
         if f.get("good") or f.get("nudge") in (None, "none"): return f
         cam_move("coolcam", f["nudge"], step); time.sleep(3)
     return f
+_patrol = {"on": False, "last": 0}
+PATROL_ON = CFG.get("CLEOBOT_PATROL", "1") != "0"
+def patrol_session(bot=None, minutes=20, step=8, every=18):
+    """One camera for two sides (the hot cam is dead, 2026-09-04): while she is awake, the cool cam drifts slowly edge to edge across the
+    enclosure so viewers see the whole landscape. A look every ~3 min: seen -> stop, frame her, hold 4 min. Hub motion -> hand over to track_session."""
+    if _patrol["on"] or _track["on"]: return
+    _patrol["on"] = True; _track["on"] = True; started = time.time(); direction = "left"; legs = 0; last_look = 0; log("patrol: started (one eye for two sides)")
+    try:
+        while time.time() - started < minutes * 60 and dead_cam() == "hot":
+            if bot is not None and getattr(bot, "rip_until", 0) > time.time(): break
+            try:
+                if bool(((hub() or {}).get("motion") or {}).get("cool", {}).get("moving")):
+                    log("patrol: she is moving, handing over to tracking"); _track["on"] = False; _track["last_motion"] = time.time()
+                    threading.Thread(target=track_session, args=(lambda: bool(((hub() or {}).get("motion") or {}).get("cool", {}).get("moving")),), daemon=True).start(); return
+            except Exception: pass
+            if time.time() - last_look > 180 and vision_ok():
+                last_look = time.time(); w = where_is_she(); log(f"patrol: head is {w}")
+                if w in ("center", "left", "right", "up", "down"):
+                    remember_sighting(w); frame_her(); log("patrol: holding on her"); 
+                    for _ in range(240):
+                        if time.time() - started > minutes * 60: break
+                        time.sleep(1)
+                    continue
+            ok = cam_move("coolcam", direction, step); legs += 1
+            if not ok or legs >= 6: direction = "right" if direction == "left" else "left"; legs = 0   # an edge (refused) or a full leg: turn around
+            time.sleep(every)
+        if any(_cam_pos["coolcam"]): cam_home("coolcam"); log("patrol: camera home")
+    except Exception as e: log("patrol error:", e)
+    finally: _patrol["on"] = False; _track["on"] = False; _patrol["last"] = time.time(); log("patrol: ended")
 def track_once(step=12, max_nudges=3):
     """Nudge the cool cam toward her until she is centred (or give up and go home). Returns the final word."""
     w = where_is_she(); log(f"track: head is {w}")
@@ -1627,6 +1656,11 @@ class Bot:
                         moving = lambda: bool(((hub() or {}).get("motion") or {}).get("cool", {}).get("moving"))
                         if moving(): _track["last_motion"] = now; threading.Thread(target=track_session, args=(moving,), daemon=True).start()
                     except Exception as e: log("track error:", e)
+                if PATROL_ON and TRACK_ON and dead_cam() == "hot" and not _patrol["on"] and not _track["on"] and now - _patrol["last"] > 600:
+                    try:
+                        m = ((hub() or {}).get("motion") or {}).get("cool", {}); awake = now - m.get("lastMove", 0) < 45 * 60 or current_show() in ("oracle", "night")
+                        if awake: threading.Thread(target=patrol_session, args=(self,), daemon=True).start()
+                    except Exception as e: log("patrol start error:", e)
                 if self.room_empty(): continue                                          # empty room: no idle chatter, no games
                 self.maybe_notice(now); self.maybe_interlude(now)
                 if AMBIENT_MINUTES <= 0: continue
