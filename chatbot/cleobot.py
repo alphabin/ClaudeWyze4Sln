@@ -46,6 +46,9 @@ AI-first (CLEOBOT_AI_FIRST=1): while at least CLEOBOT_AI_FIRST_FLOOR (0.25) of t
   Moon Interlude (CLEOBOT_INTERLUDE_HOURS, 2): in the oracle/night blocks with someone watching and chat quiet, she writes a haiku about the
   moment (overlay/interlude.json); the overlay dims to moonlight and brushes the lines in while ambience.html plays a generative Japanese
   piece (koto, shakuhachi, taiko, wind chimes; hirajōshi scale, ~70 s). 'haiku' / 'poem' in chat asks for one (room: 10 min apart).
+  Rip Night eyes: 'ripset' (broadcaster) also starts rip_watch(): a still every CLEOBOT_RIP_WATCH_EVERY (8) s for CLEOBOT_RIP_WATCH_MINUTES (30),
+  described as JSON by the vision call (pack / card / name / holo / art); one spoken + chat verdict per new card, a line when the pack
+  appears, a clip 20 s after each card. 'ripstop' ends it. Hold cards flat to the cool-side glass (the 1080p feed).
   Vision (CLEOBOT_VISION=1, cli backend): she can look at her own cameras — one still per camera from the relay (CLEOBOT_RTSP, ffmpeg) read
   by Claude (sonnet, Read tool) — when asked "what are you doing / where are you / what do you see", for some ambient lines (40%), and for
   the after-dusk "she's out" line; at most one look per CLEOBOT_VISION_MINUTES (8). Only what is really in the stills; the camera's green
@@ -164,6 +167,7 @@ def speak(text, kind):
             if f.endswith(".m4a") and time.time() - os.path.getmtime(f"{d}/{f}") > 3600: os.remove(f"{d}/{f}")
         return m4a
     except Exception as e: log("voice error:", type(e).__name__, str(e)[:80]); return None
+RIP_WATCH_MINUTES = float(CFG.get("CLEOBOT_RIP_WATCH_MINUTES", "30")); RIP_WATCH_EVERY = float(CFG.get("CLEOBOT_RIP_WATCH_EVERY", "8"))   # Rip Night eyes
 RANKS = [(30, "Royal Advisor"), (15, "Duke or Duchess"), (7, "Knight"), (3, "Courtier"), (1, "Visitor")]
 def rank(visits): return next(name for n, name in RANKS if visits >= n) if visits >= 1 else "Visitor"
 if CFG.get("ANTHROPIC_API_KEY"): os.environ["ANTHROPIC_API_KEY"] = CFG["ANTHROPIC_API_KEY"]
@@ -826,6 +830,26 @@ def describe_cams():
     finally: _cli_lock.release()
     if out: _llm["n"] += 1; _llm["nd"] += 1
     return out
+def describe_pull():
+    """Rip Night eyes: SECURITY BOUNDARY like describe_cams — Read tool on the stills only, no chat text. Returns dict or None."""
+    import subprocess
+    cams = grab_frames()
+    if not cams or LLM_BACKEND != "cli": return None
+    files = " and ".join(f"frames/{c}.jpg" for c in cams)
+    prompt = (f"Use the Read tool on exactly these files and nothing else: {files}. They are stills from two cameras inside a snake terrarium; a person may be holding a "
+              f"Pokémon trading card or a booster pack up to the glass. Reply ONLY with JSON: {{\"pack\": true/false (a sealed or torn booster pack visible), "
+              f"\"card\": true/false (a single card held up, readable), \"name\": \"card name as printed, or null\", \"holo\": true/false (foil/holographic shine), "
+              f"\"art\": \"five words on the artwork, or null\", \"hands\": true/false (human hands visible), \"cam\": \"hotcam\" or \"coolcam\" (which still shows the card), "
+              f"\"box\": [left, top, width, height] as fractions 0-1 of that image around the card, or null}}. Never invent a name you cannot read.")
+    if not _cli_lock.acquire(timeout=20): return None
+    try:
+        r = subprocess.run([CLI_BIN, "-p", prompt, "--model", CLI_MODEL, "--max-turns", "4", "--tools", "Read", "--output-format", "text",
+                            "--system-prompt", "You describe images factually and reply only with JSON. You only read the files named in the prompt."], capture_output=True, text=True, timeout=60, cwd=f"{HERE}/cli-workdir", env=CLI_ENV)
+        m = re.search(r"\{.*\}", r.stdout or "", re.S); out = json.loads(m.group(0)) if m else None
+    except Exception as e: log("describe_pull error:", type(e).__name__); out = None
+    finally: _cli_lock.release()
+    if out: _llm["n"] += 1; _llm["nd"] += 1
+    return out
 def llm_look(user, text, v=None, recent=(), task=None):
     """She 'looks' at her cameras: a tools-only description (no chat text in that call), then a normal tools-OFF reply built on it."""
     if not vision_ok() or (user == "court" and not bg_ok()): return None
@@ -1256,6 +1280,45 @@ class Bot:
             time.sleep(5); st, d2 = self.helix(f"clips?id={cid}")
             if st == 200 and d2.get("data"): return d2["data"][0].get("url") or f"https://clips.twitch.tv/{cid}"
         return None
+    # ------------------------------------------------ Rip Night: she watches the pulls ----
+    def rip_watch(self):
+        """After 'ripset': look at the glass every ~8 s for up to RIP_WATCH_MINUTES; comment once per new card (spoken + chat), once when the pack appears."""
+        seen = set(); last_pack = 0; started = time.time(); log("rip watch started")
+        while time.time() < self.rip_until and time.time() - started < RIP_WATCH_MINUTES * 60:
+            try:
+                d = describe_pull() or {}
+                if d.get("pack") and time.time() - last_pack > 300:
+                    last_pack = time.time(); line = "The pack is at my glass. Crinkle it slowly, human — I judge the reveal, not the rush. 👑"; self.send(line); threading.Thread(target=speak, args=(line, "rip"), daemon=True).start()
+                name = (d.get("name") or "").strip()
+                if d.get("card") and name and name.lower() not in seen and len(name) < 60:
+                    seen.add(name.lower())
+                    ctx = f"Card just pulled and held to your glass: {name}. Foil/holo: {'yes' if d.get('holo') else 'no'}. Art: {d.get('art') or 'unclear'}. Pull number {len(seen)} of this rip."
+                    line = llm_answer("court", "pull", recent=self.recent, model=CLI_MODEL_TALK if LLM_BACKEND == "cli" else None, cache=False,
+                                      task=f"{ctx} Give your verdict on this pull in ONE line as the queen: name the card, judge the art and the shine, a slow blink for a holo, "
+                                           f"a regal dismissal for a dud. Never mention value, price, rarity tiers or the market. No viewer name, no emoji.")
+                    self.show_pull(d, name, line or "", len(seen))
+                    if line: self.send(f"🎴 {line}"); threading.Thread(target=speak, args=(line, "rip"), daemon=True).start()
+                    if CLIPS: threading.Timer(20, self.make_clip, args=(f"pull: {name}",)).start()
+            except Exception as e: log("rip watch error:", e)
+            time.sleep(RIP_WATCH_EVERY)
+        log(f"rip watch ended, {len(seen)} cards seen"); self.rip_until = 0
+    def show_pull(self, d, name, verdict, n):
+        """Crop the card out of the still it was seen in and hand it to the overlay (overlay/pulls/<ts>.jpg + overlay/pull.json)."""
+        import subprocess
+        try:
+            cam = d.get("cam") if d.get("cam") in ("hotcam", "coolcam") else "coolcam"; src = f"{HERE}/cli-workdir/frames/{cam}.jpg"
+            ts = int(time.time()); os.makedirs(f"{ROOT}/overlay/pulls", exist_ok=True); dst = f"{ROOT}/overlay/pulls/{ts}.jpg"
+            box = d.get("box") if isinstance(d.get("box"), list) and len(d.get("box")) == 4 else None
+            if box:
+                l, t, w, h = [max(0.0, min(1.0, float(x))) for x in box]; pad = 0.04
+                l, t = max(0, l - pad), max(0, t - pad); w, h = min(1 - l, w + 2 * pad), min(1 - t, h + 2 * pad)
+                vf = f"crop=iw*{w:.3f}:ih*{h:.3f}:iw*{l:.3f}:ih*{t:.3f},scale=-2:600"
+            else: vf = "scale=-2:600"
+            subprocess.run([CFG.get("CLEOBOT_FFMPEG", "/opt/homebrew/bin/ffmpeg"), "-loglevel", "error", "-y", "-i", src, "-vf", vf, "-q:v", "3", dst], check=True, timeout=20, capture_output=True)
+            json.dump({"image": f"pulls/{ts}.jpg", "name": name, "holo": bool(d.get("holo")), "verdict": verdict, "n": n, "ts": ts}, open(f"{ROOT}/overlay/pull.json", "w"))
+            for f in os.listdir(f"{ROOT}/overlay/pulls"):
+                if time.time() - os.path.getmtime(f"{ROOT}/overlay/pulls/{f}") > 6 * 3600: os.remove(f"{ROOT}/overlay/pulls/{f}")
+        except Exception as e: log("show_pull error:", type(e).__name__, str(e)[:80])
     def keep_haiku(self, user):
         """Clip the interlude (scene + haiku on screen); hand it to the asker, or just keep it on the Clips tab when it was scheduled."""
         try:
@@ -1402,8 +1465,13 @@ class Bot:
         elif bare_command(t):                                             # "temps", "weather", "cleo status" ...
             reply = COMMANDS[bare_command(t)](); path = "command"
         elif RESOURCE_Q.search(t): reply = cmd_resources(t); path = "resources"     # "where can I learn more?" -> allowlisted links
+        elif low.strip("! .") in ("ripstop", "ripdone") and user == CHANNEL:
+            self.rip_until = 0; reply = "The rip is concluded. My verdicts stand. 👑"; path = "ripstop"
         elif low.strip("! .") == "ripset":                                    # broadcaster only: reset the vote, announce the rip
-            if user == CHANNEL: reply = RIP.reset(); path = "ripset"; threading.Thread(target=speak, args=(reply, "rip"), daemon=True).start(); RIP.d["show_until"] = time.time() + 7200; RIP._save(); threading.Thread(target=self.apply_show, daemon=True).start()
+            if user == CHANNEL:
+                reply = RIP.reset() + " I'm watching the glass — hold each card up to the cool side and I'll judge it."; path = "ripset"; threading.Thread(target=speak, args=(reply, "rip"), daemon=True).start()
+                if not getattr(self, "rip_until", 0): self.rip_until = time.time() + RIP_WATCH_MINUTES * 60; threading.Thread(target=self.rip_watch, daemon=True).start()
+                RIP.d["show_until"] = time.time() + 7200; RIP._save(); threading.Thread(target=self.apply_show, daemon=True).start()
             else: reply = "Only my human may start a set rip. You may, however, say RIP to vote. 👑"; path = "ripset-denied"
         elif re.fullmatch(r"\W*(clip|clip it|clip that|!clip)\W*", low):     # anyone may ask for a clip, every CLIP_REQUEST_MINUTES
             path = "clip"

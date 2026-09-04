@@ -20,3 +20,5 @@ tts/.venv/
 tts/voices/*.onnx
 tts/*.m4a
 tts/*.wav
+overlay/pulls/
+overlay/voice/
