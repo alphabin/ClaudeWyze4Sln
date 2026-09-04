@@ -9,6 +9,7 @@
 | **Just my Wyze Cam Pan V4 as a local stream** (RTSP / browser) for OBS, VLC or Home Assistant, nothing else | [v4-quickstream/](v4-quickstream/README.md) — one script: `./quickstream.sh start` | ~15 min |
 | **The whole thing**: two cameras, overlay, sensors, soundscape, the chat bot, 24/7 on Twitch, self-healing | [QUICKSTART.md](QUICKSTART.md) — `git clone`, `./install.sh`, then `./doctor.sh` | ~20 min |
 | **To understand the Pan V4 problem** (`IOTC_ER_UNLICENSE`) and how the Agora path works, or to port it elsewhere | [WRITEUP.md](WRITEUP.md) — findings, API details, step-by-step, troubleshooting | reading |
+| **To run a Pokémon pack rip with her judging every pull** | [docs/RIP-NIGHT.md](docs/RIP-NIGHT.md) — commands, scenarios, prices, setup, limits | reading |
 | **To fix a running install** | `./doctor.sh` prints PASS / WARN / FAIL per layer with the exact fix; `./install.sh` is re-runnable and skips what's done | minutes |
 
 ## What you end up with

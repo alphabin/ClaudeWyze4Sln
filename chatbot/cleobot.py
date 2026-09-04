@@ -148,9 +148,19 @@ INTERLUDE_HOURS = float(CFG.get("CLEOBOT_INTERLUDE_HOURS", "4")); INTERLUDE_PER_
 VOICE = CFG.get("CLEOBOT_VOICE", "Moira"); VOICE_RATE = CFG.get("CLEOBOT_VOICE_RATE", "145"); VOICE_ON = CFG.get("CLEOBOT_VOICE_ON", "1") != "0"   # fallback: macOS `say`
 PIPER = CFG.get("CLEOBOT_PIPER", f"{ROOT}/tts/.venv/bin/piper"); PIPER_VOICE = CFG.get("CLEOBOT_PIPER_VOICE", "en_GB-alba-medium")           # free neural voice (Piper), used when installed
 PIPER_LEN = CFG.get("CLEOBOT_PIPER_LENGTH", "1.08"); PIPER_PAUSE = CFG.get("CLEOBOT_PIPER_PAUSE", "0.35")                                          # a little slower and more breath between sentences
+_speech_lock = threading.Lock(); _speech_until = {"t": 0}
 def speak(text, kind):
-    """Synthesize the Oracle's voice (macOS say -> aac) into overlay/voice/<ts>.m4a and point overlay/voice.json at it; ambience.html plays it."""
+    """Synthesize the Oracle's voice into overlay/voice/<ts>.m4a and point overlay/voice.json at it; ambience.html plays it.
+    Serialized: a second line waits until the previous one has been spoken (estimated from its length), so verdicts never overlap."""
     if not VOICE_ON or not text: return None
+    with _speech_lock:
+        wait = _speech_until["t"] - time.time()
+        if wait > 0: time.sleep(min(wait, 40))
+        out = _speak_now(text, kind)
+        if out: _speech_until["t"] = time.time() + 0.5 + len(text) / 14.0          # ~14 chars per second at this pace
+        return out
+def _speak_now(text, kind):
+    if not text: return None
     import subprocess
     try:
         ts = int(time.time() * 1000); d = f"{ROOT}/overlay/voice"; os.makedirs(d, exist_ok=True)
@@ -940,7 +950,7 @@ def describe_pull():
         m = re.search(r"\{.*\}", r.stdout or "", re.S); out = json.loads(m.group(0)) if m else None
     except Exception as e: log("describe_pull error:", type(e).__name__); out = None
     finally: _cli_lock.release()
-    if out: _llm["n"] += 1; _llm["nd"] += 1
+    _llm["rip_looks"] = _llm.get("rip_looks", 0) + 1                             # counted separately: Rip Night has its own allowance, not the chat budget
     return out
 def llm_look(user, text, v=None, recent=(), task=None):
     """She 'looks' at her cameras: a tools-only description (no chat text in that call), then a normal tools-OFF reply built on it."""
@@ -1026,12 +1036,12 @@ def tarot_followup(user, text, v=None, recent=()):
                            f"decisive, two or three sentences, under 300 characters, no emoji. If they want new cards, tell them the deck rests an hour per courtier.")
 _shadow = threading.local()
 def ai_first_ok(): return AI_FIRST and LLM_BACKEND != "off" and llm_bar() <= -99 and not getattr(_shadow, "on", False)
-def llm_answer(user, text, v=None, recent=(), model=None, task=None, cache=True, ref=None, tools="", bg=False):
+def llm_answer(user, text, v=None, recent=(), model=None, task=None, cache=True, ref=None, tools="", bg=False, vip=False):
     """One Claude call, if the budget allows. task=None answers the viewer's message; otherwise `task` is an instruction (proactive lines)."""
     if LLM_BACKEND == "off": return None                                          # kill switch
     if LLM_BACKEND == "api" and not os.environ.get("ANTHROPIC_API_KEY"): return None
     h, d = llm_tick()
-    if _llm["n"] >= llm_budget() or _llm["nd"] >= LLM_PER_DAY: return None          # dynamic hourly budget + hard daily ceiling
+    if not vip and (_llm["n"] >= llm_budget() or _llm["nd"] >= LLM_PER_DAY): return None   # dynamic hourly budget + hard daily ceiling (vip = Rip Night verdicts)
     # ---- abuse protection ----
     key = re.sub(r"[^a-z0-9 ]", "", text.lower()).strip(); key = " ".join(key.split())
     if task is None and not AI_FIRST and (len(key) < 12 or len(key.split()) < 3): return None
@@ -1215,6 +1225,7 @@ class Bot:
                 now = time.time()
                 if not self.ws: continue
                 active = now - self.last_human < 7200 or now - self.viewers_ts < 7200
+                if getattr(self, "rip_until", 0) > now: continue                            # Rip Night: no idle lines, looks, games, notices, interludes
                 if CLIPS and self.ws: self.clip_out(now)                                 # clips cost no tokens: always catch her
                 if PROACTIVE: self.maybe_out_line(now)                                  # she's moving: look and say so, even to an empty room (it's the good stuff)
                 if self.room_empty(): continue                                          # empty room: no idle chatter, no games
@@ -1355,7 +1366,8 @@ class Bot:
         h = int(time.time() // 3600); d = int(time.time() // 86400)
         if c["hour"] != h: c.update(hour=h, n=0, nr=0)
         if c["day"] != d: c.update(day=d, nd=0)
-        if c["n"] >= CLIPS_PER_HOUR or c["nd"] >= CLIPS_PER_DAY: return None
+        rip = getattr(self, "rip_until", 0) > time.time()
+        if (c["n"] >= (CLIPS_PER_HOUR * 4 if rip else CLIPS_PER_HOUR)) or c["nd"] >= CLIPS_PER_DAY + (40 if rip else 0): return None   # Rip Night: room for every pull
         if requested and c.get("nr", 0) >= CLIPS_REQUEST_PER_HOUR: return None
         req = urllib.request.Request(f"https://api.twitch.tv/helix/clips?broadcaster_id={self.broadcaster_id}", data=b"", method="POST",
                                      headers={"Authorization": "Bearer " + (self.token or ""), "Client-Id": CLIENT_ID})
@@ -1376,9 +1388,10 @@ class Bot:
     # ------------------------------------------------ Rip Night: she watches the pulls ----
     def rip_watch(self):
         """After 'ripset': look at the glass every ~8 s for up to RIP_WATCH_MINUTES; comment once per new card (spoken + chat), once when the pack appears."""
-        seen = set(); products = set(); last_pack = 0; started = time.time(); last_activity = time.time(); log("rip watch started")
+        seen = set(); seen_at = {}; dupes = set(); products = set(); last_pack = 0; started = time.time(); last_activity = time.time(); log("rip watch started")
         while time.time() < self.rip_until and time.time() - started < RIP_WATCH_MINUTES * 60:
             try:
+                if not bg_ok(): time.sleep(2); continue                                   # a viewer is waiting for a reply: let that go first
                 d = describe_pull() or {}
                 if d.get("hands") or d.get("card") or d.get("pack") or d.get("product"): last_activity = time.time()
                 idle = time.time() - last_activity
@@ -1390,19 +1403,22 @@ class Bot:
                     products.add(prod.lower()); info = set_info(prod); kind = d.get("product_type") or "product"
                     facts = f"Database: set {info['name']} ({info.get('series')}), released {info.get('releaseDate')}, {info.get('printedTotal') or info.get('total')} cards." if info else "The database has no record of that set name."
                     pv = product_value(prod); facts += f" Sealed market price: {value_words(pv)}." if pv else ""
-                    line = llm_answer("court", "product", recent=self.recent, model=CLI_MODEL if LLM_BACKEND == "cli" else None, cache=False,
+                    line = llm_answer("court", "product", recent=self.recent, model=CLI_MODEL if LLM_BACKEND == "cli" else None, cache=False, vip=True,
                                       task=f"Your human holds up a sealed Pokémon {kind} to your glass: '{prod}'. {facts} In TWO or THREE sentences as the queen-seer: say what it is, "
                                            f"what is inside such a product, and which one or two cards collectors chase from that set (from your own knowledge; if unsure, say the ledgers are hazy). "
                                            f"Then command the human to open it. Nothing is for sale. No emoji, under 340 characters.")
                     if line:
                         self.send(f"🎴 {line}"); threading.Thread(target=speak, args=(line, "rip"), daemon=True).start()
                         self.show_pull(d, prod, line, len(seen), pv, kind=kind.upper() if kind else "PRODUCT")
-                name = (d.get("name") or "").strip()
-                if d.get("card") and name and name.lower() not in seen and len(name) < 60:
-                    seen.add(name.lower())
+                name = (d.get("name") or "").strip(); key = re.sub(r"[^a-z0-9]", "", name.lower())
+                if d.get("card") and name and len(name) < 60 and key in seen and time.time() - seen_at.get(key, 0) > 45 and key not in dupes:
+                    dupes.add(key); dl = f"Another {name}. The ledgers do not blink twice; neither do I."
+                    self.send(f"🎴 {dl}"); threading.Thread(target=speak, args=(dl, "rip"), daemon=True).start()
+                if d.get("card") and name and key not in seen and len(name) < 60 and not any(key[:10] == k[:10] and abs(len(key) - len(k)) <= 2 for k in seen):   # "Charizard ex" vs "Charizard EX"
+                    seen.add(key); seen_at[key] = time.time()
                     val = card_value(name, d.get("number")); vw = value_words(val)
                     ctx = f"Card just pulled and held to your glass: {name}{(' #' + d['number']) if d.get('number') else ''}. Foil/holo: {'yes' if d.get('holo') else 'no'}. Art: {d.get('art') or 'unclear'}. Pull number {len(seen)} of this rip. What the ledgers say (TCGplayer market): {vw}."
-                    line = llm_answer("court", "pull", recent=self.recent, model=CLI_MODEL_TALK if LLM_BACKEND == "cli" else None, cache=False,
+                    line = llm_answer("court", "pull", recent=self.recent, model=CLI_MODEL_TALK if LLM_BACKEND == "cli" else None, cache=False, vip=True,
                                       task=f"{ctx} Give your verdict on this pull in ONE or TWO sentences as the queen with her clairvoyant Oracle air: name the card, judge the art and the shine, "
                                            f"then reveal its worth the way a seer reads tea leaves ('the ledgers whisper...', 'I see...'), quoting the market figure above plainly. "
                                            f"A slow blink for a holo, a regal dismissal for a dud (say so if it is worth pennies). Nothing is for sale here. No viewer name, no emoji. Under 260 characters.")
@@ -1580,7 +1596,7 @@ class Bot:
             reply = COMMANDS[bare_command(t)](); path = "command"
         elif RESOURCE_Q.search(t): reply = cmd_resources(t); path = "resources"     # "where can I learn more?" -> allowlisted links
         elif low.strip("! .") in ("ripstop", "ripdone") and user == CHANNEL:
-            self.rip_until = 0; reply = "The rip is concluded. My verdicts stand. 👑"; path = "ripstop"
+            self.rip_until = 0; RIP.d["show_until"] = 0; RIP._save(); threading.Thread(target=self.apply_show, daemon=True).start(); reply = "The rip is concluded. My verdicts stand. 👑"; path = "ripstop"
         elif low.strip("! .") == "ripset":                                    # broadcaster only: reset the vote, announce the rip
             if user == CHANNEL:
                 reply = RIP.reset() + " I'm watching the glass — hold each card up to the cool side and I'll judge it."; path = "ripset"; threading.Thread(target=speak, args=(reply, "rip"), daemon=True).start()
