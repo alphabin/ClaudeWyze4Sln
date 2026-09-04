@@ -190,11 +190,12 @@ def index_lookup(name, number=None, sealed=False):
     """(low, high, best_set, best_rarity, n_matches) from the local index, or None."""
     rows = price_index(); nn = _norm(name); num = (number or "").split("/")[0].strip().lstrip("0")
     if not rows or not nn: return None
-    hits = [r for r in rows if _norm(r["n"]) == nn and bool(r.get("sealed")) == sealed] or [r for r in rows if nn in _norm(r["n"]) and bool(r.get("sealed")) == sealed]
+    cands = [r for r in rows if nn in _norm(r["n"]) and bool(r.get("sealed")) == sealed]          # includes "(Alternate Art Secret)" style variants
     full = (number or "").replace(" ", "").lstrip("0")
-    if num:
-        exact = [r for r in hits if r["num"].replace(" ", "").lstrip("0") == full] or [r for r in hits if r["num"].split("/")[0].strip().lstrip("0") == num]   # "215/203" beats "215"
-        hits = exact or hits
+    if num:                                                                                        # a printed number is the strongest key: search every variant
+        exact = [r for r in cands if r["num"].replace(" ", "").lstrip("0") == full] or [r for r in cands if r["num"].split("/")[0].strip().lstrip("0") == num]
+        hits = exact or [r for r in cands if _norm(r["n"]) == nn] or cands
+    else: hits = [r for r in cands if _norm(r["n"]) == nn] or cands
     if not hits: return None
     hits.sort(key=lambda r: r["m"]); lo, hi = hits[0]["m"], hits[-1]["m"]
     pool = [r for r in hits if not re.search(r"common|promo", (r.get("r") or "").lower())] if not num and not sealed else hits   # a name alone: judge by the real chase printings
