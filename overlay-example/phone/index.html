@@ -87,9 +87,9 @@ const mc=document.createElement('canvas'); mc.width=48; mc.height=36; const mx=m
 function sig(){ const v=$('v'); if(!v.videoWidth) return null; mx.drawImage(v,0,0,48,36); return mx.getImageData(0,0,48,36).data; }
 function diff(a,b){ if(!a||!b) return 0; let s=0; for(let i=0;i<a.length;i+=4) s+=Math.abs(a[i]-b[i])+Math.abs(a[i+1]-b[i+1])+Math.abs(a[i+2]-b[i+2]); return s/(a.length/4)/3; }
 setInterval(()=>{ if(!on||mode!=='table') return; const s=sig(); const d=diff(s,prev); prev=s; if(!s) return;
-  if(d>9){ moved=true; still=0; return; }
-  if(d<3.5) still++; else still=0;
-  if(moved&&still>=5&&Date.now()-lastSnap>7000&&!busy&&diff(s,lastShotSig)>12){ moved=false; lastShotSig=s; snap('held steady'); }
+  if(d>14){ moved=true; still=0; return; }
+  if(d<7) still++; else still=0;                                             // a hand-held phone is never perfectly still
+  if(moved&&still>=4&&Date.now()-lastSnap>7000&&!busy&&diff(s,lastShotSig)>10){ moved=false; lastShotSig=s; snap('held steady'); }
 },240);
 // ---- corrections + status from the Mac
 $('fix-no').onclick=()=>fix(false); $('fix-yes').onclick=()=>fix(true);

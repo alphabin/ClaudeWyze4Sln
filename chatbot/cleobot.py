@@ -1584,9 +1584,9 @@ class Bot:
                 now = time.time()
                 if not self.ws: continue
                 active = now - self.last_human < 7200 or now - self.viewers_ts < 7200
-                if getattr(self, "rip_until", 0) > now: continue                            # Rip Night: no idle lines, looks, games, notices, interludes
                 try: ripcam_tick(getattr(self, "rip_until", 0) > now, self)
                 except Exception as e: log("ripcam tick error:", e)
+                if getattr(self, "rip_until", 0) > now: continue                            # Rip Night: no idle lines, looks, games, notices, interludes
                 if CLIPS and self.ws: self.clip_out(now)                                 # clips cost no tokens: always catch her
                 if PROACTIVE: self.maybe_out_line(now)                                  # she's moving: look and say so, even to an empty room (it's the good stuff)
                 # presence check: in the evening blocks, if she has not been seen in frame for a while, go look at her spots (bounded)
