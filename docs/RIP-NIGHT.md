@@ -42,7 +42,8 @@ password `RIPCAM_PASSWORD` in `.env`) and re-serves it on loopback as `rtsp://12
   - **One call.** Identification, holo check and her verdict come from a single vision call (~10-15 s), the price from the local index; the stream shows the card in a *reading* state the moment it is snapped, then the verdict.
   - **While the phone is live the bot never polls the room cameras** — it only looks when the phone snaps. Stopping the camera closes the table.
   - **Corrections.** *Not a holo* / *It is a holo* under the verdict fix the screen and she says so. The holo rule is deliberately conservative (glare is not foil).
-  - **Eagle eye** puts the phone on the stream as a close-up of the snake, no judging. The layout follows the phone's orientation (upright: tall frame right with the verdict beside it; sideways: wide frame with the verdict under it).
+  - **On the stream** the card table is a band across the bottom (over the stat tiles, never over the cameras): the snapped card, her verdict, the price. The live phone picture is *not* shown in card-table mode — the snapped still is sharper. Edits to `overlay.html` need the OBS browser source refreshed (`PressInputPropertiesButton refreshnocache`, or toggle the source).
+  - **Eagle eye** puts the phone on the stream as a close-up of the snake, no judging (frame follows the phone's orientation).
 - **Bot:** the rip eyes use the phone stream automatically whenever it is live (log line "using the phone rip cam"), and fall back to the cool cam.
 - **OBS:** a "Rip Cam" media source (rtsp 8556) sits top-right as a picture-in-picture, transparent until the phone publishes — it doubles as a
   close-up cam when she's by the glass.

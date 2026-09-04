@@ -269,7 +269,8 @@ def set_info(name):
 def value_words(v):
     if not v: return "the ledgers are silent on this one"
     lo, hi, st, rar, n = v
-    if n == 1 or hi < lo * 1.6: return f"about ${hi:,.0f} on the market ({st}, {rar})"
+    if hi < 1: return f"pennies on the market ({st}, {rar})"
+    if n == 1 or hi < lo * 1.6: return f"about ${hi:,.2f} on the market ({st}, {rar})" if hi < 10 else f"about ${hi:,.0f} on the market ({st}, {rar})"
     return f"anywhere from ${lo:,.0f} to ${hi:,.0f} depending on the printing — the {st} {rar} version is the ${hi:,.0f} one"
 RIP_CAM = CFG.get("CLEOBOT_RIP_CAM", "coolcam")                          # the terrarium camera the cards are held up to (1080p on the relay)
 RIPCAM_RTSP = CFG.get("CLEOBOT_RIPCAM_RTSP", "rtsp://127.0.0.1:8556/ripcam")   # the companion phone camera, when it is publishing
@@ -299,6 +300,7 @@ def ripcam_layout(mode):
     try:
         x, y, w, h = ripcam_box(mode); scene = obs_req("GetCurrentProgramScene")["currentProgramSceneName"]
         items = obs_req("GetSceneItemList", {"sceneName": scene})["sceneItems"]; iid = [i["sceneItemId"] for i in items if i["sourceName"] == "Rip Cam"]
+        if iid: obs_req("SetSceneItemEnabled", {"sceneName": scene, "sceneItemId": iid[0], "sceneItemEnabled": mode != "table"})   # card table: the phone stays off screen, the snapped card is shown instead
         if iid: obs_req("SetSceneItemTransform", {"sceneName": scene, "sceneItemId": iid[0], "sceneItemTransform": {"positionX": x, "positionY": y, "boundsType": "OBS_BOUNDS_SCALE_INNER", "boundsWidth": w, "boundsHeight": h, "boundsAlignment": 0}})
     except Exception as e: log("ripcam layout error:", type(e).__name__, str(e)[:60])
 def ripcam_tick(rip_active, bot=None):
@@ -329,6 +331,9 @@ def ripcam_tick(rip_active, bot=None):
     if (live, mode) != (_ripcam["live"], _ripcam["mode"]):
         _ripcam.update(live=live, mode=mode); log(f"rip cam: {'live, ' + mode + (', upright' if _ripcam['portrait'] else ', sideways') if live else 'off'}")
         if mode: ripcam_layout(mode)
+        else:
+            try: sc = obs_req("GetCurrentProgramScene")["currentProgramSceneName"]; iid = [i["sceneItemId"] for i in obs_req("GetSceneItemList", {"sceneName": sc})["sceneItems"] if i["sourceName"] == "Rip Cam"]; iid and obs_req("SetSceneItemEnabled", {"sceneName": sc, "sceneItemId": iid[0], "sceneItemEnabled": True})
+            except Exception: pass
         try:
             x, y, w, h = ripcam_box(mode) if mode else (0, 0, 0, 0); json.dump({"live": live, "mode": mode, "x": x, "y": y, "w": w, "h": h, "portrait": _ripcam.get("portrait", False), "ts": int(time.time())}, open(f"{ROOT}/overlay/ripcam.json", "w"))
         except Exception as e: log("ripcam.json error:", e)
@@ -1763,6 +1768,7 @@ class Bot:
             try:
                 if not bg_ok(): time.sleep(2); continue                                   # a viewer is waiting for a reply: let that go first
                 shot = getattr(self, "judge_shot", None); self.judge_shot = None; phone = _ripcam.get("live")
+                if phone and not shot: time.sleep(1); continue                                   # phone live: she looks only at what the phone snaps
                 if shot: self.show_pull({"shot": shot}, "", "", getattr(self, "pull_count", 0) + 1, stage="reading")     # the card is on screen while she reads it
                 t0 = time.time(); d = describe_pull(shot=shot, verdict=bool(shot or phone)) or {}
                 log("rip look %.0fs: %s" % (time.time() - t0, json.dumps({k: d.get(k) for k in ("hands", "pack", "card", "name", "number", "holo", "product", "cam") if d.get(k) is not None}, ensure_ascii=False)[:160] or "nothing"))
@@ -1793,8 +1799,10 @@ class Bot:
                 if d.get("card") and name and key not in seen and len(name) < 60 and not any(key[:10] == k[:10] and abs(len(key) - len(k)) <= 2 for k in seen):   # "Charizard ex" vs "Charizard EX"
                     seen.add(key); seen_at[key] = time.time(); self.pull_count = len(seen)
                     val = card_value(name, d.get("number")); vw = value_words(val)
-                    if d.get("verdict") and "{worth}" in str(d.get("verdict")):                           # one call did it all: judgement + the ledgers
-                        line = str(d["verdict"]).replace("{worth}", vw); self.show_pull(d, name, line, len(seen), val)
+                    if shot or phone or d.get("verdict"):                                                 # one call did it all (or a plain line): never a second CLI call here
+                        line = str(d["verdict"]).replace("{worth}", vw) if d.get("verdict") else f"{name}. {(d.get('art') or 'The art is what it is').rstrip('.')}. {'A slow blink for the shine.' if d.get('holo') else 'No foil, plain paper.'} The ledgers whisper: {vw}."
+                        if "{worth}" in line: line = line.replace("{worth}", vw)
+                        self.show_pull(d, name, line, len(seen), val)
                         self.send(f"🎴 {line}"); threading.Thread(target=speak, args=(line, "rip"), daemon=True).start()
                         if CLIPS: threading.Timer(20, self.make_clip, args=(f"pull: {name}",)).start()
                         self.last_pull = {"name": name, "d": d, "val": val, "n": len(seen)}; continue
@@ -1858,7 +1866,7 @@ class Bot:
             else: vf = "scale=-2:600"
             subprocess.run([CFG.get("CLEOBOT_FFMPEG", "/opt/homebrew/bin/ffmpeg"), "-loglevel", "error", "-y", "-i", src, "-vf", vf, "-q:v", "3", dst], check=True, timeout=20, capture_output=True)
             value = None
-            if val: lo, hi, st, rar, k = val; value = (f"${hi:,.0f}" if (k == 1 or hi < lo * 1.6) else f"${lo:,.0f} – ${hi:,.0f}") + f" · {st}"
+            if val: lo, hi, st, rar, k = val; value = ("pennies" if hi < 1 else f"${hi:,.2f}" if hi < 10 else f"${hi:,.0f}" if (k == 1 or hi < lo * 1.6) else f"${lo:,.0f} – ${hi:,.0f}") + f" · {st}"
             json.dump({"image": f"pulls/{ts}.jpg", "name": name, "holo": bool(d.get("holo")), "verdict": verdict, "n": n, "value": value, "number": d.get("number"), "kind": kind, "stage": stage, "ts": ts}, open(f"{ROOT}/overlay/pull.json", "w"))
             for f in os.listdir(f"{ROOT}/overlay/pulls"):
                 if time.time() - os.path.getmtime(f"{ROOT}/overlay/pulls/{f}") > 6 * 3600: os.remove(f"{ROOT}/overlay/pulls/{f}")
