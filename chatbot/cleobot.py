@@ -47,8 +47,9 @@ AI-first (CLEOBOT_AI_FIRST=1): while at least CLEOBOT_AI_FIRST_FLOOR (0.25) of t
   moment (overlay/interlude.json); the overlay dims to moonlight and brushes the lines in while ambience.html plays a generative Japanese
   piece (koto, shakuhachi, taiko, wind chimes; hirajōshi scale, ~70 s). 'haiku' / 'poem' in chat asks for one (room: 10 min apart).
   Pan/tilt (cool cam, Pan V4, over its Agora command channel — discovered 2026-09-03): broadcaster/mods say 'cam left|right|up|down [step]',
-  'cam home' (undoes the moves), 'cam find' (vision says where she is, the camera nudges toward her). CLEOBOT_TRACK=1: when the hub sees
-  cool-side motion, one find-and-nudge cycle every CLEOBOT_TRACK_MINUTES (10). The Pan V3 (hot side) has no such channel: app-only.
+  'cam home' (undoes the moves), 'cam find' / 'cam face' (vision finds her HEAD, the camera nudges to centre it). CLEOBOT_TRACK=1: while the
+  hub sees cool-side motion she runs a tracking session — a look every CLEOBOT_TRACK_EVERY (75) s, a CLEOBOT_TRACK_STEP (8) nudge when her
+  head is off-centre, max 8 nudges per 10 min, camera 'home' after CLEOBOT_TRACK_HOME_MINUTES (20) quiet minutes. The Pan V3 (hot side) has no such channel: app-only.
   Rip Night eyes: 'ripset' (broadcaster) also starts rip_watch(): a still every CLEOBOT_RIP_WATCH_EVERY (6) s for CLEOBOT_RIP_WATCH_MINUTES (30), ripset again adds another 30;
   after 10 quiet min (no hands/cards/packs) she glances every 30 s, after 40 quiet min the session ends by itself; 'ripset' again extends it;
   described as JSON by the vision call (pack / card / name / holo / art); one spoken + chat verdict per new card, a line when the pack
@@ -307,14 +308,37 @@ def where_is_she():
     import subprocess
     if LLM_BACKEND != "cli" or not grab_frames(cams=("coolcam",), width=1280): return None
     prompt = ("Use the Read tool on exactly this file and nothing else: frames/coolcam.jpg. It is a still from a camera inside a ball python's terrarium. "
-              "Where is the snake in the frame? Reply with ONE word: center (well framed), left, right, up, down (she is visible but off toward that edge, or partly cut off there), "
+              "Find the snake's HEAD (the face, eyes, snout). Where is her head in the frame? Reply with ONE word: center (head in the middle third of the frame), "
+              "left, right, up, down (head visible but in that outer third, or cut off at that edge), body (snake visible but her head is hidden or out of frame), "
               "or none (no snake visible). Nothing else.")
+    prompt = prompt
     os.chdir(f"{HERE}/cli-workdir")
     try: out = cli_call([CLI_BIN, "-p", prompt, "--model", CLI_MODEL, "--max-turns", "4", "--tools", "Read", "--no-session-persistence",
                          "--system-prompt", "You answer with one word. You only read the file named in the prompt."], timeout=60)
     except Exception as e: log("where_is_she error:", type(e).__name__); return None
     w = re.sub(r"[^a-z]", "", (out or "").lower().split()[0] if (out or "").split() else "")
-    return w if w in ("center", "left", "right", "up", "down", "none") else None
+    return w if w in ("center", "left", "right", "up", "down", "none", "body") else None
+TRACK_STEP = int(CFG.get("CLEOBOT_TRACK_STEP", "8")); TRACK_EVERY = float(CFG.get("CLEOBOT_TRACK_EVERY", "75")); TRACK_HOME_AFTER = float(CFG.get("CLEOBOT_TRACK_HOME_MINUTES", "20"))
+_track = {"on": False, "last_motion": 0, "nudges": []}
+def track_session(motion_fn):
+    """Follow her head while the hub keeps seeing cool-side motion: a look every TRACK_EVERY s, one small nudge when her head is off-centre
+    (max 8 nudges per 10 min so we never fight the camera's own tracking), and 'home' after TRACK_HOME_AFTER quiet minutes."""
+    if _track["on"]: return
+    _track["on"] = True; log("track session started")
+    try:
+        while True:
+            if motion_fn(): _track["last_motion"] = time.time()
+            quiet = time.time() - _track["last_motion"]
+            if quiet > TRACK_HOME_AFTER * 60:
+                if any(_cam_pos["coolcam"]): cam_home("coolcam"); log("track: she settled, camera home")
+                break
+            if bg_ok() and quiet < 300:
+                w = where_is_she(); log(f"track: head is {w}")
+                recent = [t for t in _track["nudges"] if time.time() - t < 600]; _track["nudges"] = recent
+                if w in ("left", "right", "up", "down") and len(recent) < 8: cam_move("coolcam", w, TRACK_STEP); _track["nudges"].append(time.time())
+            time.sleep(TRACK_EVERY)
+    except Exception as e: log("track session error:", e)
+    finally: _track["on"] = False; log("track session ended")
 def track_once(step=12, max_nudges=3):
     """Nudge the cool cam toward her until she is centred (or give up and go home). Returns the final word."""
     w = None
@@ -1325,10 +1349,10 @@ class Bot:
                 if getattr(self, "rip_until", 0) > now: continue                            # Rip Night: no idle lines, looks, games, notices, interludes
                 if CLIPS and self.ws: self.clip_out(now)                                 # clips cost no tokens: always catch her
                 if PROACTIVE: self.maybe_out_line(now)                                  # she's moving: look and say so, even to an empty room (it's the good stuff)
-                if TRACK_ON and now - getattr(self, "last_track", 0) > TRACK_MINUTES * 60 and bg_ok() and not getattr(self, "rip_until", 0) > now:
+                if TRACK_ON and not _track["on"] and not getattr(self, "rip_until", 0) > now:
                     try:
-                        mo = (hub() or {}).get("motion") or {}
-                        if (mo.get("cool") or {}).get("moving"): self.last_track = now; threading.Thread(target=track_once, daemon=True).start()
+                        moving = lambda: bool(((hub() or {}).get("motion") or {}).get("cool", {}).get("moving"))
+                        if moving(): _track["last_motion"] = now; threading.Thread(target=track_session, args=(moving,), daemon=True).start()
                     except Exception as e: log("track error:", e)
                 if self.room_empty(): continue                                          # empty room: no idle chatter, no games
                 self.maybe_notice(now); self.maybe_interlude(now)
@@ -1718,10 +1742,10 @@ class Bot:
         elif bare_command(t):                                             # "temps", "weather", "cleo status" ...
             reply = COMMANDS[bare_command(t)](); path = "command"
         elif RESOURCE_Q.search(t): reply = cmd_resources(t); path = "resources"     # "where can I learn more?" -> allowlisted links
-        elif re.match(r"^\W*(cool|hot)?\s*cam\s+(left|right|up|down|home|find)(\s+\d{1,2})?\W*$", low) and (user == CHANNEL or (tags or {}).get("mod") == "1"):
-            m = re.match(r"^\W*(cool|hot)?\s*cam\s+(left|right|up|down|home|find)(?:\s+(\d{1,2}))?", low); cam = "hotcam" if m.group(1) == "hot" else "coolcam"; path = "cam"
+        elif re.match(r"^\W*(cool|hot)?\s*cam\s+(left|right|up|down|home|find|face)(\s+\d{1,2})?\W*$", low) and (user == CHANNEL or (tags or {}).get("mod") == "1"):
+            m = re.match(r"^\W*(cool|hot)?\s*cam\s+(left|right|up|down|home|find|face)(?:\s+(\d{1,2}))?", low); cam = "hotcam" if m.group(1) == "hot" else "coolcam"; path = "cam"
             if m.group(2) == "home": ok = cam_home(cam); reply = "Back to my usual view." if ok else "The camera did not answer."
-            elif m.group(2) == "find": w = track_once(); reply = {"center": "There. Framed, as a queen should be.", "none": "I am not in that camera's world right now. Try the other side."}.get(w, "I looked and nudged; judge for yourself.")
+            elif m.group(2) in ("find", "face"): w = track_once(); reply = {"center": "There. My face, framed, as a queen's should be.", "none": "I am not in that camera's world right now. Try the other side.", "body": "You have my coils; my face keeps its own counsel."}.get(w, "I looked and nudged; judge for yourself.")
             else: ok = cam_move(cam, m.group(2), int(m.group(3) or 10)); reply = f"{'Cool' if cam == 'coolcam' else 'Hot'} side, {m.group(2)}. Mind my nap." if ok else "The camera did not answer."
         elif user == CHANNEL and re.match(r"^\W*pull\s+\S", low):                     # broadcaster correction: "pull Umbreon VMAX 215/203" -> judge THIS card now
             m = re.match(r"^\W*pull\s+(.+?)(?:\s+(\d{1,3}\s*/\s*\d{1,3}))?\s*$", t.strip(), re.I); path = "pull-manual"
