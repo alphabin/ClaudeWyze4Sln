@@ -631,6 +631,17 @@ def hub():
 def feeding():
     try: return json.load(open(f"{ROOT}/overlay/feeding.json"))
     except Exception: return {}
+def dead_cam():
+    """'hot' | 'cool' | None from overlay/cams.json (obs/watchdog.py): a camera relay that has been dead for 3 checks."""
+    try:
+        c = json.load(open(f"{ROOT}/overlay/cams.json")); return c.get("dead") if time.time() - c.get("ts", 0) < 900 else None
+    except Exception: return None
+def situation():
+    """Live notes she must know when she speaks (shown to the model as trusted facts)."""
+    d = dead_cam()
+    if d == "hot": return "SITUATION: the hot-side camera is temporarily unavailable due to python constriction — she coiled around it last night and squeezed it dead. Only the cool-side camera is live; the stream shows it full width. If anyone asks about the black/missing hot side or the second camera, say exactly that, with pride. A new camera is coming."
+    if d == "cool": return "SITUATION: the cool-side camera is temporarily unavailable (she got it); only the hot-side camera is live, shown full width."
+    return ""
 def facts():
     try: return json.load(open(f"{ROOT}/overlay/facts.json"))
     except Exception: return ["Ball pythons are constrictors and not venomous."]
@@ -1175,7 +1186,7 @@ def _system_prompt():
             "Format: one short reply, at most 220 characters (300 if it carries a resource link), plain text, no markdown, no hashtags, at most one emoji (👑 or 🐍), "
             "no greeting preamble, no sign-off, do not start with the viewer's name. "
             "Current mood: %s — %s Let it colour the reply lightly. " % mood() +
-            "Facts you may use: " + " ".join(facts()) + guard_suffix())
+            "Facts you may use: " + " ".join(facts()) + ((" " + situation()) if situation() else "") + guard_suffix())
 def _context(user, v, recent):
     """Untrusted chat context + what she knows, for one call. Chat text is quoted, never interpreted."""
     import datetime
@@ -1246,6 +1257,7 @@ def grab_frames(cams=("hotcam", "coolcam"), width=960):
     import subprocess
     ok = []; os.makedirs(f"{HERE}/cli-workdir/frames", exist_ok=True)
     for cam in cams:
+        if cam == f"{dead_cam()}cam": continue                                     # the watchdog says that camera is gone: no 20 s timeout per look
         out = f"{HERE}/cli-workdir/frames/{cam}.jpg"
         try:
             r = subprocess.run([FFMPEG, "-loglevel", "error", "-y", "-rtsp_transport", "tcp", "-i", f"{RTSP}/{cam}", "-frames:v", "1", "-vf", f"scale={width}:-1", "-q:v", "3", out],

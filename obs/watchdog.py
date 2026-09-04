@@ -39,8 +39,39 @@ def obs(requests):
             m = json.loads(ws.recv())
             if m["op"] == 7 and m["d"]["requestId"] == str(i): out.append(m["d"].get("responseData")); break
     ws.close(); return out
+# ---- solo camera: a dead relay (she constricted the hot cam, 2026-09-04) must not leave a black half on the stream
+import subprocess
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); FFPROBE = ENV.get("CLEOBOT_FFMPEG", "/opt/homebrew/bin/ffmpeg").replace("ffmpeg", "ffprobe")
+CAMS = {"hot": ("Hot Side (Relay)", "hotcam", 0), "cool": ("Cool Side (Relay)", "coolcam", 960)}
+_dead = {"hot": 0, "cool": 0}; _solo = {"mode": None}
+def cam_alive(path):
+    try: return subprocess.run([FFPROBE, "-v", "error", "-rtsp_transport", "tcp", "-select_streams", "v", "-show_entries", "stream=width", "-of", "csv=p=0", f"rtsp://127.0.0.1:8555/{path}"], capture_output=True, timeout=12).returncode == 0
+    except Exception: return False
+def solo_layout(dead):
+    """dead: 'hot' | 'cool' | None. The living camera fills the 1920x540 stage (its own middle band, cropped), the dead one is hidden; overlay/cams.json tells the overlay."""
+    scene = obs([("GetCurrentProgramScene", None)])[0]["currentProgramSceneName"]; items = {i["sourceName"]: i["sceneItemId"] for i in obs([("GetSceneItemList", {"sceneName": scene})])[0]["sceneItems"]}
+    reqs = []
+    for key, (src, _, x) in CAMS.items():
+        iid = items.get(src)
+        if not iid: continue
+        if dead == key: reqs.append(("SetSceneItemEnabled", {"sceneName": scene, "sceneItemId": iid, "sceneItemEnabled": False}))
+        elif dead and dead != key:
+            reqs += [("SetSceneItemEnabled", {"sceneName": scene, "sceneItemId": iid, "sceneItemEnabled": True}),
+                     ("SetSceneItemTransform", {"sceneName": scene, "sceneItemId": iid, "sceneItemTransform": {"positionX": 0, "positionY": 270, "boundsType": "OBS_BOUNDS_SCALE_INNER", "boundsWidth": 1920, "boundsHeight": 540, "boundsAlignment": 0, "cropTop": 270, "cropBottom": 270, "cropLeft": 0, "cropRight": 0}})]
+        else:
+            reqs += [("SetSceneItemEnabled", {"sceneName": scene, "sceneItemId": iid, "sceneItemEnabled": True}),
+                     ("SetSceneItemTransform", {"sceneName": scene, "sceneItemId": iid, "sceneItemTransform": {"positionX": x, "positionY": 270, "boundsType": "OBS_BOUNDS_SCALE_INNER", "boundsWidth": 960, "boundsHeight": 540, "boundsAlignment": 0, "cropTop": 0, "cropBottom": 0, "cropLeft": 0, "cropRight": 0}})]
+    obs(reqs); json.dump({"dead": dead, "ts": int(time.time())}, open(f"{ROOT}/overlay/cams.json", "w"))
+def solo_tick():
+    for key, (_, path, _) in CAMS.items(): _dead[key] = 0 if cam_alive(path) else _dead[key] + 1
+    dead = next((k for k in ("hot", "cool") if _dead[k] >= 3), None)
+    if dead == "hot" and _dead["cool"] >= 3: dead = None                                   # both gone: leave the layout alone
+    if dead != _solo["mode"]:
+        solo_layout(dead); _solo["mode"] = dead; log(f"cameras: {dead + ' camera dead, ' + ('cool' if dead == 'hot' else 'hot') + ' side goes solo' if dead else 'both back, split view restored'}")
 strikes = 0; log(f"watchdog for #{CHANNEL}, restart after {STRIKES} offline minutes")
 while True:
+    try: solo_tick()
+    except Exception as e: log("solo check error:", e)
     try:
         st = obs([("GetStreamStatus", None)])[0]; active = st and st.get("outputActive")
         live = twitch_live() if active else None
