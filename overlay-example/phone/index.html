@@ -9,11 +9,10 @@ body{display:flex;flex-direction:column;min-height:100dvh;padding:env(safe-area-
 header{padding:10px 14px 6px;text-align:center}
 h1{font-family:Cinzel,serif;font-weight:700;font-size:16px;letter-spacing:.2em;color:var(--gold2);white-space:nowrap}
 .sub{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-top:3px}
-.stage{position:relative;margin:6px 14px;border:2px solid var(--gold);border-radius:14px;overflow:hidden;background:#000;aspect-ratio:4/3;box-shadow:0 12px 40px rgba(0,0,0,.6)}
-video{width:100%;height:100%;object-fit:cover;background:#000}
+.stage{position:relative;margin:6px 14px;border:2px solid var(--gold);border-radius:14px;overflow:hidden;background:#000;aspect-ratio:3/4;max-height:52dvh;box-shadow:0 12px 40px rgba(0,0,0,.6)}
+video{width:100%;height:100%;object-fit:contain;background:#000}
 .guide{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;opacity:0;transition:opacity .4s}.guide.on{opacity:1}
-.guide b{width:38%;aspect-ratio:63/88;border:2px dashed rgba(242,210,122,.75);border-radius:10px;box-shadow:0 0 0 2000px rgba(0,0,0,.28)}
-.guide.flash b{border-style:solid;border-color:#fff;box-shadow:0 0 0 2000px rgba(255,255,255,.35)}
+.guide.flash{background:rgba(255,255,255,.55)}
 .badge{position:absolute;left:10px;top:10px;padding:4px 12px;border-radius:999px;background:rgba(10,8,20,.85);border:1px solid rgba(217,182,91,.5);color:var(--gold2);font-family:Cinzel,serif;font-size:11px;letter-spacing:.2em}
 .badge i{display:inline-block;width:8px;height:8px;border-radius:50%;background:#666;margin-right:7px}.badge.on i{background:var(--red);box-shadow:0 0 8px var(--red)}
 .status{margin:6px 14px;padding:10px 14px;border-radius:12px;background:var(--panel);border:1px solid rgba(201,162,77,.35)}
@@ -35,9 +34,9 @@ button:active{transform:scale(.97)}
 .hint{margin:4px 22px 14px;font-size:12px;line-height:1.4;color:var(--muted);text-align:center}
 </style></head><body>
 <header><h1>✦ CLEO'S CARD TABLE ✦</h1><div class="sub">phone cam · princess cleo live</div></header>
-<div class="stage"><video id="v" autoplay muted playsinline></video><div class="guide" id="guide"><b></b></div><div class="badge" id="badge"><i></i>OFF AIR</div></div>
+<div class="stage"><video id="v" autoplay muted playsinline></video><div class="guide" id="guide"></div><div class="badge" id="badge"><i></i>OFF AIR</div></div>
 <div class="zoom"><span>1×</span><input type="range" id="zoom" min="1" max="4" step="0.1" value="1"><span id="zoom-v">zoom 1.0×</span></div>
-<div class="status"><b id="st-title">READY</b><span id="st-text">Tap Start camera. Then hold a card in the dashed frame and tap Snap.</span></div>
+<div class="status"><b id="st-title">READY</b><span id="st-text">Tap Start camera. Then fill the picture with a card and tap Snap.</span></div>
 <div class="verdict" id="verdict"><b id="vd-name"></b><div class="v" id="vd-text"></div><div class="p" id="vd-price"></div><div class="chips"><button id="fix-no">Not a holo</button><button id="fix-yes">It is a holo</button></div></div>
 <div class="row"><button class="primary" id="start">Start camera</button></div>
 <div class="row"><button class="primary snap" id="judge">📸 Snap this card</button></div>
@@ -51,7 +50,7 @@ const $=id=>document.getElementById(id);
 async function start(){
   try{
     stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30}},audio:false});
-    $('v').srcObject=stream; pc=new RTCPeerConnection({iceServers:[]});
+    $('v').srcObject=stream; $('v').onloadedmetadata=()=>{ const v=$('v'); document.querySelector('.stage').style.aspectRatio=v.videoWidth+'/'+v.videoHeight; }; pc=new RTCPeerConnection({iceServers:[]});
     stream.getTracks().forEach(t=>pc.addTransceiver(t,{direction:'sendonly'}));
     const offer=await pc.createOffer(); await pc.setLocalDescription(offer);
     await new Promise(r=>{ if(pc.iceGatheringState==='complete') return r(); pc.onicegatheringstatechange=()=>pc.iceGatheringState==='complete'&&r(); setTimeout(r,1500); });
@@ -68,11 +67,11 @@ function applyZoom(){ zoom=parseFloat($('zoom').value); $('zoom-v').textContent=
   if(nativeZoom&&stream){ stream.getVideoTracks()[0].applyConstraints({advanced:[{zoom}]}).catch(()=>{}); $('v').style.transform='none'; } else $('v').style.transform='scale('+zoom+')'; }
 $('zoom').oninput=applyZoom;
 function stop(){ on=false; try{pc&&pc.close()}catch{} try{stream&&stream.getTracks().forEach(t=>t.stop())}catch{} $('v').srcObject=null; fetch('/cmd',{method:'POST',body:JSON.stringify({stop:true})}).catch(()=>{}); ui(); }
-function ui(){ const b=$('start'); b.textContent=on?'Stop camera':'Start camera'; $('judge').disabled=!on||mode!=='table'; b.classList.toggle('stop',on); $('badge').className='badge'+(on?' on':''); $('badge').innerHTML='<i></i>'+(on?'ON AIR':'OFF AIR'); $('guide').classList.toggle('on',on&&mode==='table'); if(!on) setStatus('READY','Tap Start camera. Then hold a card in the dashed frame and tap Snap.'); }
+function ui(){ const b=$('start'); b.textContent=on?'Stop camera':'Start camera'; $('judge').disabled=!on||mode!=='table'; b.classList.toggle('stop',on); $('badge').className='badge'+(on?' on':''); $('badge').innerHTML='<i></i>'+(on?'ON AIR':'OFF AIR');  if(!on) setStatus('READY','Tap Start camera. Then fill the picture with a card and tap Snap.'); }
 function setStatus(t,x){ $('st-title').textContent=t; $('st-text').textContent=x; }
 $('start').onclick=()=>on?stop():start();
 $('mode-table').onclick=()=>setMode('table'); $('mode-eagle').onclick=()=>setMode('eagle');
-function setMode(m,send=true){ mode=m; $('judge').disabled=!on||m!=='table'; $('verdict').classList.remove('on'); $('mode-table').classList.toggle('sel',m==='table'); $('mode-eagle').classList.toggle('sel',m==='eagle'); $('guide').classList.toggle('on',on&&m==='table'); if(send) fetch('/cmd',{method:'POST',body:JSON.stringify({mode:m})}).catch(()=>{}); }
+function setMode(m,send=true){ mode=m; $('judge').disabled=!on||m!=='table'; $('verdict').classList.remove('on'); $('mode-table').classList.toggle('sel',m==='table'); $('mode-eagle').classList.toggle('sel',m==='eagle'); if(send) fetch('/cmd',{method:'POST',body:JSON.stringify({mode:m})}).catch(()=>{}); }
 // ---- the snap: a full-size JPEG straight from the camera, posted to the Mac (sharper than any frame grabbed off the stream)
 async function snap(why){
   if(!on||busy) return; const v=$('v'); if(!v.videoWidth) return; busy=1; lastSnap=Date.now();
@@ -98,7 +97,7 @@ async function poll(){ try{ const s=await (await fetch('/status',{cache:'no-stor
   const p=s.pull; const mine=p&&p.ts&&p.ts>LOADED;                                  // only cards snapped since this page was opened
   if(on){ const r=s.ripcam||{}; if(!r.live) setStatus('CONNECTING','Cleo is picking up the stream (up to 30 s)…');
     else if(mine&&p.stage==='reading'&&Date.now()/1000-p.ts<90) setStatus('READING','She has the card. About 12 seconds…');
-    else if(mode==='table') setStatus('READY FOR A CARD','Card in the frame, tap Snap (or hold it still and it snaps by itself).');
+    else if(mode==='table') setStatus('READY FOR A CARD','Fill the picture with the card, tap Snap (or hold still and it snaps by itself).');
     else setStatus('SNAKE CLOSE-UP','Your phone is live on the stream. Switch to Cards to judge cards.'); }
   if(mine&&p.ts!==lastPull&&p.stage!=='reading'){ lastPull=p.ts; if(p.stage==='none'){ $('verdict').classList.remove('on'); return; }
     $('vd-name').textContent=(p.name||'')+(p.holo?' ✦ holo':''); $('vd-text').textContent=p.verdict||''; $('vd-price').textContent=p.value?('the ledgers whisper · '+p.value):''; $('verdict').classList.add('on'); }
