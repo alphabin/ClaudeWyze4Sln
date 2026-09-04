@@ -789,6 +789,33 @@ def oracle_ok():
     if _oracle["hour"] != h: _oracle.update(hour=h, n=0)
     if _oracle["n"] >= ORACLE_PER_HOUR: return False
     _oracle["n"] += 1; return True
+def cli_call(args, stdin_text=None, timeout=45):
+    """Run the claude CLI with --output-format json and return the result text as soon as the JSON is complete, killing the process
+    (after a tools call the next process can answer in 2 s and then hang on exit for a minute; waiting for exit made replies 'hang')."""
+    import subprocess
+    p = subprocess.Popen(args + ["--output-format", "json"], stdin=subprocess.PIPE if stdin_text is not None else subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, env=CLI_ENV)
+    if stdin_text is not None:
+        try: p.stdin.write(stdin_text); p.stdin.close()
+        except Exception: pass
+    buf = ""; t0 = time.time(); out = None
+    import select
+    while time.time() - t0 < timeout:
+        r, _, _ = select.select([p.stdout], [], [], 0.5)
+        if r:
+            chunk = p.stdout.read(4096) if hasattr(p.stdout, "read1") is False else p.stdout.read1(4096)
+            if not chunk: break
+            buf += chunk
+            try:
+                j = json.loads(buf.strip()); out = j.get("result") if isinstance(j, dict) else None; break
+            except ValueError: pass
+        elif p.poll() is not None: break
+    try: p.kill()
+    except Exception: pass
+    if out is None and buf.strip():
+        try: j = json.loads(buf.strip()); out = j.get("result") if isinstance(j, dict) else None
+        except ValueError: out = None
+    if out is None and time.time() - t0 >= timeout: raise TimeoutError("claude cli %.0f s" % timeout)
+    return out or ""
 CLI_ENV = dict(os.environ, DISABLE_AUTOUPDATER="1", CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="1", DISABLE_TELEMETRY="1", DISABLE_ERROR_REPORTING="1")   # no update checks or telemetry inside a chat reply
 _cli_lock = threading.BoundedSemaphore(2)          # two model calls at once
 _waiting = {"n": 0}                                   # viewer replies waiting for a slot; background chatter yields to them
@@ -924,9 +951,9 @@ def describe_cams():
               f"climbing...)? If not visible say so. Anything else notable. Ignore green rectangles (a tracking box) and the timestamp. Do not invent details.")
     if not _cli_lock.acquire(timeout=30): return None
     try:
-        r = subprocess.run([CLI_BIN, "-p", prompt, "--model", CLI_MODEL, "--max-turns", "4", "--tools", "Read", "--output-format", "text",
-                            "--system-prompt", "You describe images factually. You only read the files named in the prompt."], capture_output=True, text=True, timeout=75, cwd=f"{HERE}/cli-workdir", env=CLI_ENV)
-        out = " ".join(r.stdout.split())[:400] if r.returncode == 0 else None
+        os.chdir(f"{HERE}/cli-workdir")
+        out = " ".join(cli_call([CLI_BIN, "-p", prompt, "--model", CLI_MODEL, "--max-turns", "4", "--tools", "Read", "--no-session-persistence",
+                                 "--system-prompt", "You describe images factually. You only read the files named in the prompt."], timeout=75).split())[:400] or None
     except Exception as e: log("describe_cams error:", type(e).__name__); out = None
     finally: _cli_lock.release()
     if out: _llm["n"] += 1; _llm["nd"] += 1
@@ -934,10 +961,19 @@ def describe_cams():
 def describe_pull():
     """Rip Night eyes: SECURITY BOUNDARY like describe_cams — Read tool on the stills only, no chat text. Returns dict or None."""
     import subprocess
-    cams = grab_frames(cams=(RIP_CAM,), width=1920)
-    if not cams or LLM_BACKEND != "cli": return None
-    files = " and ".join(f"frames/{c}.jpg" for c in cams)
-    prompt = (f"Use the Read tool on exactly this file and nothing else: {files}. It is a still from a camera inside a snake terrarium looking out through the glass; a person may be holding a "
+    if LLM_BACKEND != "cli": return None
+    d = f"{HERE}/cli-workdir/frames"; os.makedirs(d, exist_ok=True)
+    for f in os.listdir(d):
+        if f.startswith("rip_"): os.remove(f"{d}/{f}")
+    for i in (1, 2):      # a burst: two separate stills ~0.6 s apart, so one catches the card sharp and still (three was ~16 s per look)
+        try: subprocess.run([FFMPEG, "-loglevel", "error", "-y", "-rtsp_transport", "tcp", "-i", f"{RTSP}/{RIP_CAM}", "-frames:v", "1", "-vf", "scale=1600:-1", "-q:v", "3", f"{d}/rip_{i}.jpg"], capture_output=True, timeout=12)
+        except Exception as e: log("rip burst error:", str(e)[:60])
+        time.sleep(0.4)
+    shots = sorted(f for f in os.listdir(d) if f.startswith("rip_"))[:2]
+    if not shots: return None
+    files = ", ".join(f"frames/{f}" for f in shots)
+    prompt = (f"Use the Read tool on exactly these files and nothing else: {files}. They are {len(shots)} stills taken a moment apart by a camera inside a snake terrarium looking out through the glass; "
+              f"a person may be holding a card up. Use whichever still is sharpest (motion blur differs between them). A person may be holding a "
               f"Pokémon trading card or a booster pack up to the glass. Reply ONLY with JSON: {{\"pack\": true/false (a sealed or torn booster pack visible), "
               f"\"card\": true/false (a single card held up), \"name\": \"card name as printed; if the print is blurred but the Pokémon is clearly recognisable from the artwork, its name; else null\", \"guess\": true/false (name came from the artwork, not the print), \"holo\": true/false (foil/holographic shine), "
               f"\"art\": \"five words on the artwork, or null\", \"hands\": true/false (human hands visible), \"cam\": \"hotcam\" or \"coolcam\" (which still shows the card), "
@@ -946,9 +982,10 @@ def describe_pull():
               f"\"product_type\": \"box|etb|tin|blister|pack|null\"}}. Never invent a number or set you cannot read; a name from the artwork must be marked guess.")
     if not _cli_lock.acquire(timeout=20): return None
     try:
-        r = subprocess.run([CLI_BIN, "-p", prompt, "--model", CLI_MODEL, "--max-turns", "4", "--tools", "Read", "--output-format", "text",
-                            "--system-prompt", "You describe images factually and reply only with JSON. You only read the files named in the prompt."], capture_output=True, text=True, timeout=60, cwd=f"{HERE}/cli-workdir", env=CLI_ENV)
-        m = re.search(r"\{.*\}", r.stdout or "", re.S); out = json.loads(m.group(0)) if m else None
+        os.chdir(f"{HERE}/cli-workdir")
+        txt = cli_call([CLI_BIN, "-p", prompt, "--model", CLI_MODEL, "--max-turns", "4", "--tools", "Read", "--no-session-persistence",
+                        "--system-prompt", "You describe images factually and reply only with JSON. You only read the files named in the prompt."], timeout=60)
+        m = re.search(r"\{.*\}", txt or "", re.S); out = json.loads(m.group(0)) if m else None
     except Exception as e: log("describe_pull error:", type(e).__name__); out = None
     finally: _cli_lock.release()
     _llm["rip_looks"] = _llm.get("rip_looks", 0) + 1                             # counted separately: Rip Night has its own allowance, not the chat budget
@@ -1076,11 +1113,13 @@ def llm_answer(user, text, v=None, recent=(), model=None, task=None, cache=True,
             if not got: return None
             try:
                 # cwd = an empty folder on purpose: the claude tool loads project notes/memory from its working folder
-                args = [CLI_BIN, "-p", msg, "--model", model, "--max-turns", "1", "--tools", "", "--output-format", "text",   # tools are NEVER enabled for calls that carry chat text
+                args = [CLI_BIN, "-p", msg, "--model", model, "--max-turns", "1", "--tools", "", "--no-session-persistence",   # tools are NEVER enabled for calls that carry chat text
                         "--system-prompt", _system_prompt()]
-                try: r = subprocess.run(args, capture_output=True, text=True, timeout=40, cwd=f"{HERE}/cli-workdir", env=CLI_ENV)
-                except subprocess.TimeoutExpired:                                     # the CLI occasionally hangs on one call; one retry usually lands in seconds
-                    log("claude cli hung 40 s — retrying once"); r = subprocess.run(args, capture_output=True, text=True, timeout=40, cwd=f"{HERE}/cli-workdir", env=CLI_ENV)
+                os.chdir(f"{HERE}/cli-workdir")
+                try: out = cli_call(args, timeout=45)
+                except TimeoutError: log("claude cli 45 s — retrying once"); out = cli_call(args, timeout=45)
+                class _R: pass
+                r = _R(); r.returncode = 0 if out else 1; r.stdout = out; r.stderr = ""
                 if r.returncode != 0: log("claude cli error:", (r.stderr or r.stdout)[:200]); return None
                 out = r.stdout.strip()
             finally: _cli_lock.release()
@@ -1453,6 +1492,8 @@ class Bot:
         import subprocess
         try:
             cam = d.get("cam") if d.get("cam") in ("hotcam", "coolcam") else "coolcam"; src = f"{HERE}/cli-workdir/frames/{cam}.jpg"
+            bursts = sorted(f for f in os.listdir(f"{HERE}/cli-workdir/frames") if f.startswith("rip_"))
+            if bursts: src = f"{HERE}/cli-workdir/frames/{bursts[len(bursts) // 2]}"                # the middle burst still
             ts = int(time.time()); os.makedirs(f"{ROOT}/overlay/pulls", exist_ok=True); dst = f"{ROOT}/overlay/pulls/{ts}.jpg"
             box = d.get("box") if isinstance(d.get("box"), list) and len(d.get("box")) == 4 else None
             if box:

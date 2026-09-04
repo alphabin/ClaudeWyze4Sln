@@ -49,9 +49,15 @@ We do **not** scrape eBay/TCGplayer pages: both serve automated browsers a bot-c
 `CLEOBOT_RIP_WATCH_MINUTES` (30) · `CLEOBOT_RIP_WATCH_EVERY` (1.5 s between looks; each look itself takes ~8 s) · `CLEOBOT_CLIPS_PER_HOUR` (6, ×4 during a rip) ·
 `CLEOBOT_VOICE_ON` (1) · `CLEOBOT_PIPER_VOICE` (en_GB-alba-medium) · `CLEOBOT_VISION=0` disables all camera looks.
 
+## What went wrong on the first live try (2026-09-03) and what fixed it
+- Cards flat on the glass were out of the lens's focus range → unreadable → silence. Fix: a hand's width back; she now names a card from the artwork when the print is blurred (flagged 'if my eyes serve') and tells you when the letters swim.
+- The still was downscaled to 960 px → text too small. Fix: full-resolution stills from the cool side only.
+- A bot restart wiped the session. Fix: the session is persisted and resumes after restarts.
+- The verdict took 75 s: the Claude command answers in 2 s but sometimes refuses to exit for a minute after a camera read. Fix: the bot now reads the answer and kills the process (`cli_call`).
+
 ## Known limits
 - Name/number reads through glass will sometimes be wrong; a wrong number gives a wrong exact price. Correct her with `pull <name> <number>` from the channel account.
-- The vision call is 5–10 s per look; with 6 s spacing she comments 10–15 s after you hold a card up.
+- A look is ~10 s (two full-res stills a beat apart, she reads the sharpest); looks run back-to-back, the verdict adds ~5 s. Expect her voice 15–25 s after you raise the card. Keep holding until she speaks.
 - Chase-card lore is model memory, not the price book.
 - The price book is TCGplayer market, not eBay sold comps; graded cards are not in it.
 
