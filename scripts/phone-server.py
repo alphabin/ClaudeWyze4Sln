@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """HTTPS server for the phone companion page (overlay/phone/), on the LAN, same self-signed cert as the rip-cam relay.
-GET  /            -> the page        GET /status -> {ripcam, pull, cmd}        POST /cmd {"mode":"table|eagle|auto","judge":true,"stop":true}
+GET  /            -> the page        GET /status -> {ripcam, pull, cmd}        POST /cmd {"mode":"table|eagle","judge":true,"stop":true,"holo":true|false}   POST /shot <jpeg> -> judge that still
 The bot reads overlay/phone_cmd.json. The page itself publishes the camera straight to the relay over WHIP (port 8891)."""
 import http.server, json, os, ssl, time, sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); WEB = f"{ROOT}/overlay/phone"; PORT = int(os.environ.get("PHONE_PORT", "8895"))
@@ -19,9 +19,16 @@ class H(http.server.SimpleHTTPRequestHandler):
         if self.path == "/": self.path = "/index.html"
         return super().do_GET()
     def do_POST(self):
+        n = int(self.headers.get("Content-Length") or 0)
+        if self.path == "/shot":                                                   # the page snapped a sharp full-size still: judge this one
+            if n > 12_000_000: return self._json(413, {"error": "too big"})
+            data = self.rfile.read(n); ts = int(time.time()); tmp = f"{ROOT}/overlay/phone_shot.tmp"; dst = f"{ROOT}/overlay/phone_shot.jpg"
+            if not data.startswith(b"\xff\xd8"): return self._json(400, {"error": "not a jpeg"})
+            open(tmp, "wb").write(data); os.replace(tmp, dst)
+            cmd = {"judge": True, "shot": dst, "ts": ts}; json.dump(cmd, open(f"{ROOT}/overlay/phone_cmd.json", "w")); return self._json(200, {"ok": True, "bytes": n})
         if self.path != "/cmd": return self._json(404, {"error": "no"})
-        n = int(self.headers.get("Content-Length") or 0); body = json.loads(self.rfile.read(n) or b"{}")
-        cmd = {k: body[k] for k in ("mode", "judge", "stop") if k in body}; cmd["ts"] = int(time.time())
+        body = json.loads(self.rfile.read(n) or b"{}")
+        cmd = {k: body[k] for k in ("mode", "judge", "stop", "holo") if k in body}; cmd["ts"] = int(time.time())
         json.dump(cmd, open(f"{ROOT}/overlay/phone_cmd.json", "w")); return self._json(200, {"ok": True, "cmd": cmd})
 httpd = http.server.ThreadingHTTPServer(("0.0.0.0", PORT), H)
 ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER); ctx.load_cert_chain(f"{ROOT}/relay/ripcam/certs/server.crt", f"{ROOT}/relay/ripcam/certs/server.key"); httpd.socket = ctx.wrap_socket(httpd.socket, server_side=True)

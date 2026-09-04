@@ -223,6 +223,9 @@
   #pull.on{opacity:1;transform:none}
   #pull .img{position:relative;flex:none;width:210px;height:300px;border-radius:10px;overflow:hidden;box-shadow:0 10px 26px rgba(0,0,0,.6);background:#000}
   #pull .img img{width:100%;height:100%;object-fit:cover}
+  #pull.reading .img img{filter:saturate(.6) brightness(.8)} #pull.reading .nm,#pull.reading .vd{color:var(--gold-2);animation:pulse 1.6s ease-in-out infinite} #pull.reading .img:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 0%,rgba(242,210,122,.35) 50%,transparent 100%);background-size:100% 200%;animation:scanline 1.8s linear infinite}
+  @keyframes scanline{from{background-position:0 200%}to{background-position:0 -200%}} @keyframes pulse{0%,100%{opacity:.55}50%{opacity:1}}
+  #pull.none .img img{filter:grayscale(1) brightness(.6)}
   #pull.holo .img:after{content:"";position:absolute;inset:-40%;background:linear-gradient(115deg,transparent 35%,rgba(255,255,255,.35) 45%,rgba(180,220,255,.45) 50%,rgba(255,200,255,.35) 55%,transparent 65%);animation:holo 2.4s linear infinite;mix-blend-mode:screen}
   @keyframes holo{from{transform:translateX(-30%) rotate(0)}to{transform:translateX(30%) rotate(0)}}
   #pull .txt{min-width:0}
@@ -340,7 +343,7 @@
     phases: { dawn: [5, 8], day: [8, 17], dusk: [17, 20], night: [20, 5] },     // fallback hours; real sun times come from the weather service
     facts: [],   // loaded from facts.json (shared with the chat bot)
   };
-  const WEATHER = { lat: LATITUDE, lon: LONGITUDE };
+  const WEATHER = { lat: 33.9319, lon: -117.9462 };
 
   // ---- scenery: a procedural savanna edge (trees, vines, mist) that recolours with the time of day ----
   const SCENE = {
@@ -599,15 +602,20 @@
   // ---- Rip Night pull card (overlay/pull.json from the bot) ----
   let pullTs = 0;
   function pullPoll() { fetch('pull.json?' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(f => {
-    if (!f || !f.ts || f.ts === pullTs || Date.now() / 1000 - f.ts > 60) return; pullTs = f.ts; const p = document.getElementById('pull');
-    document.getElementById('pull-img').src = f.image + '?' + f.ts; document.getElementById('pull-k').textContent = f.kind ? ('THE QUEEN INSPECTS · ' + f.kind) : ('PULL ' + (f.n || 1) + ' · THE QUEEN JUDGES');
-    document.getElementById('pull-nm').textContent = f.name || ''; document.getElementById('pull-vd').textContent = f.verdict || ''; document.getElementById('pull-holo').hidden = !f.holo; const pv = document.getElementById('pull-val'); pv.hidden = !f.value; pv.innerHTML = f.value ? esc(f.value) + '<small>the ledgers whisper · TCGplayer market</small>' : ''; p.classList.toggle('holo', !!f.holo); p.classList.add('on');
-    setTimeout(() => { if (pullTs === f.ts) p.classList.remove('on'); }, 24000); }).catch(() => {}); }
+    if (!f || !f.ts || f.ts === pullTs || Date.now() / 1000 - f.ts > 60) return; pullTs = f.ts; const p = document.getElementById('pull'); const st = f.stage || 'done';
+    document.getElementById('pull-img').src = f.image + '?' + f.ts; p.classList.toggle('reading', st === 'reading'); p.classList.toggle('none', st === 'none');
+    document.getElementById('pull-k').textContent = st === 'reading' ? ('PULL ' + (f.n || 1) + ' · THE QUEEN READS') : st === 'none' ? 'THE QUEEN SQUINTS' : f.kind ? ('THE QUEEN INSPECTS · ' + f.kind) : ('PULL ' + (f.n || 1) + ' · THE QUEEN JUDGES');
+    document.getElementById('pull-nm').textContent = st === 'reading' ? 'reading the card…' : st === 'none' ? 'no card in that' : (f.name || '');
+    document.getElementById('pull-vd').textContent = st === 'reading' ? 'the ledgers are being consulted' : (f.verdict || ''); document.getElementById('pull-holo').hidden = !f.holo || st !== 'done';
+    const pv = document.getElementById('pull-val'); pv.hidden = !f.value || st !== 'done'; pv.innerHTML = f.value ? esc(f.value) + '<small>the ledgers whisper · TCGplayer market</small>' : ''; p.classList.toggle('holo', !!f.holo && st === 'done'); p.classList.add('on');
+    setTimeout(() => { if (pullTs === f.ts) p.classList.remove('on'); }, st === 'reading' ? 90000 : st === 'none' ? 8000 : 30000); }).catch(() => {}); }
   setInterval(pullPoll, 2000); pullPoll();
   // ---- companion phone cam frame (overlay/ripcam.json from the bot) ----
   function ripframePoll() { fetch('ripcam.json?' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(f => { const el = document.getElementById('ripframe');
     if (!f || !f.live || Date.now() / 1000 - f.ts > 120) { el.classList.remove('on'); return; }
     el.style.left = f.x + 'px'; el.style.top = f.y + 'px'; el.style.width = f.w + 'px'; el.style.height = f.h + 'px'; el.classList.toggle('table', f.mode === 'table');
+    const p = document.getElementById('pull'); p.style.right = 'auto';                       // the verdict card sits beside an upright phone, under a sideways one
+    if (f.portrait) { p.style.left = (f.x - 600) + 'px'; p.style.top = (f.y + 220) + 'px'; } else { p.style.left = (f.x + f.w - 560) + 'px'; p.style.top = (f.y + f.h + 30) + 'px'; }
     document.getElementById('ripframe-lbl').textContent = f.mode === 'table' ? '✦ THE CARD TABLE ✦' : '◈ EAGLE EYE ◈'; el.classList.add('on'); }).catch(() => {}); }
   setInterval(ripframePoll, 3000); ripframePoll();
   function esc(t) { return String(t).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }

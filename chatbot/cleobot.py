@@ -273,8 +273,18 @@ def value_words(v):
     return f"anywhere from ${lo:,.0f} to ${hi:,.0f} depending on the printing — the {st} {rar} version is the ${hi:,.0f} one"
 RIP_CAM = CFG.get("CLEOBOT_RIP_CAM", "coolcam")                          # the terrarium camera the cards are held up to (1080p on the relay)
 RIPCAM_RTSP = CFG.get("CLEOBOT_RIPCAM_RTSP", "rtsp://127.0.0.1:8556/ripcam")   # the companion phone camera, when it is publishing
-RIPCAM_LAYOUT = {"table": (1040, 300, 800, 450), "eagle": (1400, 250, 480, 270)}      # x, y, w, h on the 1920x1080 canvas
-_ripcam = {"live": False, "mode": None}
+RIPCAM_LAYOUT = {"table": (960, 80, 900, 506), "eagle": (1400, 250, 480, 270),                 # x, y, w, h on the 1920x1080 canvas (phone held sideways)
+                 "table_p": (1330, 60, 540, 960), "eagle_p": (1590, 60, 300, 533)}             # phone held upright
+_ripcam = {"live": False, "mode": None, "portrait": False, "miss": 0}
+def ripcam_orient():
+    """Is the phone publishing upright (portrait) or sideways? One ffprobe when it goes live."""
+    import subprocess
+    try:
+        o = subprocess.run([FFMPEG.replace("ffmpeg", "ffprobe"), "-v", "error", "-rtsp_transport", "tcp", "-select_streams", "v", "-show_entries", "stream=width,height", "-of", "csv=p=0", RIPCAM_RTSP], capture_output=True, text=True, timeout=8).stdout.strip().split(",")
+        return int(o[1]) > int(o[0])
+    except Exception: return False
+def ripcam_box(mode):
+    return RIPCAM_LAYOUT.get(mode + ("_p" if _ripcam.get("portrait") else ""), (0, 0, 0, 0))
 def obs_req(t, data=None):
     import hashlib, base64
     pw = CFG.get("OBS_WS_PASSWORD", ""); ws = websocket.create_connection("ws://127.0.0.1:4455", timeout=8); h = json.loads(ws.recv())["d"].get("authentication"); ident = {"rpcVersion": 1}
@@ -287,7 +297,7 @@ def obs_req(t, data=None):
 def ripcam_layout(mode):
     """Place the OBS 'Rip Cam' source for the mode and tell the overlay (overlay/ripcam.json) so it can draw the frame."""
     try:
-        x, y, w, h = RIPCAM_LAYOUT[mode]; scene = obs_req("GetCurrentProgramScene")["currentProgramSceneName"]
+        x, y, w, h = ripcam_box(mode); scene = obs_req("GetCurrentProgramScene")["currentProgramSceneName"]
         items = obs_req("GetSceneItemList", {"sceneName": scene})["sceneItems"]; iid = [i["sceneItemId"] for i in items if i["sourceName"] == "Rip Cam"]
         if iid: obs_req("SetSceneItemTransform", {"sceneName": scene, "sceneItemId": iid[0], "sceneItemTransform": {"positionX": x, "positionY": y, "boundsType": "OBS_BOUNDS_SCALE_INNER", "boundsWidth": w, "boundsHeight": h, "boundsAlignment": 0}})
     except Exception as e: log("ripcam layout error:", type(e).__name__, str(e)[:60])
@@ -301,7 +311,9 @@ def ripcam_tick(rip_active, bot=None):
     if bot is not None and fresh and cmd.get("stop") and not getattr(bot, "_cmd_seen", 0) == cmd.get("ts"):
         bot._cmd_seen = cmd.get("ts"); bot.rip_until = 0; bot.rip_auto = False; log("rip cam: stop from the phone")
     if bot is not None and fresh and cmd.get("judge") and not getattr(bot, "_cmd_seen", 0) == cmd.get("ts"):
-        bot._cmd_seen = cmd.get("ts"); log("rip cam: judge-now from the phone"); bot.judge_next = True
+        bot._cmd_seen = cmd.get("ts"); log("rip cam: judge-now from the phone" + (" (snapshot)" if cmd.get("shot") else "")); bot.judge_shot = cmd.get("shot"); bot.judge_next = True
+    if bot is not None and fresh and cmd.get("holo") is not None and not getattr(bot, "_cmd_seen", 0) == cmd.get("ts"):
+        bot._cmd_seen = cmd.get("ts"); bot.fix_holo(bool(cmd.get("holo")))
     if bot is not None:
         if live and not getattr(bot, "rip_until", 0) > time.time():
             bot.rip_until = time.time() + 20 * 60; bot.rip_auto = True; threading.Thread(target=bot.rip_watch, daemon=True).start()
@@ -313,17 +325,20 @@ def ripcam_tick(rip_active, bot=None):
     if bot is not None and want == "eagle" and getattr(bot, "rip_auto", False): bot.rip_until = 0; bot.rip_auto = False   # eagle eye = no judging
     if bot is not None and want == "table" and live and not getattr(bot, "rip_until", 0) > time.time(): bot.rip_until = time.time() + 20 * 60; bot.rip_auto = True; threading.Thread(target=bot.rip_watch, daemon=True).start()
     mode = (want or ("table" if rip_active else "eagle")) if live else None
+    if live and not _ripcam["live"]: _ripcam["portrait"] = ripcam_orient()
     if (live, mode) != (_ripcam["live"], _ripcam["mode"]):
-        _ripcam.update(live=live, mode=mode); log(f"rip cam: {'live, ' + mode if live else 'off'}")
+        _ripcam.update(live=live, mode=mode); log(f"rip cam: {'live, ' + mode + (', upright' if _ripcam['portrait'] else ', sideways') if live else 'off'}")
         if mode: ripcam_layout(mode)
         try:
-            x, y, w, h = RIPCAM_LAYOUT.get(mode, (0, 0, 0, 0)); json.dump({"live": live, "mode": mode, "x": x, "y": y, "w": w, "h": h, "ts": int(time.time())}, open(f"{ROOT}/overlay/ripcam.json", "w"))
+            x, y, w, h = ripcam_box(mode) if mode else (0, 0, 0, 0); json.dump({"live": live, "mode": mode, "x": x, "y": y, "w": w, "h": h, "portrait": _ripcam.get("portrait", False), "ts": int(time.time())}, open(f"{ROOT}/overlay/ripcam.json", "w"))
         except Exception as e: log("ripcam.json error:", e)
 def ripcam_live():
     """True when the phone is publishing to the rip-cam relay (a quick RTSP probe)."""
     import subprocess
-    try: return subprocess.run([FFMPEG, "-loglevel", "error", "-rtsp_transport", "tcp", "-i", RIPCAM_RTSP, "-frames:v", "1", "-f", "null", "-"], capture_output=True, timeout=6).returncode == 0
-    except Exception: return False
+    try: ok = subprocess.run([FFMPEG, "-loglevel", "error", "-rtsp_transport", "tcp", "-i", RIPCAM_RTSP, "-frames:v", "1", "-f", "null", "-"], capture_output=True, timeout=6).returncode == 0
+    except Exception: ok = False
+    _ripcam["miss"] = 0 if ok else _ripcam.get("miss", 0) + 1
+    return ok or (_ripcam["live"] and _ripcam["miss"] < 2)
 # ---------- pan/tilt over the camera's own command channel (Pan V4 via Agora data stream; discovered 2026-09-03) ----------
 CAM_PORTS = {"coolcam": int(CFG.get("CLEOBOT_COOLCAM_CDP", "9224")), "hotcam": int(CFG.get("CLEOBOT_HOTCAM_CDP", "9225"))}
 _cam_pos = {"coolcam": [0, 0], "hotcam": [0, 0]}                              # a step ledger so 'home' can undo moves
@@ -1242,13 +1257,18 @@ def describe_cams():
     if out: _llm["n"] += 1; _llm["nd"] += 1
     return out
 _rip_src = {"phone": False}
-def describe_pull():
-    """Rip Night eyes: SECURITY BOUNDARY like describe_cams — Read tool on the stills only, no chat text. Returns dict or None."""
+def describe_pull(shot=None, verdict=False):
+    """Rip Night eyes: SECURITY BOUNDARY like describe_cams — Read tool on the stills only, no chat text. Returns dict or None.
+    shot: a JPEG the phone page snapped itself (sharp, full resolution) — used instead of grabbing the stream. verdict: also write her one-line judgement (one CLI call instead of two)."""
     import subprocess
     if LLM_BACKEND != "cli": return None
     d = f"{HERE}/cli-workdir/frames"; os.makedirs(d, exist_ok=True)
     for f in os.listdir(d):
         if f.startswith("rip_"): os.remove(f"{d}/{f}")
+    if shot and os.path.exists(shot) and time.time() - os.path.getmtime(shot) < 120:
+        try: subprocess.run([FFMPEG, "-loglevel", "error", "-y", "-i", shot, "-vf", "scale='min(1600,iw)':-2", "-q:v", "3", f"{d}/rip_1.jpg"], capture_output=True, timeout=12)
+        except Exception as e: log("rip shot error:", str(e)[:60])
+        if os.path.exists(f"{d}/rip_1.jpg"): _rip_src["phone"] = True; return _describe_stills(d, verdict, snapped=True)
     src = RIPCAM_RTSP if ripcam_live() else f"{RTSP}/{RIP_CAM}"                 # the phone's close-up beats the glass every time
     if src == RIPCAM_RTSP and not _rip_src.get("phone"): log("rip eyes: using the phone rip cam"); _rip_src["phone"] = True
     elif src != RIPCAM_RTSP and _rip_src.get("phone"): log("rip eyes: phone cam gone, back to the cool cam"); _rip_src["phone"] = False
@@ -1256,23 +1276,29 @@ def describe_pull():
         try: subprocess.run([FFMPEG, "-loglevel", "error", "-y", "-rtsp_transport", "tcp", "-i", src, "-frames:v", "1", "-vf", "scale=1600:-1", "-q:v", "3", f"{d}/rip_{i}.jpg"], capture_output=True, timeout=12)
         except Exception as e: log("rip burst error:", str(e)[:60])
         time.sleep(0.4)
+    return _describe_stills(d, verdict)
+def _describe_stills(d, verdict=False, snapped=False):
     shots = sorted(f for f in os.listdir(d) if f.startswith("rip_"))[:2]
     if not shots: return None
     files = ", ".join(f"frames/{f}" for f in shots)
-    where = "a phone camera held over the table" if _rip_src.get("phone") else "a camera inside a snake terrarium looking out through the glass"
-    prompt = (f"Use the Read tool on exactly these files and nothing else: {files}. They are {len(shots)} stills taken a moment apart by {where}; "
+    where = ("a phone camera, snapped by the person holding the card" if snapped else "a phone camera held over the table") if _rip_src.get("phone") else "a camera inside a snake terrarium looking out through the glass"
+    vd = ("\"verdict\": \"ONE or TWO sentences (under 220 characters) spoken by Princess Cleo, a ball python queen with a clairvoyant Oracle air, judging THIS card: name it, judge the artwork and the shine, "
+          "a slow blink for a holo, a regal dismissal for a dud; end with the literal placeholder {worth} where its market worth goes. No emoji, no viewer name, nothing is for sale.\", ") if verdict else ""
+    prompt = (f"Use the Read tool on exactly these files and nothing else: {files}. They are {len(shots)} still(s) taken a moment apart by {where}; "
               f"a person may be holding a card up. Use whichever still is sharpest (motion blur differs between them). A person may be holding a "
               f"Pokémon trading card or a booster pack up to the glass. Reply ONLY with JSON: {{\"pack\": true/false (a sealed or torn booster pack visible), "
               f"\"card\": true/false (a single card held up), \"name\": \"card name as printed; if the print is blurred but the Pokémon is clearly recognisable from the artwork, its name; else null\", \"guess\": true/false (name came from the artwork, not the print), \"holo\": true/false (foil/holographic shine), "
-              f"\"art\": \"five words on the artwork, or null\", \"hands\": true/false (human hands visible), \"cam\": \"hotcam\" or \"coolcam\" (which still shows the card), "
+              f"\"art\": \"five words on the artwork, or null\", \"hands\": true/false (human hands visible), \"cam\": \"hotcam\" or \"coolcam\" (which still shows the card), {vd}"
               f"\"box\": [left, top, width, height] as fractions 0-1 of that image around the card, or null, \"number\": \"collector number as printed e.g. 234/091, or null\", "
-              f"\"set\": \"set name if printed/readable, or null\", \"product\": \"if a sealed product is held up (booster box, elite trainer box, tin, blister, booster pack): its printed name, or null\", "
-              f"\"product_type\": \"box|etb|tin|blister|pack|null\"}}. Never invent a number or set you cannot read; a name from the artwork must be marked guess.")
+              f"\"set\": \"set name if printed/readable, or null\", \"rarity\": \"the small mark by the collector number: circle|diamond|star|double-star|other|null\", \"product\": \"if a sealed product is held up (booster box, elite trainer box, tin, blister, booster pack): its printed name, or null\", "
+              f"\"product_type\": \"box|etb|tin|blister|pack|null\"}}. Never invent a number or set you cannot read; a name from the artwork must be marked guess. "
+              f"HOLO RULE: white or grey camera glare, sheen and reflections on a plain card are NOT holo — a flat card under a phone light looks shiny. Say holo only when you see a rainbow diffraction pattern (bands of several colours across the artwork or the card face), the card is a full-art/textured/gold card, or its name carries ex, EX, V, VMAX, VSTAR, GX; "
+              f"a card whose rarity mark is a circle or diamond is not holo unless the whole card except the artwork shines (reverse holo). When unsure: false.")
     if not _cli_lock.acquire(timeout=20): return None
     try:
         os.chdir(f"{HERE}/cli-workdir")
         txt = cli_call([CLI_BIN, "-p", prompt, "--model", CLI_MODEL, "--max-turns", "4", "--tools", "Read", "--no-session-persistence",
-                        "--system-prompt", "You describe images factually and reply only with JSON. You only read the files named in the prompt."], timeout=60)
+                        "--system-prompt", "You describe images factually and reply only with JSON. You only read the files named in the prompt."], timeout=75)
         m = re.search(r"\{.*\}", txt or "", re.S); out = json.loads(m.group(0)) if m else None
     except Exception as e: log("describe_pull error:", type(e).__name__); out = None
     finally: _cli_lock.release()
@@ -1736,7 +1762,9 @@ class Bot:
         while time.time() < self.rip_until and time.time() - started < RIP_WATCH_MINUTES * 60:
             try:
                 if not bg_ok(): time.sleep(2); continue                                   # a viewer is waiting for a reply: let that go first
-                t0 = time.time(); d = describe_pull() or {}
+                shot = getattr(self, "judge_shot", None); self.judge_shot = None; phone = _ripcam.get("live")
+                if shot: self.show_pull({"shot": shot}, "", "", getattr(self, "pull_count", 0) + 1, stage="reading")     # the card is on screen while she reads it
+                t0 = time.time(); d = describe_pull(shot=shot, verdict=bool(shot or phone)) or {}
                 log("rip look %.0fs: %s" % (time.time() - t0, json.dumps({k: d.get(k) for k in ("hands", "pack", "card", "name", "number", "holo", "product", "cam") if d.get(k) is not None}, ensure_ascii=False)[:160] or "nothing"))
                 if d.get("hands") or d.get("card") or d.get("pack") or d.get("product"): last_activity = time.time()
                 idle = time.time() - last_activity
@@ -1763,19 +1791,32 @@ class Bot:
                     dupes.add(key); dl = f"Another {name}. The ledgers do not blink twice; neither do I."
                     self.send(f"🎴 {dl}"); threading.Thread(target=speak, args=(dl, "rip"), daemon=True).start()
                 if d.get("card") and name and key not in seen and len(name) < 60 and not any(key[:10] == k[:10] and abs(len(key) - len(k)) <= 2 for k in seen):   # "Charizard ex" vs "Charizard EX"
-                    seen.add(key); seen_at[key] = time.time()
+                    seen.add(key); seen_at[key] = time.time(); self.pull_count = len(seen)
                     val = card_value(name, d.get("number")); vw = value_words(val)
+                    if d.get("verdict") and "{worth}" in str(d.get("verdict")):                           # one call did it all: judgement + the ledgers
+                        line = str(d["verdict"]).replace("{worth}", vw); self.show_pull(d, name, line, len(seen), val)
+                        self.send(f"🎴 {line}"); threading.Thread(target=speak, args=(line, "rip"), daemon=True).start()
+                        if CLIPS: threading.Timer(20, self.make_clip, args=(f"pull: {name}",)).start()
+                        self.last_pull = {"name": name, "d": d, "val": val, "n": len(seen)}; continue
                     ctx = f"Card just pulled and held to your glass: {name}{(' #' + d['number']) if d.get('number') else ''}{' (the print was blurred; you recognised it from the artwork — say so lightly, e.g. if my eyes serve)' if d.get('guess') else ''}. Foil/holo: {'yes' if d.get('holo') else 'no'}. Art: {d.get('art') or 'unclear'}. Pull number {len(seen)} of this rip. What the ledgers say (TCGplayer market): {vw}."
                     line = llm_answer("court", "pull", recent=self.recent, model=CLI_MODEL_TALK if LLM_BACKEND == "cli" else None, cache=False, vip=True,
                                       task=f"{ctx} Give your verdict on this pull in ONE or TWO sentences as the queen with her clairvoyant Oracle air: name the card, judge the art and the shine, "
                                            f"then reveal its worth the way a seer reads tea leaves ('the ledgers whisper...', 'I see...'), quoting the market figure above plainly. "
                                            f"A slow blink for a holo, a regal dismissal for a dud (say so if it is worth pennies). Nothing is for sale here. No viewer name, no emoji. Under 260 characters.")
-                    self.show_pull(d, name, line or "", len(seen), val)
+                    self.show_pull(d, name, line or "", len(seen), val); self.last_pull = {"name": name, "d": d, "val": val, "n": len(seen)}
                     if line: self.send(f"🎴 {line}"); threading.Thread(target=speak, args=(line, "rip"), daemon=True).start()
                     if CLIPS: threading.Timer(20, self.make_clip, args=(f"pull: {name}",)).start()
+                elif shot and not d.get("card"):
+                    self.show_pull({"shot": shot}, "", "", len(seen) + 1, stage="none")
+                    bl = "I see no card in that, human. Fill my frame with it and hold still — I snap by myself."; self.send(bl); threading.Thread(target=speak, args=(bl, "rip"), daemon=True).start()
+                elif shot and d.get("card") and not name:
+                    self.show_pull({"shot": shot}, "", "", len(seen) + 1, stage="none")
+                    bl = "A card, but the print swims. Closer, flatter, more light — and snap again."; self.send(bl); threading.Thread(target=speak, args=(bl, "rip"), daemon=True).start()
             except Exception as e: log("rip watch error:", e)
-            for _ in range(int((RIP_WATCH_EVERY if time.time() - last_activity < 600 else 30) * 2)):
+            wait = (RIP_WATCH_EVERY if time.time() - last_activity < 600 else 30) if not _ripcam.get("live") else 3600   # phone live: no polling at all — she looks when the phone snaps
+            for _ in range(int(wait * 2)):
                 if getattr(self, "judge_next", False): self.judge_next = False; last_activity = time.time(); break
+                if time.time() > self.rip_until: break
                 time.sleep(0.5)
         log(f"rip watch ended, {len(seen)} cards seen"); self.rip_until = 0; RIP.d["watch_until"] = 0; RIP._save()
     def judge_card(self, name, number=""):
@@ -1793,13 +1834,21 @@ class Bot:
             if line: self.send(f"🎴 {line}"); threading.Thread(target=speak, args=(line, "rip"), daemon=True).start()
             if CLIPS: threading.Timer(20, self.make_clip, args=(f"pull: {name}",)).start()
         except Exception as e: log("judge_card error:", e)
-    def show_pull(self, d, name, verdict, n, val=None, kind=None):
-        """Crop the card out of the still it was seen in and hand it to the overlay (overlay/pulls/<ts>.jpg + overlay/pull.json)."""
+    def fix_holo(self, holo):
+        """The broadcaster taps 'not a holo' / 'it is a holo' on the phone: correct the screen and say so."""
+        try:
+            f = f"{ROOT}/overlay/pull.json"; p = json.load(open(f)); p["holo"] = holo; p["ts"] = int(time.time()); json.dump(p, open(f, "w"))
+            line = (f"Corrected: the {p.get('name') or 'card'} does shine after all — a slow blink, then." if holo else f"Corrected: no foil on the {p.get('name') or 'card'} — plain paper, judged as such.")
+            self.send(f"🎴 {line}"); threading.Thread(target=speak, args=(line, "rip"), daemon=True).start(); log("rip cam: holo corrected ->", holo)
+        except Exception as e: log("fix_holo error:", e)
+    def show_pull(self, d, name, verdict, n, val=None, kind=None, stage="done"):
+        """Crop the card out of the still it was seen in and hand it to the overlay (overlay/pulls/<ts>.jpg + overlay/pull.json). stage: reading | done | none."""
         import subprocess
         try:
             cam = d.get("cam") if d.get("cam") in ("hotcam", "coolcam") else "coolcam"; src = f"{HERE}/cli-workdir/frames/{cam}.jpg"
             bursts = sorted(f for f in os.listdir(f"{HERE}/cli-workdir/frames") if f.startswith("rip_"))
             if bursts: src = f"{HERE}/cli-workdir/frames/{bursts[len(bursts) // 2]}"                # the middle burst still
+            if d.get("shot") and os.path.exists(d["shot"]): src = d["shot"]                     # the phone's own snapshot
             ts = int(time.time()); os.makedirs(f"{ROOT}/overlay/pulls", exist_ok=True); dst = f"{ROOT}/overlay/pulls/{ts}.jpg"
             box = d.get("box") if isinstance(d.get("box"), list) and len(d.get("box")) == 4 else None
             if box:
@@ -1810,7 +1859,7 @@ class Bot:
             subprocess.run([CFG.get("CLEOBOT_FFMPEG", "/opt/homebrew/bin/ffmpeg"), "-loglevel", "error", "-y", "-i", src, "-vf", vf, "-q:v", "3", dst], check=True, timeout=20, capture_output=True)
             value = None
             if val: lo, hi, st, rar, k = val; value = (f"${hi:,.0f}" if (k == 1 or hi < lo * 1.6) else f"${lo:,.0f} – ${hi:,.0f}") + f" · {st}"
-            json.dump({"image": f"pulls/{ts}.jpg", "name": name, "holo": bool(d.get("holo")), "verdict": verdict, "n": n, "value": value, "number": d.get("number"), "kind": kind, "ts": ts}, open(f"{ROOT}/overlay/pull.json", "w"))
+            json.dump({"image": f"pulls/{ts}.jpg", "name": name, "holo": bool(d.get("holo")), "verdict": verdict, "n": n, "value": value, "number": d.get("number"), "kind": kind, "stage": stage, "ts": ts}, open(f"{ROOT}/overlay/pull.json", "w"))
             for f in os.listdir(f"{ROOT}/overlay/pulls"):
                 if time.time() - os.path.getmtime(f"{ROOT}/overlay/pulls/{f}") > 6 * 3600: os.remove(f"{ROOT}/overlay/pulls/{f}")
         except Exception as e: log("show_pull error:", type(e).__name__, str(e)[:80])
