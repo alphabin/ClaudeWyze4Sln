@@ -451,7 +451,7 @@ def search_for_her():
     _search["last"] = time.time(); log("search: checking her favourite spots first")
     for pan, tilt in favourite_spots():                                             # where she usually is (home = the hide/log view)
         goto_spot(pan, tilt); w = where_is_she(); log(f"search: favourite spot ({pan},{tilt}): {w}")
-        if w in ("center", "left", "right", "up", "down"): remember_sighting(w); log("search: found her at a favourite spot"); return w
+        if w in ("center", "left", "right", "up", "down"): remember_sighting(w); log("search: found her at a favourite spot"); frame_her(); return w
         if w == "body": remember_sighting(w); log("search: her body at a favourite spot, staying"); return "body"
     log("search: sweeping for her")
     if any(_cam_pos["coolcam"]): cam_home("coolcam"); time.sleep(2)
@@ -470,6 +470,25 @@ def search_for_her():
             if w2 != "body": log("search: found her"); return w2
             log("search: staying on her body"); return "body"
     _cam_pos["coolcam"] = [0, 0]; return "none"
+def framing():
+    """SECURITY BOUNDARY like describe_cams. Once she is in frame: is her head AND body both showing, and which small nudge would improve the shot?"""
+    if LLM_BACKEND != "cli" or not grab_frames(cams=("coolcam",), width=1280): return None
+    prompt = ("Use the Read tool on exactly this file and nothing else: frames/coolcam.jpg. A ball python is in this still from her terrarium camera. Judge the framing: "
+              "reply ONLY with JSON {\"head\": \"visible|hidden\", \"body\": \"visible|hidden\", \"cut\": \"none|left|right|top|bottom\" (which edge cuts her off), "
+              "\"nudge\": \"none|left|right|up|down\" (the ONE small camera move that would show more of her head and body together), \"good\": true/false}")
+    os.chdir(f"{HERE}/cli-workdir")
+    try: txt = cli_call([CLI_BIN, "-p", prompt, "--model", CLI_MODEL, "--max-turns", "4", "--tools", "Read", "--no-session-persistence", "--system-prompt", "You judge photo framing factually and reply only with JSON. You only read the file named in the prompt."], timeout=60)
+    except Exception as e: log("framing error:", type(e).__name__); return None
+    m = re.search(r"\{.*\}", txt or "", re.S)
+    try: return json.loads(m.group(0)) if m else None
+    except Exception: return None
+def frame_her(max_nudges=2, step=6):
+    """After a sighting: up to two tiny nudges to get head and body in the shot together."""
+    for i in range(max_nudges):
+        f = framing() or {}; log(f"frame: head {f.get('head')} body {f.get('body')} cut {f.get('cut')} nudge {f.get('nudge')} good {f.get('good')}")
+        if f.get("good") or f.get("nudge") in (None, "none"): return f
+        cam_move("coolcam", f["nudge"], step); time.sleep(3)
+    return f
 def track_once(step=12, max_nudges=3):
     """Nudge the cool cam toward her until she is centred (or give up and go home). Returns the final word."""
     w = where_is_she(); log(f"track: head is {w}")
@@ -478,6 +497,7 @@ def track_once(step=12, max_nudges=3):
     for i in range(max_nudges):
         if w in (None, "center", "none", "body"): break
         cam_move("coolcam", w, step); time.sleep(3); w = where_is_she(); log(f"track: head is {w}")
+    if w in ("center", "body", "left", "right", "up", "down"): frame_her()           # she is in frame: now compose the shot
     return w
 RIP_WATCH_MINUTES = float(CFG.get("CLEOBOT_RIP_WATCH_MINUTES", "30")); RIP_WATCH_EVERY = float(CFG.get("CLEOBOT_RIP_WATCH_EVERY", "1.5"))   # Rip Night eyes: up to 3 h, idle-aware
 RANKS = [(30, "Royal Advisor"), (15, "Duke or Duchess"), (7, "Knight"), (3, "Courtier"), (1, "Visitor")]
