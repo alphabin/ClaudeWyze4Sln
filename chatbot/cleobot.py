@@ -484,7 +484,7 @@ def track_session(motion_fn):
             if motion_fn(): _track["last_motion"] = time.time()
             quiet = time.time() - _track["last_motion"]
             if quiet > TRACK_HOME_AFTER * 60:
-                if any(_cam_pos["coolcam"]): cam_home("coolcam"); log("track: she settled, camera home")
+                cam_vista(); log("track: she settled, camera back to the vista")             # home = the vista, not the floor
                 break
             if bg_ok() and quiet < 300 and time.time() - _track.get("last_look", 0) > TRACK_EVERY:
                 _track["last_look"] = time.time(); w = where_is_she(); log(f"track: head is {w}")

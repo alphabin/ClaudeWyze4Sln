@@ -689,7 +689,7 @@
       (c.key === 'cool' ? `<div class="shade"><b>◆ BEYOND THE GLASS ◆</b></div>` : '') + `<div class="plate"><b>${ICON[c.key] || '◆'}</b>${esc(c.label)}</div>` + (c.here ? `<div class="here"><i></i>SHE'S HERE</div>` : '') + `</div>`).join('');
     CELLS = f.cells.filter(c => c.live || c.key === 'reel').map(c => [c.x, c.y, c.w, c.h]); if (curPhase) { try { renderBase(SCENE[curPhase]); } catch (e) {} }
     let tag = document.getElementById('cam-rest'); if (!tag) { tag = document.createElement('div'); tag.id = 'cam-rest'; document.body.appendChild(tag); }
-    const dead = (f.dead || []).filter(k => k === 'hot' || k === 'cool'); tag.textContent = dead.length ? ('◆ ' + dead.map(k => k.toUpperCase()).join(' + ') + ' SIDE CAM TEMPORARILY UNAVAILABLE DUE TO PYTHON CONSTRICTION') : ''; tag.style.display = dead.length ? '' : 'none'; }).catch(() => {}); }
+    const dead = f.dead || []; tag.textContent = dead.includes('hot') ? '◆ HOT SIDE CAM TEMPORARILY UNAVAILABLE DUE TO PYTHON CONSTRICTION' : dead.includes('cool') ? '◆ COOL SIDE CAM · A MOMENT OF PRIVACY' : ''; tag.style.display = tag.textContent ? '' : 'none'; }).catch(() => {}); }
   setInterval(layoutPoll, 5000); layoutPoll();
   // ---- court status (overlay/whereabouts.json from the bot's director): where she is, since when
   const WHERE = { cool: 'OUT ON THE COOL SIDE', hot: 'OUT ON THE HOT SIDE', hothide: 'IN THE HOT HIDE', coldhide: 'IN THE COLD HIDE' };
