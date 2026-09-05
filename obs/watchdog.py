@@ -98,8 +98,20 @@ def reel_refresh():
         except Exception as e: log("reel error:", e)
         finally: _reel["building"] = False
     import threading; threading.Thread(target=run, daemon=True).start()
+CDP = {"cool": 9224, "hot": 9225, "hothide": 9226, "coldhide": 9227}; _reloaded = {}
+def reload_player(key):
+    """A dead relay with a live Chrome behind it: reload that player page (Agora/Kinesis sessions stall now and then; a reload re-joins). At most every 5 min."""
+    port = CDP.get(key)
+    if not port or time.time() - _reloaded.get(key, 0) < 300: return
+    _reloaded[key] = time.time()
+    try:
+        pg = [p for p in json.load(urllib.request.urlopen(f"http://localhost:{port}/json", timeout=5)) if p["type"] == "page"][0]
+        d = websocket.create_connection(pg["webSocketDebuggerUrl"], timeout=10); d.send(json.dumps({"id": 1, "method": "Page.reload", "params": {}})); d.recv(); d.close(); log(f"{key}: relay dead, player page reloaded")
+    except Exception as e: log(f"{key}: reload failed: {str(e)[:60]}")
 def solo_tick():
-    for key, (_, path) in CAMS.items(): _dead[key] = 0 if cam_alive(path) else _dead[key] + 1
+    for key, (_, path) in CAMS.items():
+        _dead[key] = 0 if cam_alive(path) else _dead[key] + 1
+        if _dead[key] >= 3 and key != "hot": reload_player(key)          # the hot cam is physically dead (2026-09-04): do not thrash it
     alive = {k: _dead[k] < 3 for k in CAMS}
     if not alive["hot"]: reel_refresh()
     cells = plan(alive, she_settled()); key = json.dumps(cells)
