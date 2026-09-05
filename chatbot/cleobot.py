@@ -377,12 +377,47 @@ def cam_goto(cam, pan, tilt):
     while dy:
         c = min(60, abs(dy)); ok &= cam_move(cam, "up" if dy > 0 else "down", c); dy -= c if dy > 0 else -c; time.sleep(0.6)
     return ok
-def cam_vista(cam="coolcam"): return cam_goto(cam, *VISTA)                              # a step ledger so 'home' can undo moves
+def cam_vista(cam="coolcam"): return cam_goto(cam, *VISTA)
+_guard = {"timer": None, "last": 0}
+def glass_guard(reason="move"):
+    """PRIVACY GUARD: after any cool-cam move (debounced) and at start, one vision look at the cool cam's picture. If it shows the room through
+    the glass (walls, furniture, a window, people) instead of the inside of the terrarium, black that camera out on the stream (overlay/blackout.json)
+    and tell the log. The watchdog treats a blacked-out camera as dead. Lift it by deleting the file after re-aiming."""
+    import subprocess
+    if LLM_BACKEND != "cli": return
+    _guard["last"] = time.time()
+    try:
+        f = f"{HERE}/cli-workdir/frames/guard.jpg"; os.makedirs(os.path.dirname(f), exist_ok=True)
+        subprocess.run([FFMPEG, "-loglevel", "error", "-y", "-rtsp_transport", "tcp", "-i", f"{RTSP}/coolcam", "-frames:v", "1", "-vf", "scale=800:-1", "-q:v", "4", f], capture_output=True, timeout=20)
+        if not os.path.exists(f): return
+        prompt = ("Use the Read tool on exactly this file and nothing else: frames/guard.jpg. It is a still from a camera INSIDE a snake terrarium. Reply ONLY with JSON: "
+                  "{\"inside\": true/false (the picture is mostly the inside of the enclosure: substrate, plants, cork bark, hides, glass edges are fine), "
+                  "\"room\": true/false (a human room is visible through the glass: walls, pictures, furniture, a window, a door, a TV, a person), \"roof\": true/false (a mesh lid fills much of the frame)}.")
+        if not _cli_lock.acquire(timeout=20): return
+        try:
+            os.chdir(f"{HERE}/cli-workdir")
+            txt = cli_call([CLI_BIN, "-p", prompt, "--model", CLI_MODEL, "--max-turns", "3", "--tools", "Read", "--no-session-persistence", "--system-prompt", "You describe images factually and reply only with JSON. You only read the file named in the prompt."], timeout=75)
+            m = re.search(r"\{.*\}", txt or "", re.S); j = json.loads(m.group(0)) if m else {}
+        finally: _cli_lock.release()
+        bad = bool(j.get("room")) or (bool(j.get("roof")) and not j.get("inside"))
+        bf = f"{ROOT}/overlay/blackout.json"
+        if bad:
+            json.dump({"cool": True, "why": f"glass guard: room={j.get('room')} roof={j.get('roof')} ({reason})", "ts": int(time.time())}, open(bf, "w")); log(f"GLASS GUARD: cool cam shows the room/roof -> blacked out ({reason})")
+        else: log(f"glass guard: cool cam is inside the enclosure ({reason})")
+    except Exception as e: log("glass guard error:", type(e).__name__, str(e)[:60])
+def glass_guard_soon():
+    """Debounced: 8 s after the last move."""
+    try:
+        if _guard["timer"]: _guard["timer"].cancel()
+        _guard["timer"] = threading.Timer(8, glass_guard, args=("after a move",)); _guard["timer"].daemon = True; _guard["timer"].start()
+    except Exception: pass                              # a step ledger so 'home' can undo moves
 def cam_move(cam, direction, step=10, speed=5):
     """Nudge a camera: direction left|right|up|down, step in the camera's units (10 ≈ a small nudge, 20 clearly visible). Returns True on the camera's ack."""
     port = CAM_PORTS.get(cam)
     if not port or direction not in ("left", "right", "up", "down"): return False
     step = max(1, min(60, int(step)))
+    x, y = _cam_pos.get(cam, [0, 0])
+    if cam == "coolcam" and y + (step if direction == "up" else 0) > 150 and (x - (step if direction == "left" else 0)) < 320: log(f"cam {cam} {direction} {step}: would show the room through the glass, refused"); return False   # privacy: high tilt only on the right half
     if direction == "up" and _cam_pos.get(cam, [0, 0])[1] + step > TILT_MAX: log(f"cam {cam} up {step}: above the tilt ceiling ({TILT_MAX}), refused"); return False
     try:
         pg = [p for p in json.load(urllib.request.urlopen(f"http://localhost:{port}/json", timeout=5)) if p["type"] == "page"][0]
@@ -398,6 +433,7 @@ def cam_move(cam, direction, step=10, speed=5):
         if ok:
             dx = {"left": -step, "right": step}.get(direction, 0); dy = {"up": step, "down": -step}.get(direction, 0)
             _cam_pos[cam][0] += dx; _cam_pos[cam][1] += dy; _save_pos()
+            if cam == "coolcam": glass_guard_soon()
         log(f"cam {cam} {direction} {step}: {'ok' if ok else 'refused'}")
         _cam_fail[cam] = 0 if ok else _cam_fail.get(cam, 0) + 1
         if not ok and _cam_fail[cam] >= 3 and time.time() - _cam_fail.get(cam + "_reload", 0) > 900:   # no acks three times running: the control channel is stale (seen 2026-09-04 05:05-15:20) — reload the page
@@ -626,7 +662,7 @@ def patrol_session(bot=None, minutes=20, step=8, every=18):
                         time.sleep(1)
                     continue
             x = _cam_pos["coolcam"][0]
-            if (direction == "left" and x - step < 0) or (direction == "right" and x + step > VISTA[0]): direction = "right" if direction == "left" else "left"; legs = 0   # patrol the land between the base and the vista
+            if (direction == "left" and x - step < 320) or (direction == "right" and x + step > VISTA[0]): direction = "right" if direction == "left" else "left"; legs = 0   # patrol pan 320..500 at vista height: left of that the glass shows the ROOM (survey 2026-09-04)
             ok = cam_move("coolcam", direction, step); legs += 1
             if not ok: direction = "right" if direction == "left" else "left"; legs = 0
             time.sleep(every)
@@ -1310,7 +1346,7 @@ def _system_prompt():
             "Format: one short reply, at most 220 characters (300 if it carries a resource link), plain text, no markdown, no hashtags, at most one emoji (👑 or 🐍), "
             "no greeting preamble, no sign-off, do not start with the viewer's name. "
             "Current mood: %s — %s Let it colour the reply lightly. " % mood() +
-            "Facts you may use: " + " ".join(facts()) + ((" " + situation()) if situation() else "") + guard_suffix())
+            "Facts you may use: " + " ".join(facts()) + ((" " + situation()) if situation() else "") + " HOSPITALITY: when someone is new, quiet or thanks you, invite them to FOLLOW (following earns rank at court, a say in votes, and a place in the pack-pull giveaway at 25 followers) and offer something concrete: a tarot reading, a haiku, a poem, the Oracle, or simply a talk about anything — pick one or two, never the whole list." + guard_suffix())
 def _context(user, v, recent):
     """Untrusted chat context + what she knows, for one call. Chat text is quoted, never interpreted."""
     import datetime
@@ -2403,6 +2439,7 @@ class Bot:
                 self.ws = websocket.create_connection("wss://irc-ws.chat.twitch.tv:443", sslopt={"cert_reqs": ssl.CERT_REQUIRED})
                 self.ws.send("CAP REQ :twitch.tv/tags twitch.tv/commands\r\n"); self.ws.send(f"PASS oauth:{token}\r\n"); self.ws.send(f"NICK {NICK}\r\n"); self.ws.send(f"JOIN #{CHANNEL}\r\n")
                 log(f"connected as {NICK}, joined #{CHANNEL}")
+                threading.Timer(20, glass_guard, args=("startup",)).start()
                 try: self.replay_missed()                                                        # anything the sentinel saw while we were down
                 except Exception as e: log("replay error:", e)
                 if not getattr(self, "_threads", False):

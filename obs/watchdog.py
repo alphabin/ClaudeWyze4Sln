@@ -76,7 +76,7 @@ def plan(alive, settled):
         else: cells.append(("phone", x, y, w, h))
         hero = None
     else:
-        hero = where if where in alive and alive.get(where) else "cool" if alive["cool"] else "hot" if alive["hot"] else None
+        hero = where if where in alive and alive.get(where) else next((k for k in ("cool", "hot", "coldhide", "hothide") if alive[k]), None)   # no pan cam: a hide takes the hero slot
         if hero: cells.append((hero, *G["hero"]))
     col = [k for k in ("cool", "hot", "hothide", "coldhide") if k != hero and alive[k]]
     for k in ("hothide", "coldhide"):                                                   # a hide cam that dropped out keeps its slot as a card, never a black hole
@@ -141,6 +141,8 @@ def solo_tick():
         _dead[key] = 0 if cam_alive(path) else _dead[key] + 1
         if _dead[key] >= 3 and key != "hot": reload_player(key)          # the hot cam is physically dead (2026-09-04): do not thrash it
     alive = {k: _dead[k] < 3 for k in CAMS}
+    try: bo = json.load(open(f"{ROOT}/overlay/blackout.json")); alive = {k: (v and not bo.get(k)) for k, v in alive.items()}   # a camera blacked out on purpose (privacy) counts as dead
+    except Exception: pass
     if not alive["hot"]: reel_refresh()
     cells = plan(alive, she_settled()); key = json.dumps(cells) + str(director().get("where")) + str((phone_live() or {}).get("mode"))
     if key != _layout["key"]:

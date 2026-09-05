@@ -677,7 +677,7 @@
   setInterval(ripframePoll, 3000); ripframePoll();
   // ---- stage layout (overlay/layout.json from obs/watchdog.py): a chip + frame per cell; hero left, grid right
   let layoutKey = '';
-  function layoutPoll() { fetch('layout.json?' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(f => { if (!f || !f.cells) return; const k = JSON.stringify(f.cells) + (f.dead || []).join(); if (k === layoutKey) return; layoutKey = k;   // redraw only when the layout really changes (no flashing frames) document.body.classList.toggle('compact', !!f.compact); ST.top = f.compact ? 180 : 270; ST.h = f.compact ? 720 : 540;
+  function layoutPoll() { fetch('layout.json?' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(f => { if (!f || !f.cells) return; document.body.classList.toggle('compact', !!f.compact); ST.top = f.compact ? 180 : 270; ST.h = f.compact ? 720 : 540; const k = JSON.stringify(f.cells) + (f.dead || []).join(); if (k === layoutKey) return; layoutKey = k;   // the class every poll (the phase code rewrites body's classes); redraw only when the layout really changes
     document.getElementById('win-hot').style.display = 'none'; document.getElementById('win-cool').style.display = 'none';
     let box = document.getElementById('cells'); if (!box) { box = document.createElement('div'); box.id = 'cells'; document.body.appendChild(box); }
     const ICON = { hot: '🔥', cool: '❄', hothide: '⌂', coldhide: '⌂', reel: '▶', hothide_off: '⌂', coldhide_off: '⌂', phone: '●' };
