@@ -238,6 +238,10 @@
   #pull .holo-tag{display:inline-block;margin:0;vertical-align:middle;padding:2px 10px;border:1px solid #9fd8ff;border-radius:999px;color:#bfe6ff;font-family:var(--display);font-size:12px;letter-spacing:.2em}
   /* the companion phone cam: a drawn frame around the OBS 'Rip Cam' source — Card Table during a rip, Eagle Eye otherwise */
   #kills{position:absolute;right:430px;top:212px;z-index:6;display:flex;align-items:center;gap:10px;padding:3px 12px 3px 14px;background:rgba(10,8,20,.55);border:1px solid rgba(217,182,91,.5);border-radius:999px;font-family:'Cinzel',serif;letter-spacing:.22em} #kills .k{font-size:11px;color:#f2d27a} #kills .n{font-size:16px;font-weight:700;color:#fff;text-shadow:0 0 12px rgba(224,72,60,.8)}
+  #cells .cell{position:absolute;pointer-events:none;box-shadow:inset 0 0 0 1px rgba(217,182,91,.45)} #cells .cell.small{box-shadow:inset 0 0 0 1px rgba(217,182,91,.55),inset 0 0 30px rgba(0,0,0,.35)}
+  #cells .cell .chip{position:absolute;left:18px;top:18px} #cells .cell.small .chip{left:10px;top:10px;transform:scale(.8);transform-origin:left top}
+  #cells .cell .card{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:24px;text-align:center;background:radial-gradient(ellipse at 50% 40%,#2a1730,#0b0710 75%)}
+  #cells .cell .card b{font-family:'Cinzel',serif;font-size:16px;letter-spacing:.24em;color:#f2d27a} #cells .cell .card span{font-size:13px;color:#b7a9c4;max-width:380px;line-height:1.4}
   #cam-rest{position:absolute;right:24px;top:786px;z-index:6;padding:3px 12px;background:rgba(10,8,20,.85);border:1px solid rgba(217,182,91,.5);border-radius:999px;color:#f2d27a;font-family:'Cinzel',serif;font-size:11px;letter-spacing:.22em}
   .win.reel{box-shadow:inset 0 0 0 2px rgba(217,182,91,.55),inset 0 0 60px rgba(0,0,0,.5)}
   #ripframe{position:absolute;pointer-events:none;opacity:0;transition:opacity .8s;border:3px solid #c9a24d;border-radius:12px;box-shadow:0 0 0 6px rgba(20,8,14,.85),0 18px 50px rgba(0,0,0,.65),inset 0 0 40px rgba(0,0,0,.35)}
@@ -621,13 +625,16 @@
     el.style.left = f.x + 'px'; el.style.top = f.y + 'px'; el.style.width = f.w + 'px'; el.style.height = f.h + 'px'; el.classList.toggle('table', f.mode === 'table');
     document.getElementById('ripframe-lbl').textContent = f.mode === 'table' ? '✦ THE CARD TABLE ✦' : '◈ EAGLE EYE ◈'; el.classList.add('on'); }).catch(() => {}); }
   setInterval(ripframePoll, 3000); ripframePoll();
-  // ---- solo camera (overlay/cams.json from obs/watchdog.py): one window spans the stage, the dead one is hidden
-  function camsPoll() { fetch('cams.json?' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(f => { const dead = f && f.dead; const wh = document.getElementById('win-hot'), wc = document.getElementById('win-cool');
-    const deadWin = dead === 'hot' ? wh : dead === 'cool' ? wc : null; [wh, wc].forEach(w => { w.style.display = ''; w.style.left = ''; w.style.width = ''; w.classList.remove('reel'); w.querySelector('.chip.side .label').textContent = w === wh ? 'Hot side' : 'Cool side'; w.querySelector('.chip.ir').style.display = ''; });
-    if (deadWin) { deadWin.classList.add('reel'); deadWin.querySelector('.chip.side .label').textContent = f.reel ? 'Highlight reel · her on the move' : 'Camera resting'; deadWin.querySelector('.chip.ir').style.display = 'none'; }
+  // ---- stage layout (overlay/layout.json from obs/watchdog.py): a chip + frame per cell; hero left, grid right
+  function layoutPoll() { fetch('layout.json?' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(f => { if (!f || !f.cells) return;
+    document.getElementById('win-hot').style.display = 'none'; document.getElementById('win-cool').style.display = 'none';
+    let box = document.getElementById('cells'); if (!box) { box = document.createElement('div'); box.id = 'cells'; document.body.appendChild(box); }
+    box.innerHTML = f.cells.map(c => `<div class="cell ${c.key}${c.w < 900 ? ' small' : ''}" style="left:${c.x}px;top:${c.y}px;width:${c.w}px;height:${c.h}px">` +
+      (c.key === 'moving' ? `<div class="card"><b>SHE IS ON THE MOVE</b><span>the live cameras have her — the reel waits</span></div>` : c.key === 'soon' ? `<div class="card"><b>HOT SIDE CAMERA</b><span>temporarily unavailable due to python constriction · a new one is on the way</span></div>` : '') +
+      `<div class="chip side"><i></i><span class="label">${esc(c.label)}</span></div></div>`).join('');
     let tag = document.getElementById('cam-rest'); if (!tag) { tag = document.createElement('div'); tag.id = 'cam-rest'; document.body.appendChild(tag); }
-    tag.textContent = dead ? ('◆ ' + (dead === 'hot' ? 'HOT' : 'COOL') + ' SIDE CAM TEMPORARILY UNAVAILABLE DUE TO PYTHON CONSTRICTION') : ''; tag.style.display = dead ? '' : 'none'; }).catch(() => {}); }
-  setInterval(camsPoll, 5000); camsPoll();
+    const dead = (f.dead || []).filter(k => k === 'hot' || k === 'cool'); tag.textContent = dead.length ? ('◆ ' + dead.map(k => k.toUpperCase()).join(' + ') + ' SIDE CAM TEMPORARILY UNAVAILABLE DUE TO PYTHON CONSTRICTION') : ''; tag.style.display = dead.length ? '' : 'none'; }).catch(() => {}); }
+  setInterval(layoutPoll, 5000); layoutPoll();
   // ---- cameras destroyed (overlay/kills.json): the queen's trophy count, in the header
   function killsPoll() { fetch('kills.json?' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(k => { let el = document.getElementById('kills'); if (!el) { el = document.createElement('div'); el.id = 'kills'; document.body.appendChild(el); }
     const n = (k && k.count) || 0; el.innerHTML = '<span class="k">☠ CAMERAS DESTROYED</span><span class="n">' + n + '</span>'; el.style.display = n ? '' : 'none'; }).catch(() => {}); }

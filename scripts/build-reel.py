@@ -19,7 +19,31 @@ for s in slugs:
     have.append(f)
 for old in glob.glob(f"{D}/src/*.mp4"):                         # keep the folder to the reel's size
     if old not in have and time.time() - os.path.getmtime(old) > 7 * 86400: os.remove(old)
-if not have: print("nothing downloaded"); sys.exit(1)
+# ---- only her: a still from the middle of each clip goes to the vision model — snake visible and no person, or the clip is out (cached per clip)
+import json
+JF = f"{D}/judged.json"
+try: judged = json.load(open(JF))
+except Exception: judged = {}
+CLI = "/opt/homebrew/bin/claude"
+def keep(f):
+    k = os.path.basename(f)
+    if k in judged: return judged[k]
+    still = f"{D}/src/{k}.jpg"
+    subprocess.run(["/opt/homebrew/bin/ffmpeg", "-loglevel", "error", "-y", "-ss", "12", "-i", f, "-frames:v", "1", "-vf", "crop=iw*0.40:ih*0.40:iw*0.55:ih*0.31,scale=960:-1", "-q:v", "4", still], capture_output=True)
+    ok = None
+    if os.path.exists(still) and os.path.exists(CLI):
+        try:
+            r = subprocess.run([CLI, "-p", f"Use the Read tool on exactly this file and nothing else: {still}. Reply ONLY with JSON: {{\"snake\": true/false (any part of a snake visible), \"person\": true/false (any human, hand, arm, face or phone visible)}}.",
+                                "--model", "sonnet", "--max-turns", "3", "--tools", "Read", "--no-session-persistence", "--output-format", "json", "--system-prompt", "You describe images factually and reply only with JSON."],
+                               capture_output=True, text=True, timeout=90, env={**os.environ, "DISABLE_AUTOUPDATER": "1", "DISABLE_TELEMETRY": "1"}, cwd=f"{D}/src")
+            txt = json.loads(r.stdout).get("result", "") if r.stdout.strip().startswith("{") else r.stdout
+            m = re.search(r"\{.*\}", txt or "", re.S); j = json.loads(m.group(0)) if m else {}
+            ok = bool(j.get("snake")) and not j.get("person")
+        except Exception as e: print("judge error", k, str(e)[:60])
+    if ok is None: return False                                                  # could not judge: leave it out
+    judged[k] = ok; json.dump(judged, open(JF, "w")); print("judged", k, "keep" if ok else "OUT (no snake or a person)"); return ok
+have = [f for f in have if keep(f)]
+if not have: print("nothing left after the snake-only filter"); sys.exit(1)
 lst = f"{D}/list.txt"; open(lst, "w").write("".join(f"file '{f}'\n" for f in have))
 tmp = f"{D}/reel.tmp.mp4"; out = f"{ROOT}/overlay/reel.mp4"
 subprocess.run(["/opt/homebrew/bin/ffmpeg", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", lst, "-an", "-vf", "crop=iw*0.40:ih*0.40:iw*0.55:ih*0.31,scale=960:540,fps=30",

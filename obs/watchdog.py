@@ -42,29 +42,47 @@ def obs(requests):
 # ---- solo camera: a dead relay (she constricted the hot cam, 2026-09-04) must not leave a black half on the stream
 import subprocess
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); FFPROBE = ENV.get("CLEOBOT_FFMPEG", "/opt/homebrew/bin/ffmpeg").replace("ffmpeg", "ffprobe")
-CAMS = {"hot": ("Hot Side (Relay)", "hotcam", 0), "cool": ("Cool Side (Relay)", "coolcam", 960)}
-_dead = {"hot": 0, "cool": 0}; _solo = {"mode": None}
+CAMS = {"hot": ("Hot Side (Relay)", "hotcam"), "cool": ("Cool Side (Relay)", "coolcam"), "hothide": ("Hot Hide (OG)", "hothide"), "coldhide": ("Cold Hide (OG)", "coldhide")}
+LABELS = {"hot": "Hot side", "cool": "Cool side", "hothide": "Hot hide", "coldhide": "Cold hide", "reel": "Highlight reel · her on the move", "soon": "Hot side · camera returning"}
+_dead = {k: 3 for k in CAMS}; _layout = {"key": None}          # every camera starts "dead" until a probe succeeds: no black cell at startup
 def cam_alive(path):
     try: return subprocess.run([FFPROBE, "-v", "error", "-rtsp_transport", "tcp", "-select_streams", "v", "-show_entries", "stream=width", "-of", "csv=p=0", f"rtsp://127.0.0.1:8555/{path}"], capture_output=True, timeout=12).returncode == 0
     except Exception: return False
-def solo_layout(dead):
-    """dead: 'hot' | 'cool' | None. The living camera fills the 1920x540 stage (its own middle band, cropped), the dead one is hidden; overlay/cams.json tells the overlay."""
+def she_settled():
+    """No cool-side motion for 10 min (the sensor hub) = nothing going on: the reel may play."""
+    try:
+        m = json.load(urllib.request.urlopen("http://127.0.0.1:5090/state.json", timeout=4)).get("motion", {}).get("cool", {})
+        return not m.get("moving") and time.time() - m.get("lastMove", 0) > 600
+    except Exception: return True
+def plan(alive, settled):
+    """Which source goes in which cell. Stage = 1920x540 at y=270. Hero (960x540) left; 2x2 grid (480x270) right.
+    Both pan cams alive: the classic split, hides underneath the... no — hides always get the grid; the hero is the cool V4 (or the hot side when the V4 is gone)."""
+    cells = []
+    hero = "cool" if alive["cool"] else "hot" if alive["hot"] else None
+    if hero: cells.append((hero, 0, 270, 960, 540))
+    grid = [(960, 270), (1440, 270), (960, 540), (1440, 540)]; slots = []
+    for k in ("hot", "cool"):
+        if k != hero and alive[k]: slots.append(k)
+    for k in ("hothide", "coldhide"):
+        if alive[k]: slots.append(k)
+    if not alive["hot"]: slots.append("reel" if settled and os.path.exists(f"{ROOT}/overlay/reel.mp4") else "moving")
+    if not alive["hot"] and len(slots) < 4: slots.append("soon")
+    for k, (x, y) in zip(slots[:4], grid): cells.append((k, x, y, 480, 270))
+    return cells
+def apply_layout(cells, alive):
     scene = obs([("GetCurrentProgramScene", None)])[0]["currentProgramSceneName"]; items = {i["sourceName"]: i["sceneItemId"] for i in obs([("GetSceneItemList", {"sceneName": scene})])[0]["sceneItems"]}
-    reqs = []
-    for key, (src, _, x) in CAMS.items():
+    placed = {k: (x, y, w, h) for k, x, y, w, h in cells}; reqs = []
+    for key, src in list(((k, v[0]) for k, v in CAMS.items())) + [("reel", "Highlights")]:
         iid = items.get(src)
         if not iid: continue
-        if dead == key: reqs.append(("SetSceneItemEnabled", {"sceneName": scene, "sceneItemId": iid, "sceneItemEnabled": False}))
-        else:
-            reqs += [("SetSceneItemEnabled", {"sceneName": scene, "sceneItemId": iid, "sceneItemEnabled": True}),
-                     ("SetSceneItemTransform", {"sceneName": scene, "sceneItemId": iid, "sceneItemTransform": {"positionX": x, "positionY": 270, "boundsType": "OBS_BOUNDS_SCALE_INNER", "boundsWidth": 960, "boundsHeight": 540, "boundsAlignment": 0, "cropTop": 0, "cropBottom": 0, "cropLeft": 0, "cropRight": 0}})]
-    reel = items.get("Highlights")                                                     # the dead camera's slot plays her highlight reel (overlay/reel.mp4)
-    if reel:
-        x = CAMS[dead][2] if dead else 0
-        reqs += [("SetSceneItemIndex", {"sceneName": scene, "sceneItemId": reel, "sceneItemIndex": 0}),                 # under the overlay, so its label chip shows
-                 ("SetSceneItemEnabled", {"sceneName": scene, "sceneItemId": reel, "sceneItemEnabled": bool(dead)}),
-                 ("SetSceneItemTransform", {"sceneName": scene, "sceneItemId": reel, "sceneItemTransform": {"positionX": x, "positionY": 270, "boundsType": "OBS_BOUNDS_SCALE_INNER", "boundsWidth": 960, "boundsHeight": 540, "boundsAlignment": 0}})]
-    obs(reqs); json.dump({"dead": dead, "reel": bool(reel and dead and os.path.exists(f"{ROOT}/overlay/reel.mp4")), "ts": int(time.time())}, open(f"{ROOT}/overlay/cams.json", "w"))
+        if key in placed:
+            x, y, w, h = placed[key]
+            reqs += [("SetSceneItemIndex", {"sceneName": scene, "sceneItemId": iid, "sceneItemIndex": 0}), ("SetSceneItemEnabled", {"sceneName": scene, "sceneItemId": iid, "sceneItemEnabled": True}),
+                     ("SetSceneItemTransform", {"sceneName": scene, "sceneItemId": iid, "sceneItemTransform": {"positionX": x, "positionY": y, "boundsType": "OBS_BOUNDS_SCALE_INNER", "boundsWidth": w, "boundsHeight": h, "boundsAlignment": 0, "cropTop": 0, "cropBottom": 0, "cropLeft": 0, "cropRight": 0}})]
+        else: reqs.append(("SetSceneItemEnabled", {"sceneName": scene, "sceneItemId": iid, "sceneItemEnabled": False}))
+    obs(reqs)
+    json.dump({"cells": [{"key": k, "label": LABELS.get(k, k), "x": x, "y": y, "w": w, "h": h, "live": k in CAMS} for k, x, y, w, h in cells], "dead": [k for k in CAMS if not alive[k]], "ts": int(time.time())}, open(f"{ROOT}/overlay/layout.json", "w"))
+    json.dump({"dead": "hot" if not alive["hot"] else None, "reel": any(k == "reel" for k, *_ in cells), "ts": int(time.time())}, open(f"{ROOT}/overlay/cams.json", "w"))   # kept for the bot + old overlay code
 _reel = {"building": False}
 def reel_refresh():
     """Rebuild overlay/reel.mp4 from her newest movement clips (scripts/build-reel.py) every 2 h while a camera is dead, then make OBS reopen it."""
@@ -73,22 +91,22 @@ def reel_refresh():
     _reel["building"] = True
     def run():
         try:
-            r = subprocess.run([sys.executable, f"{ROOT}/scripts/build-reel.py", "12"], capture_output=True, text=True, timeout=1200); log("reel:", (r.stdout or r.stderr).strip()[-80:])
+            r = subprocess.run([sys.executable, f"{ROOT}/scripts/build-reel.py", "12"], capture_output=True, text=True, timeout=2400); log("reel:", (r.stdout or r.stderr).strip()[-80:])
             obs([("SetInputSettings", {"inputName": "Highlights", "inputSettings": {"local_file": f + ".none"}}), ("SetInputSettings", {"inputName": "Highlights", "inputSettings": {"local_file": f}})])   # reopen the new file
         except Exception as e: log("reel error:", e)
         finally: _reel["building"] = False
     import threading; threading.Thread(target=run, daemon=True).start()
 def solo_tick():
-    for key, (_, path, _) in CAMS.items(): _dead[key] = 0 if cam_alive(path) else _dead[key] + 1
-    dead = next((k for k in ("hot", "cool") if _dead[k] >= 3), None)
-    if dead == "hot" and _dead["cool"] >= 3: dead = None                                   # both gone: leave the layout alone
-    if dead: reel_refresh()
-    if dead != _solo["mode"]:
-        solo_layout(dead); _solo["mode"] = dead; log(f"cameras: {dead + ' camera dead, ' + ('cool' if dead == 'hot' else 'hot') + ' side goes solo' if dead else 'both back, split view restored'}")
+    for key, (_, path) in CAMS.items(): _dead[key] = 0 if cam_alive(path) else _dead[key] + 1
+    alive = {k: _dead[k] < 3 for k in CAMS}
+    if not alive["hot"]: reel_refresh()
+    cells = plan(alive, she_settled()); key = json.dumps(cells)
+    if key != _layout["key"]:
+        apply_layout(cells, alive); _layout["key"] = key; log("layout: " + ", ".join(f"{k}@{x},{y}" for k, x, y, *_ in cells) + " | dead: " + ",".join(k for k in CAMS if not alive[k]))
 strikes = 0; log(f"watchdog for #{CHANNEL}, restart after {STRIKES} offline minutes")
 while True:
     try: solo_tick()
-    except Exception as e: log("solo check error:", e)
+    except Exception as e: log("layout check error:", e)
     try:
         st = obs([("GetStreamStatus", None)])[0]; active = st and st.get("outputActive")
         live = twitch_live() if active else None
