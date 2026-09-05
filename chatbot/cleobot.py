@@ -427,15 +427,16 @@ def showdown_plan():
     fresh_head = time.time() - dr.get("ts", 0) < 180 and dr.get("where") == H                      # only lean the zoom toward her head when that look is recent and from this camera
     ox, oy = {"left": (-0.5, 0), "right": (0.5, 0), "up": (0, -0.5), "down": (0, 0.5)}.get(str(dr.get("head") or ""), (0, 0)) if fresh_head else (0, 0)
     others = [c["key"] for c in cells if c.get("live") and c["key"] != H][:2]
-    shots = [{"t": 0.0, "cam": H, "z": 1.0, "push": 1.2, "dur": 4.4},               # the wide, and the slow push
-             {"t": 4.8, "cam": H, "z": 2.0, "ox": ox, "oy": oy},                          # her eyes
-             {"t": 7.2, "cam": H, "z": 1.3},
-             {"t": 8.6, "cam": H, "z": 2.2, "ox": ox * 0.8, "oy": oy - 0.15}]
-    t = 10.0; gaps = [0.6, 0.5, 0.42, 0.36, 0.3, 0.26, 0.22, 0.2, 0.18, 0.16, 0.15, 0.14]
+    shots = [{"t": 0.0, "cam": H, "z": 1.0, "push": 1.22, "dur": 6.0},               # the wide, a long slow push
+             {"t": 6.4, "cam": H, "z": 2.0, "ox": ox, "oy": oy},                          # her eyes
+             {"t": 9.4, "cam": H, "z": 1.3},
+             {"t": 11.4, "cam": H, "z": 2.2, "ox": ox * 0.8, "oy": oy - 0.15},
+             {"t": 13.9, "cam": H, "z": 1.15, "push": 1.4, "dur": 2.6}]                   # back out, and in again
+    t = 16.8; gaps = [0.7, 0.6, 0.5, 0.44, 0.38, 0.32, 0.28, 0.24, 0.21, 0.19, 0.17, 0.15, 0.14, 0.13]
     ring = ([{"cam": H, "z": 1.9, "ox": ox, "oy": oy}] + [{"cam": o, "z": 1.7} for o in others]) or [{"cam": H, "z": 1.9}]
     if len(ring) == 1: ring = [{"cam": H, "z": 2.0, "ox": ox, "oy": oy}, {"cam": H, "z": 1.4}, {"cam": H, "z": 2.2, "ox": -ox, "oy": oy}]
     for k, g in enumerate(gaps): shots.append({"t": round(t, 2), **ring[k % len(ring)]}); t += g     # the spin
-    shots.append({"t": round(t + 0.2, 2), "cam": H, "z": 1.0, "hold": 4.0})                       # the crack, the wide, the title
+    shots.append({"t": round(t + 0.25, 2), "cam": H, "z": 1.0, "hold": 6.0})                      # the crack, the wide, the title
     return shots
 def showdown(bot=None, why="", say=True):
     """The spaghetti-western moment: letterbox, sun-baked grade and grain on the stage, a title card, an original whistle-and-twang sting.
@@ -1687,9 +1688,9 @@ def tarot(user, text, v=None, recent=(), bot=None):
     if reading: save(reading); threading.Thread(target=speak, args=(reading, "tarot"), daemon=True).start()
     names = " · ".join(f"{c['pos']}: {c['name']}{' ⟲' if c['reversed'] else ''}" for c in spread)
     _tarot.setdefault("readings", {})[user] = {"spread": desc, "reading": reading or "", "q": q, "ts": now}     # for follow-up questions
-    invite = random.choice([f"@{user} ask me about any card — 'what does the {spread[1]['name']} mean?', 'why reversed?' — or tell me what's really going on and I'll read deeper.",
-                            f"@{user} that is the spread; now the conversation. Which card struck you? Ask and I will open it.",
-                            f"@{user} questions are welcome — say the card's name and I'll explain it, or ask what to do about it."])
+    invite = random.choice([f"ask me about any card — 'what does the {spread[1]['name']} mean?', 'why reversed?' — or tell me what's really going on and I'll read deeper.",
+                            f"that is the spread; now the conversation. Which card struck you? Ask and I will open it.",
+                            f"questions are welcome — say the card's name and I'll explain it, or ask what to do about it."])
     if bot is not None:                                                             # if they go quiet, the Oracle leans in once
         def nudge():
             try:
@@ -2517,6 +2518,9 @@ class Bot:
             reply = random.choice(GIVEAWAY_RULES); path = "giveaway-rule"
         elif SALE_RX.search(t) and POKE.search(t):                            # buying/selling -> just for fun
             reply = random.choice(NOT_FOR_SALE) + (NO_PROMISE if re.search(r"\b(worth|value|which card|what card)\b", low) else ""); path = "not-for-sale"
+        elif TAROT_RX.search(t) and (_tarot.get("readings") or {}).get(user) and time.time() - _tarot["readings"][user]["ts"] < 1800 and not re.search(r"\b(another|again|new|second|more cards|redo|one more)\b", low):   # they mention tarot after their reading: talk about it, do not redraw
+            reply = tarot_followup(user, t, v=v, recent=self.recent); path = "tarot-followup"
+            if not reply: reply = f"Your cards are still on the table, {user}. Ask me about any of them, or say 'another reading' when the deck has rested."
         elif getattr(self, "tarot_pending", {}).get(user) and time.time() - self.tarot_pending[user]["ts"] < 240 and not TAROT_RX.search(t):   # their answer to "what should the cards speak to?"
             focus = self.tarot_pending.pop(user)["text"]; path = "tarot"
             parts = tarot(user, f"{t} (they asked for a reading: {focus})", v=v, recent=self.recent, bot=self)

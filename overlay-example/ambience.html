@@ -268,22 +268,31 @@ function bigdrum(L, out, s, peak) { const o = ctx.createOscillator(), g = ctx.cr
   const n = ctx.createBufferSource(); n.buffer = noiseBuffer(0.25, 'white'); const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 500; const ng = ctx.createGain(); ng.gain.setValueAtTime(peak * 0.7, s); ng.gain.exponentialRampToValueAtTime(0.0004, s + 0.25); n.connect(lp); lp.connect(ng); ng.connect(out); n.start(s); n.stop(s + 0.3); }
 function rattle(L, out, s, dur, peak) { for (let t = 0; t < dur; t += 0.045 + Math.random() * 0.02) { const n = ctx.createBufferSource(); n.buffer = noiseBuffer(0.03, 'white'); const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 5000;
   const g = ctx.createGain(); const p = peak * (0.5 + 0.5 * Math.sin(t / dur * Math.PI)); g.gain.setValueAtTime(p, s + t); g.gain.exponentialRampToValueAtTime(0.0003, s + t + 0.03); n.connect(hp); hp.connect(g); g.connect(out); n.start(s + t); n.stop(s + t + 0.04); } }
+function brass(L, out, f, s, dur, peak) { const o = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain(), lp = ctx.createBiquadFilter(), vib = ctx.createOscillator(), vg = ctx.createGain();
+  o.type = 'sawtooth'; o2.type = 'sawtooth'; o.frequency.value = f; o2.frequency.value = f * 1.004; lp.type = 'lowpass'; lp.frequency.setValueAtTime(f * 2, s); lp.frequency.exponentialRampToValueAtTime(f * 6, s + 0.25); lp.frequency.exponentialRampToValueAtTime(f * 3, s + dur);
+  vib.frequency.value = 5; vg.gain.setValueAtTime(0, s); vg.gain.linearRampToValueAtTime(f * 0.012, s + 0.5); vib.connect(vg); vg.connect(o.frequency); vib.connect(vg); 
+  g.gain.setValueAtTime(0, s); g.gain.linearRampToValueAtTime(peak, s + 0.08); g.gain.setValueAtTime(peak, s + dur - 0.2); g.gain.linearRampToValueAtTime(0, s + dur); o.connect(lp); o2.connect(lp); lp.connect(g); g.connect(out); o.start(s); o2.start(s); vib.start(s); o.stop(s + dur + 0.05); o2.stop(s + dur + 0.05); vib.stop(s + dur + 0.05); }
+function choir(L, out, f, s, dur, peak) { const g = ctx.createGain(), lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = f * 4; g.gain.setValueAtTime(0, s); g.gain.linearRampToValueAtTime(peak, s + 1.6); g.gain.setValueAtTime(peak, s + dur - 1.5); g.gain.linearRampToValueAtTime(0, s + dur);
+  for (const r of [1, 1.003, 0.997, 1.5, 1.498, 2]) { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f * r; const og = ctx.createGain(); og.gain.value = r >= 2 ? 0.12 : r > 1.2 ? 0.25 : 0.3; o.connect(og); og.connect(lp); o.start(s); o.stop(s + dur + 0.1); } lp.connect(g); g.connect(out); }
 function showdown(f) {
-  // Leone timeline: whistle over the wide (0-4.5), the wah on the first close-up, sparse hits on the early cuts, the rattle and the hits
-  // accelerating with the cross-cuts, a gunshot-like crack + the low twang under the title. All original material.
+  // the Leone timeline, longer: the whistle call over the long push, the howl at the eyes, a low choir swelling under the middle,
+  // a gallop and the rattle accelerating through the spin, then the crack, the brass and the twang under the title. Original material only.
   window._oracleAt = now(); const t = now() + 0.2, L = layer('oracle'); L.gain.gain.setValueAtTime(1, t);
-  const W = place(L, 0.1, 0.9), C = place(L, -0.5, 1.3), G = place(L, 0.4, 1.0), R = place(L, -0.7, 0.8), D = place(L, 0, 1.6);
+  const W = place(L, 0.1, 0.9), C = place(L, -0.5, 1.3), G = place(L, 0.4, 1.0), R = place(L, -0.7, 0.8), D = place(L, 0, 1.6), B = place(L, 0.2, 1.2), K = place(L, 0, 2.0);
   const d = 146.83, sc = [d * 2, d * 2 * 6 / 5, d * 2 * 4 / 3, d * 2 * 3 / 2, d * 2 * 9 / 5, d * 4];
-  const cuts = (f && f.cuts) || [4.6, 7, 8.8, 10.2, 11.2, 12, 12.6, 13.1, 13.5, 13.8, 14.3], tAt = (f && f.title_at) || 14.3;
-  let s = t + 0.4; for (const [i, len] of [[5, 0.6], [3, 0.55], [2, 0.55], [0, 1.9]]) { whistle(L, W, sc[i], s, len, 0.09); s += len + 0.06; }     // the call over the wide
-  koto(L, G, d / 2, t + 0.2, 4, 0.12);
-  cuts.forEach((c, k) => { const peak = 0.12 + 0.02 * k; bigdrum(L, D, t + c, Math.min(0.3, peak)); whoosh(L, W, t + c - 0.18, 0.32, 0.05 + 0.006 * k);   // the cut: a whoosh into a deep hit
-    if (k === 0) { howl(L, C, d * 2, t + c + 0.1, 0.6, 0.15); howl(L, C, d * 2, t + c + 0.8, 0.6, 0.15); howl(L, C, d * 2 * 6 / 5, t + c + 1.5, 1.1, 0.16); }   // the eyes: the call, three times, the last one lower
-    if (k >= 3 && c < tAt) rattle(L, R, t + c, Math.max(0.25, (cuts[k + 1] || tAt) - c), 0.03 + 0.01 * k); });
-  // the climax: a crack (short bright noise), the low twang, the answer phrase under the title
-  const n = ctx.createBufferSource(); n.buffer = noiseBuffer(0.12, 'white'); const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1800; const ng = ctx.createGain(); ng.gain.setValueAtTime(0.35, t + tAt); ng.gain.exponentialRampToValueAtTime(0.0003, t + tAt + 0.12); n.connect(hp); hp.connect(ng); ng.connect(D); n.start(t + tAt); n.stop(t + tAt + 0.15);
-  bigdrum(L, D, t + tAt + 0.02, 0.36); koto(L, G, d / 2, t + tAt + 0.05, 6, 0.2); koto(L, G, d / 2 * 3 / 2, t + tAt + 0.08, 5, 0.11); koto(L, G, d / 4, t + tAt + 0.1, 7, 0.14);
-  let s2 = t + tAt + 0.9; for (const [i, len] of [[3, 0.5], [2, 0.5], [1, 0.5], [0, 2.2]]) { whistle(L, W, sc[i] / 2, s2, len, 0.085); s2 += len + 0.06; }
+  const cuts = (f && f.cuts) || [6.4, 9.4, 11.4, 13.9, 16.8], tAt = (f && f.title_at) || 22, spin = cuts.filter(c => c > 16);
+  let s = t + 0.6; for (const [i, len] of [[5, 0.7], [3, 0.6], [2, 0.6], [0, 2.2]]) { whistle(L, W, sc[i], s, len, 0.09); s += len + 0.08; }       // the call over the wide
+  koto(L, G, d / 2, t + 0.3, 5, 0.12); koto(L, G, d / 2 * 3 / 2, t + 2.6, 4, 0.07);
+  choir(L, K, d / 2, t + 8, tAt - 8 + 1.5, 0.05); choir(L, K, d / 2 * 6 / 5, t + 12, tAt - 12 + 1.5, 0.035);                                 // the low choir, swelling
+  let s2 = t + 9.6; for (const [i, len] of [[3, 0.55], [2, 0.55], [1, 0.55], [0, 1.9]]) { whistle(L, W, sc[i] / 2, s2, len, 0.08); s2 += len + 0.08; }   // the answer, lower
+  cuts.forEach((c, k) => { const late = c > 16; const peak = late ? 0.14 + 0.012 * k : 0.1; bigdrum(L, D, t + c, Math.min(0.3, peak)); whoosh(L, W, t + c - 0.18, 0.3, late ? 0.045 + 0.005 * k : 0.035);
+    if (k === 0) { howl(L, C, d * 2, t + c + 0.1, 0.6, 0.15); howl(L, C, d * 2, t + c + 0.8, 0.6, 0.15); howl(L, C, d * 2 * 6 / 5, t + c + 1.5, 1.1, 0.16); }   // the eyes: the call, three times
+    if (k === 2) { howl(L, C, d * 2 * 4 / 3, t + c + 0.2, 0.5, 0.13); howl(L, C, d * 2, t + c + 0.8, 0.9, 0.14); } });
+  if (spin.length) { rattle(L, R, t + spin[0], tAt - spin[0], 0.05); for (let g = spin[0]; g < tAt; g += 0.36) bigdrum(L, D, t + g, 0.07); }        // the gallop and the rattle under the spin
+  const n = ctx.createBufferSource(); n.buffer = noiseBuffer(0.14, 'white'); const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1600; const ng = ctx.createGain(); ng.gain.setValueAtTime(0.4, t + tAt); ng.gain.exponentialRampToValueAtTime(0.0003, t + tAt + 0.14); n.connect(hp); hp.connect(ng); ng.connect(D); n.start(t + tAt); n.stop(t + tAt + 0.16);
+  bigdrum(L, D, t + tAt + 0.02, 0.38); koto(L, G, d / 2, t + tAt + 0.05, 7, 0.2); koto(L, G, d / 4, t + tAt + 0.1, 8, 0.14);
+  brass(L, B, d * 2, t + tAt + 0.6, 0.5, 0.11); brass(L, B, d * 2 * 4 / 3, t + tAt + 1.15, 0.5, 0.11); brass(L, B, d * 2 * 3 / 2, t + tAt + 1.7, 2.4, 0.13); brass(L, B, d * 3 / 2, t + tAt + 1.7, 2.4, 0.07);   // the fanfare under the title
+  let s3 = t + tAt + 2.4; for (const [i, len] of [[3, 0.5], [2, 0.5], [1, 0.5], [0, 2.4]]) { whistle(L, W, sc[i] / 2, s3, len, 0.08); s3 += len + 0.06; }
   say('showdown ' + (f && f.title || ''));
 }
 window.showdown = showdown;
