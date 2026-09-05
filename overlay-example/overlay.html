@@ -249,6 +249,8 @@
   #cells .cell .here{position:absolute;right:14px;top:12px;display:flex;align-items:center;gap:8px;padding:5px 12px;border-radius:999px;background:rgba(10,6,16,.9);border:1px solid #f2d27a;font-family:'Cinzel',serif;font-size:12px;letter-spacing:.22em;color:#f2d27a;box-shadow:0 0 18px rgba(242,210,122,.35)}
   #cells .cell .here i{width:8px;height:8px;border-radius:50%;background:#f2d27a;box-shadow:0 0 10px #f2d27a;animation:pulse 1.6s ease-out infinite}
   #cells .cell.small .here{font-size:10px;padding:3px 9px;right:10px;top:10px}
+  #cells .cell.phone .plate b{color:#e0483c;text-shadow:0 0 8px #e0483c;animation:pulse 1.8s ease-out infinite}
+  body.compact #ripframe{display:none}
   #cells .cell.reel{box-shadow:0 0 0 2px #c9a24d,0 0 0 8px rgba(8,5,12,.92),0 0 0 9px rgba(217,182,91,.35),0 22px 50px rgba(0,0,0,.75);z-index:4}
   #cells .cell.reel:before{content:"";position:absolute;inset:0;border-radius:12px;background:repeating-linear-gradient(90deg,rgba(0,0,0,0) 0 22px,rgba(0,0,0,.55) 22px 30px);height:10px;top:-12px;opacity:.9}
   #cells .cell .card{position:absolute;inset:0;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:24px;text-align:center;background:radial-gradient(ellipse at 50% 40%,#2a1730,#0b0710 75%)}
@@ -677,7 +679,7 @@
   function layoutPoll() { fetch('layout.json?' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(f => { if (!f || !f.cells) return; document.body.classList.toggle('compact', !!f.compact); ST.top = f.compact ? 180 : 270; ST.h = f.compact ? 720 : 540;
     document.getElementById('win-hot').style.display = 'none'; document.getElementById('win-cool').style.display = 'none';
     let box = document.getElementById('cells'); if (!box) { box = document.createElement('div'); box.id = 'cells'; document.body.appendChild(box); }
-    const ICON = { hot: '🔥', cool: '❄', hothide: '⌂', coldhide: '⌂', reel: '▶', hothide_off: '⌂', coldhide_off: '⌂' };
+    const ICON = { hot: '🔥', cool: '❄', hothide: '⌂', coldhide: '⌂', reel: '▶', hothide_off: '⌂', coldhide_off: '⌂', phone: '●' };
     box.innerHTML = f.cells.map(c => `<div class="cell ${c.key}${c.w < 900 ? ' small' : ''}" style="left:${c.x}px;top:${c.y}px;width:${c.w}px;height:${c.h}px">` +
       (c.key.endsWith('_off') ? `<div class="card"><b>${c.key.startsWith('hot') ? 'HOT' : 'COLD'} HIDE</b><span>camera reconnecting…</span></div>` : '') +
       `<div class="plate"><b>${ICON[c.key] || '◆'}</b>${esc(c.label)}</div>` + (c.here ? `<div class="here"><i></i>SHE'S HERE</div>` : '') + `</div>`).join('');

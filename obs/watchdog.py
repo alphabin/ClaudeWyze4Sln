@@ -43,7 +43,7 @@ def obs(requests):
 import subprocess
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); FFPROBE = ENV.get("CLEOBOT_FFMPEG", "/opt/homebrew/bin/ffmpeg").replace("ffmpeg", "ffprobe")
 CAMS = {"hot": ("Hot Side (Relay)", "hotcam"), "cool": ("Cool Side (Relay)", "coolcam"), "hothide": ("Hot Hide (OG)", "hothide"), "coldhide": ("Cold Hide (OG)", "coldhide")}
-LABELS = {"hot": "Hot side", "cool": "Cool side", "hothide": "Hot hide", "coldhide": "Cold hide", "hothide_off": "Hot hide · reconnecting", "coldhide_off": "Cold hide · reconnecting", "reel": "Highlight reel · her on the move", "soon": "Hot side · camera returning"}
+LABELS = {"hot": "Hot side", "cool": "Cool side", "hothide": "Hot hide", "coldhide": "Cold hide", "hothide_off": "Hot hide · reconnecting", "coldhide_off": "Cold hide · reconnecting", "reel": "Highlight reel · her on the move", "soon": "Hot side · camera returning", "phone": "Phone cam · handheld · live"}
 _dead = {k: 3 for k in CAMS}; _layout = {"key": None}          # every camera starts "dead" until a probe succeeds: no black cell at startup
 def cam_alive(path):
     try: return subprocess.run([FFPROBE, "-v", "error", "-rtsp_transport", "tcp", "-select_streams", "v", "-show_entries", "stream=width", "-of", "csv=p=0", f"rtsp://127.0.0.1:8555/{path}"], capture_output=True, timeout=12).returncode == 0
@@ -61,12 +61,23 @@ def director():
         d = json.load(open(f"{ROOT}/overlay/director.json"))
         return d if time.time() - d.get("ts", 0) < 720 else {}
     except Exception: return {}
+def phone_live():
+    """overlay/ripcam.json from the bot: the phone is publishing and set to 'phone live on stream' (eagle)."""
+    try:
+        r = json.load(open(f"{ROOT}/overlay/ripcam.json")); return r if r.get("live") and r.get("mode") == "eagle" and time.time() - r.get("ts", 0) < 180 else None
+    except Exception: return None
 def plan(alive, settled):
     """Stage 1920x720 at y=180 with 16 px gutters: hero left (1223x688), a right column of two 597x336 windows (three 597x218 strips when both
     pan cams are up). DIRECTOR MODE: the camera that has her becomes the hero; the reel pops up over the hero's lower right when she is settled."""
-    cells = []; where = director().get("where")
-    hero = where if where in alive and alive.get(where) else "cool" if alive["cool"] else "hot" if alive["hot"] else None
-    if hero: cells.append((hero, *G["hero"]))
+    cells = []; where = director().get("where"); ph = phone_live()
+    if ph:                                                                             # the handheld phone is the hero: it goes where no fixed camera can
+        x, y, w, h = G["hero"]
+        if ph.get("portrait"): pw = int(h * 9 / 16); cells.append(("phone", x + (w - pw) // 2, y, pw, h))
+        else: cells.append(("phone", x, y, w, h))
+        hero = None
+    else:
+        hero = where if where in alive and alive.get(where) else "cool" if alive["cool"] else "hot" if alive["hot"] else None
+        if hero: cells.append((hero, *G["hero"]))
     col = [k for k in ("cool", "hot", "hothide", "coldhide") if k != hero and alive[k]]
     for k in ("hothide", "coldhide"):                                                   # a hide cam that dropped out keeps its slot as a card, never a black hole
         if not alive[k] and len(col) < 2: col.append(k + "_off")
@@ -86,14 +97,14 @@ def apply_layout(cells, alive):
     scene = obs([("GetCurrentProgramScene", None)])[0]["currentProgramSceneName"]; lst = obs([("GetSceneItemList", {"sceneName": scene})])[0]["sceneItems"]
     items = {i["sourceName"]: i["sceneItemId"] for i in lst}; sizes = {i["sourceName"]: (i["sceneItemTransform"].get("sourceWidth"), i["sceneItemTransform"].get("sourceHeight")) for i in lst}
     placed = {k: (x, y, w, h) for k, x, y, w, h in cells}; reqs = []
-    for key, src in list(((k, v[0]) for k, v in CAMS.items())) + [("reel", "Highlights")]:
+    for key, src in list(((k, v[0]) for k, v in CAMS.items())) + [("reel", "Highlights"), ("phone", "Rip Cam")]:
         iid = items.get(src)
         if not iid: continue
         if key in placed:
             x, y, w, h = placed[key]
             reqs += [("SetSceneItemIndex", {"sceneName": scene, "sceneItemId": iid, "sceneItemIndex": 0}), ("SetSceneItemEnabled", {"sceneName": scene, "sceneItemId": iid, "sceneItemEnabled": True}),
-                     ("SetSceneItemTransform", {"sceneName": scene, "sceneItemId": iid, "sceneItemTransform": {"positionX": x, "positionY": y, "boundsType": "OBS_BOUNDS_SCALE_INNER", "boundsWidth": w, "boundsHeight": h, "boundsAlignment": 0, **crop_for(w, h, *sizes.get(src, (0, 0)), osd=(key != "reel"))}})]
-        else: reqs.append(("SetSceneItemEnabled", {"sceneName": scene, "sceneItemId": iid, "sceneItemEnabled": False}))
+                     ("SetSceneItemTransform", {"sceneName": scene, "sceneItemId": iid, "sceneItemTransform": {"positionX": x, "positionY": y, "boundsType": "OBS_BOUNDS_SCALE_INNER", "boundsWidth": w, "boundsHeight": h, "boundsAlignment": 0, **crop_for(w, h, *sizes.get(src, (0, 0)), osd=(key not in ("reel", "phone")))}})]
+        elif key != "phone": reqs.append(("SetSceneItemEnabled", {"sceneName": scene, "sceneItemId": iid, "sceneItemEnabled": False}))   # the bot shows/hides the phone itself
     reel = items.get("Highlights")
     if reel and "reel" in placed: reqs.append(("SetSceneItemIndex", {"sceneName": scene, "sceneItemId": reel, "sceneItemIndex": len([k for k in placed if k != "reel"])}))   # above the cameras, under the overlay
     obs(reqs)
@@ -129,7 +140,7 @@ def solo_tick():
         if _dead[key] >= 3 and key != "hot": reload_player(key)          # the hot cam is physically dead (2026-09-04): do not thrash it
     alive = {k: _dead[k] < 3 for k in CAMS}
     if not alive["hot"]: reel_refresh()
-    cells = plan(alive, she_settled()); key = json.dumps(cells) + str(director().get("where"))
+    cells = plan(alive, she_settled()); key = json.dumps(cells) + str(director().get("where")) + str(bool(phone_live()))
     if key != _layout["key"]:
         apply_layout(cells, alive); _layout["key"] = key; log("layout: " + ", ".join(f"{k}@{x},{y}" for k, x, y, *_ in cells) + " | dead: " + ",".join(k for k in CAMS if not alive[k]))
 strikes = 0; log(f"watchdog for #{CHANNEL}, restart after {STRIKES} offline minutes")

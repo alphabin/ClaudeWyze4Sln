@@ -302,6 +302,7 @@ def ripcam_layout(mode):
         x, y, w, h = ripcam_box(mode); scene = obs_req("GetCurrentProgramScene")["currentProgramSceneName"]
         items = obs_req("GetSceneItemList", {"sceneName": scene})["sceneItems"]; iid = [i["sceneItemId"] for i in items if i["sourceName"] == "Rip Cam"]
         if iid: obs_req("SetSceneItemEnabled", {"sceneName": scene, "sceneItemId": iid[0], "sceneItemEnabled": mode != "table"})   # card table: the phone stays off screen, the snapped card is shown instead
+        if iid and os.path.exists(f"{ROOT}/overlay/layout.json"): return                        # the watchdog places it (compact stage: the phone becomes the hero)
         if iid: obs_req("SetSceneItemTransform", {"sceneName": scene, "sceneItemId": iid[0], "sceneItemTransform": {"positionX": x, "positionY": y, "boundsType": "OBS_BOUNDS_SCALE_INNER", "boundsWidth": w, "boundsHeight": h, "boundsAlignment": 0}})
     except Exception as e: log("ripcam layout error:", type(e).__name__, str(e)[:60])
 def ripcam_tick(rip_active, bot=None):
@@ -317,15 +318,15 @@ def ripcam_tick(rip_active, bot=None):
         bot._cmd_seen = cmd.get("ts"); log("rip cam: judge-now from the phone" + (" (snapshot)" if cmd.get("shot") else "")); bot.judge_shot = cmd.get("shot"); bot.judge_next = True
     if bot is not None and fresh and cmd.get("holo") is not None and not getattr(bot, "_cmd_seen", 0) == cmd.get("ts"):
         bot._cmd_seen = cmd.get("ts"); bot.fix_holo(bool(cmd.get("holo")))
-    if bot is not None:
+    want = cmd.get("mode") if time.time() - cmd.get("ts", 0) < 6 * 3600 and cmd.get("mode") in ("table", "eagle") else None   # the phone's switch wins
+    if bot is not None and want != "eagle":
         if (live or shot_queue_next()) and not getattr(bot, "rip_until", 0) > time.time():
             bot.rip_until = time.time() + 20 * 60; bot.rip_auto = True; threading.Thread(target=bot.rip_watch, daemon=True).start()
             bot.send("The card table is open. Show me what you pulled — hold it still and I will judge it. 👑"); rip_active = True
         elif not live and getattr(bot, "rip_auto", False) and getattr(bot, "rip_until", 0) > time.time():
             bot.rip_until = 0; bot.rip_auto = False; log("rip cam: phone stopped, table closed")
         elif live and getattr(bot, "rip_until", 0) > time.time(): bot.rip_until = max(bot.rip_until, time.time() + 20 * 60); rip_active = True   # keep the watch alive while the phone is up
-    want = cmd.get("mode") if time.time() - cmd.get("ts", 0) < 6 * 3600 and cmd.get("mode") in ("table", "eagle") else None   # the phone's switch wins
-    if bot is not None and want == "eagle" and getattr(bot, "rip_auto", False): bot.rip_until = 0; bot.rip_auto = False   # eagle eye = no judging
+    if bot is not None and want == "eagle" and getattr(bot, "rip_until", 0) > time.time(): bot.rip_until = 0; bot.rip_auto = False; log("rip cam: phone live on stream, table closed")   # eagle eye = no judging, ever
     if bot is not None and want == "table" and live and not getattr(bot, "rip_until", 0) > time.time(): bot.rip_until = time.time() + 20 * 60; bot.rip_auto = True; threading.Thread(target=bot.rip_watch, daemon=True).start()
     mode = (want or ("table" if rip_active else "eagle")) if live else None
     if live and not _ripcam["live"]: _ripcam["portrait"] = ripcam_orient()
