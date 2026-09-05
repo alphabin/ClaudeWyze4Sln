@@ -424,15 +424,16 @@ def showdown_plan():
         if m.get("moving") or time.time() - m.get("lastMove", 0) < 240: her = "cool"
     except Exception: pass
     H = her or next((c["key"] for c in cells if c.get("hero")), "cool")
-    ox, oy = {"left": (-0.6, 0), "right": (0.6, 0), "up": (0, -0.6), "down": (0, 0.6)}.get(str(dr.get("head") or ""), (0, 0))
+    fresh_head = time.time() - dr.get("ts", 0) < 180 and dr.get("where") == H                      # only lean the zoom toward her head when that look is recent and from this camera
+    ox, oy = {"left": (-0.5, 0), "right": (0.5, 0), "up": (0, -0.5), "down": (0, 0.5)}.get(str(dr.get("head") or ""), (0, 0)) if fresh_head else (0, 0)
     others = [c["key"] for c in cells if c.get("live") and c["key"] != H][:2]
     shots = [{"t": 0.0, "cam": H, "z": 1.0, "push": 1.2, "dur": 4.4},               # the wide, and the slow push
-             {"t": 4.8, "cam": H, "z": 2.5, "ox": ox, "oy": oy},                          # her eyes
-             {"t": 7.2, "cam": H, "z": 1.35},
-             {"t": 8.6, "cam": H, "z": 3.0, "ox": ox * 0.8, "oy": oy - 0.2}]
+             {"t": 4.8, "cam": H, "z": 2.0, "ox": ox, "oy": oy},                          # her eyes
+             {"t": 7.2, "cam": H, "z": 1.3},
+             {"t": 8.6, "cam": H, "z": 2.2, "ox": ox * 0.8, "oy": oy - 0.15}]
     t = 10.0; gaps = [0.6, 0.5, 0.42, 0.36, 0.3, 0.26, 0.22, 0.2, 0.18, 0.16, 0.15, 0.14]
-    ring = ([{"cam": H, "z": 3.0, "ox": ox, "oy": oy}] + [{"cam": o, "z": 2.3} for o in others]) or [{"cam": H, "z": 3.0}]
-    if len(ring) == 1: ring = [{"cam": H, "z": 3.2, "ox": ox, "oy": oy}, {"cam": H, "z": 1.6}, {"cam": H, "z": 3.6, "ox": -ox, "oy": oy}]
+    ring = ([{"cam": H, "z": 1.9, "ox": ox, "oy": oy}] + [{"cam": o, "z": 1.7} for o in others]) or [{"cam": H, "z": 1.9}]
+    if len(ring) == 1: ring = [{"cam": H, "z": 2.0, "ox": ox, "oy": oy}, {"cam": H, "z": 1.4}, {"cam": H, "z": 2.2, "ox": -ox, "oy": oy}]
     for k, g in enumerate(gaps): shots.append({"t": round(t, 2), **ring[k % len(ring)]}); t += g     # the spin
     shots.append({"t": round(t + 0.2, 2), "cam": H, "z": 1.0, "hold": 4.0})                       # the crack, the wide, the title
     return shots
