@@ -386,44 +386,70 @@ _cine = {"last": 0}
 _showdown = {"last": 0}
 SHOWDOWN_TITLES = ["THE GOOD, THE BAD AND THE SCALY", "A FISTFUL OF SUBSTRATE", "FOR A FEW MICE MORE", "ONCE UPON A TIME IN THE TERRARIUM", "HIGH NOON AT THE GLASS", "THE QUEEN WITH NO NAME"]
 def showdown_cuts(cuts):
-    """The close-ups: at each cut the next live camera takes the hero window for a few seconds (OBS transforms swapped, then restored),
-    and the pan camera makes a slow cinematic drift, relative moves only."""
+    """Leone: ONE full-bleed frame at a time. The active source is stacked on top at its zoom (offset toward her); the others stay enabled beneath
+    (re-enabling an OBS source restarts its stream and shows black, so nothing is ever disabled). Restored afterwards."""
     try:
-        lay = json.load(open(f"{ROOT}/overlay/layout.json")); cells = lay.get("cells") or []
-        hero = next((c for c in cells if c.get("hero")), None); others = [c for c in cells if c.get("live") and not c.get("hero")]
-        if not hero or not others: return
         NAME = {"cool": "Cool Side (Relay)", "hot": "Hot Side (Relay)", "hothide": "Hot Hide (OG)", "coldhide": "Cold Hide (OG)"}
         scene = obs_req("GetCurrentProgramScene")["currentProgramSceneName"]; items = {i["sourceName"]: i for i in obs_req("GetSceneItemList", {"sceneName": scene})["sceneItems"]}
-        def place(src, x, y, w, h, idx=None):
-            it = items.get(src)
-            if not it: return
+        keys = [k for k in NAME if NAME[k] in items and items[NAME[k]]["sceneItemEnabled"]]
+        saved = {k: (dict(items[NAME[k]]["sceneItemTransform"]), items[NAME[k]]["sceneItemIndex"]) for k in keys}
+        top = max(i["sceneItemIndex"] for i in items.values() if i["sourceName"] not in ("Overlay", "Ambience")) if items else 0
+        def full(key, z, ox=0.0, oy=0.0):
+            it = items[NAME[key]]; w, h = 1920 * z, 1080 * z; x = -(w - 1920) / 2 - ox * (w - 1920) / 2; y = -(h - 1080) / 2 - oy * (h - 1080) / 2
             obs_req("SetSceneItemTransform", {"sceneName": scene, "sceneItemId": it["sceneItemId"], "sceneItemTransform": {"positionX": x, "positionY": y, "boundsType": "OBS_BOUNDS_SCALE_INNER", "boundsWidth": w, "boundsHeight": h, "boundsAlignment": 0, "cropTop": 0, "cropBottom": 0, "cropLeft": 0, "cropRight": 0}})
-            if idx is not None: obs_req("SetSceneItemIndex", {"sceneName": scene, "sceneItemId": it["sceneItemId"], "sceneItemIndex": idx})
-        saved = {c["key"]: dict(items[NAME[c["key"]]]["sceneItemTransform"]) for c in cells if c.get("live") and NAME.get(c["key"]) in items}
+        def on_top(key): obs_req("SetSceneItemIndex", {"sceneName": scene, "sceneItemId": items[NAME[key]]["sceneItemId"], "sceneItemIndex": top})
         t0 = time.time()
-        if hero["key"] == "cool": threading.Thread(target=lambda: (time.sleep(1.0), cam_move("coolcam", "left", 18), time.sleep(6), cam_move("coolcam", "right", 18)), daemon=True).start()   # the slow drift
-        top = len([c for c in cells if c.get("live")])
-        for k, c in enumerate(others[:len(cuts) - 1]):
-            time.sleep(max(0, t0 + cuts[k] - time.time())); place(NAME[c["key"]], hero["x"], hero["y"], hero["w"], hero["h"], idx=top); log(f"showdown cut: {c['key']} takes the hero")
-        time.sleep(max(0, t0 + cuts[-1] - time.time()))
-        for key, tr in saved.items():                                                   # everything back where the watchdog put it
-            it = items[NAME[key]]; obs_req("SetSceneItemTransform", {"sceneName": scene, "sceneItemId": it["sceneItemId"], "sceneItemTransform": {k2: tr[k2] for k2 in ("positionX", "positionY", "boundsType", "boundsWidth", "boundsHeight", "boundsAlignment", "cropTop", "cropBottom", "cropLeft", "cropRight")}})
-            obs_req("SetSceneItemIndex", {"sceneName": scene, "sceneItemId": it["sceneItemId"], "sceneItemIndex": 0})
-        log("showdown: cuts done, layout restored")
+        for c in cuts:
+            time.sleep(max(0, t0 + c["t"] - time.time())); full(c["cam"], c["z"], c.get("ox", 0), c.get("oy", 0)); on_top(c["cam"])
+            if c.get("push") and c.get("dur"):
+                steps = max(4, int(c["dur"] / 0.2)); z0, z1 = c["z"], c["push"]
+                for k in range(1, steps + 1): time.sleep(c["dur"] / steps); full(c["cam"], z0 + (z1 - z0) * k / steps, c.get("ox", 0), c.get("oy", 0))
+        time.sleep(max(0, t0 + cuts[-1]["t"] + cuts[-1].get("hold", 3.0) - time.time()))
+        for k, (tr, idx) in saved.items():
+            it = items[NAME[k]]
+            obs_req("SetSceneItemTransform", {"sceneName": scene, "sceneItemId": it["sceneItemId"], "sceneItemTransform": {k2: tr[k2] for k2 in ("positionX", "positionY", "boundsType", "boundsWidth", "boundsHeight", "boundsAlignment", "cropTop", "cropBottom", "cropLeft", "cropRight")}})
+            obs_req("SetSceneItemIndex", {"sceneName": scene, "sceneItemId": it["sceneItemId"], "sceneItemIndex": idx})
+        log("showdown: cut, layout restored")
     except Exception as e: log("showdown cuts error:", type(e).__name__, str(e)[:80])
+def showdown_plan():
+    """The shot list, around the camera that HAS her. Zoom centres lean toward where her head was last seen. The hides only appear if she is in one."""
+    lay = json.load(open(f"{ROOT}/overlay/layout.json")); cells = lay.get("cells") or []
+    try: dr = json.load(open(f"{ROOT}/overlay/director.json"))
+    except Exception: dr = {}
+    her = dr.get("where") if dr.get("where") in ("cool", "hot", "hothide", "coldhide") and time.time() - dr.get("ts", 0) < 600 else None
+    try:
+        m = ((hub() or {}).get("motion") or {}).get("cool", {})
+        if m.get("moving") or time.time() - m.get("lastMove", 0) < 240: her = "cool"                       # moving on the cool side right now beats an old look
+    except Exception: pass
+    hero = her or next((c["key"] for c in cells if c.get("hero")), "cool")
+    ox, oy = {"left": (-0.6, 0), "right": (0.6, 0), "up": (0, -0.6), "down": (0, 0.6)}.get(str(dr.get("head") or ""), (0, 0))
+    if hero in ("cool", "hot") and her:                                                  # she is out on a pan camera: the whole duel is hers
+        H = hero
+        return [{"t": 0.0, "cam": H, "z": 1.0, "push": 1.18, "dur": 4.4},
+                {"t": 4.8, "cam": H, "z": 2.4, "ox": ox, "oy": oy},                          # the eyes
+                {"t": 7.2, "cam": H, "z": 1.35},
+                {"t": 8.8, "cam": H, "z": 2.9, "ox": ox * 0.8, "oy": oy - 0.2},
+                {"t": 10.2, "cam": H, "z": 1.5, "push": 1.8, "dur": 1.2}, {"t": 11.5, "cam": H, "z": 3.0, "ox": ox, "oy": oy}, {"t": 12.2, "cam": H, "z": 1.6}, {"t": 12.8, "cam": H, "z": 3.3, "ox": -ox, "oy": oy},
+                {"t": 13.3, "cam": H, "z": 1.7}, {"t": 13.7, "cam": H, "z": 3.6, "ox": ox, "oy": oy}, {"t": 14.0, "cam": H, "z": 1.8},
+                {"t": 14.4, "cam": H, "z": 1.0, "hold": 4.0}]
+    others = [c["key"] for c in cells if c.get("live") and c["key"] != hero][:2] or [hero]; a, b = others[0], others[-1]
+    return [{"t": 0.0, "cam": hero, "z": 1.0, "push": 1.18, "dur": 4.2}, {"t": 4.6, "cam": hero, "z": 2.2, "ox": ox, "oy": oy}, {"t": 7.0, "cam": a, "z": 1.9}, {"t": 8.8, "cam": hero, "z": 1.3},
+            {"t": 10.2, "cam": b, "z": 2.0}, {"t": 11.2, "cam": hero, "z": 2.6, "ox": ox, "oy": oy}, {"t": 12.0, "cam": a, "z": 2.4}, {"t": 12.6, "cam": hero, "z": 1.5}, {"t": 13.1, "cam": b, "z": 2.7}, {"t": 13.5, "cam": hero, "z": 3.0, "ox": ox, "oy": oy}, {"t": 13.8, "cam": hero, "z": 1.6},
+            {"t": 14.3, "cam": hero, "z": 1.0, "hold": 4.0}]
 def showdown(bot=None, why="", say=True):
     """The spaghetti-western moment: letterbox, sun-baked grade and grain on the stage, a title card, an original whistle-and-twang sting.
     At most once per 20 min. Fires when she comes out of a hide, on 'showdown' in chat, and once a night on its own."""
     if time.time() - _showdown["last"] < 1200: return False
     _showdown["last"] = time.time(); title = random.choice(SHOWDOWN_TITLES)
-    cuts = [4.0, 7.5, 11.0]
-    try: json.dump({"ts": int(time.time()), "title": title, "sub": "A STANDOFF AT THE GLASS", "why": why, "cuts": cuts}, open(f"{ROOT}/overlay/showdown.json", "w"))
+    try: cuts = showdown_plan()
+    except Exception as e: log("showdown plan error:", e); cuts = [{"t": 0.0, "cam": "cool", "z": 1.0, "hold": 12}]
+    try: json.dump({"ts": int(time.time()), "title": title, "sub": "A STANDOFF AT THE GLASS", "why": why, "cuts": [c["t"] for c in cuts[1:]], "title_at": cuts[-1]["t"], "end": cuts[-1]["t"] + cuts[-1].get("hold", 3.0)}, open(f"{ROOT}/overlay/showdown.json", "w"))
     except Exception as e: log("showdown.json error:", e)
     threading.Thread(target=showdown_cuts, args=(cuts,), daemon=True).start()
     log(f"showdown: {title} ({why})")
     if bot is not None and say:
         line = random.choice(["High noon at the glass. Draw, human. I blink slower.", "The wind stops. The mice go quiet. She is out.", "Every court has its outlaw. Mine wears the crown.", "Squint. Stare. Nobody moves first. That is how I win."])
-        threading.Timer(3.5, lambda: (bot.send(f"🤠 {line}"), speak(line, "court")), ).start()
+        threading.Timer(19, lambda: (bot.send(f"🤠 {line}"), speak(line, "court")), ).start()
     return True
 CINE_MINUTES = float(CFG.get("CLEOBOT_CINE_MINUTES", "5"))
 def cinematographer():

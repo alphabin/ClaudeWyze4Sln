@@ -167,6 +167,10 @@ def solo_tick():
     except Exception: pass
     if not alive["hot"]: reel_refresh()
     cells = plan(alive, she_settled()); key = json.dumps(cells) + str(director().get("where")) + str((phone_live() or {}).get("mode"))
+    try:                                                                             # a showdown is running: the bot owns the scene until it ends
+        sd = json.load(open(f"{ROOT}/overlay/showdown.json"))
+        if time.time() < sd.get("ts", 0) + sd.get("end", 18) + 3: return
+    except Exception: pass
     if key != _layout["key"]:
         apply_layout(cells, alive); _layout["key"] = key; log("layout: " + ", ".join(f"{k}@{x},{y}" for k, x, y, *_ in cells) + " | dead: " + ",".join(k for k in CAMS if not alive[k]))
 strikes = 0; log(f"watchdog for #{CHANNEL}, restart after {STRIKES} offline minutes")

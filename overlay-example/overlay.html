@@ -280,16 +280,19 @@
   #cells .cell .shade{position:absolute;left:0;right:0;top:0;height:46%;border-radius:12px 12px 0 0;background:linear-gradient(180deg,rgba(14,8,22,.55) 0%,rgba(14,8,22,.35) 60%,rgba(14,8,22,0) 100%);backdrop-filter:blur(9px);display:none;pointer-events:none;-webkit-mask-image:linear-gradient(180deg,#000 55%,transparent 100%)}
   #cells .cell.glass .shade{display:block} #cells .cell .shade b{display:none}
   #cells .cell.corner .shade{display:block;height:50%;width:34%;right:auto;border-radius:12px 0 30px 0;background:linear-gradient(135deg,rgba(14,8,22,.6) 0%,rgba(14,8,22,.35) 70%,rgba(14,8,22,0) 100%);-webkit-mask-image:linear-gradient(135deg,#000 60%,transparent 100%)}
-  /* ---- the showdown: letterbox, a sun-baked grade, grain, and a title card ---- */
-  #western{position:absolute;inset:0;z-index:18;pointer-events:none;opacity:0;transition:opacity 1.2s}
+  /* ---- the showdown, Leone cut: cinema mode hides the whole UI; one 2.35:1 frame, a hard warm grade, a whisper of grain, the title at the end ---- */
+  body.cinema #head,body.cinema #stars,body.cinema #cells,body.cinema #rule,body.cinema #facts,body.cinema #cards,body.cinema #show,body.cinema #kills,body.cinema #cam-rest,body.cinema #status,body.cinema #frameA,body.cinema #frameB,body.cinema #fx,body.cinema #ripframe,body.cinema #pull,body.cinema #ledger{opacity:0 !important;transition:opacity .6s}
+  #western{position:absolute;inset:0;z-index:18;pointer-events:none;opacity:0;transition:opacity .8s}
   #western.on{opacity:1}
-  #western .bar{position:absolute;left:0;right:0;height:0;background:#000;transition:height 1.4s cubic-bezier(.2,.8,.2,1)} #western .bar.t{top:0} #western .bar.b{bottom:0} #western.on .bar{height:150px}
-  #western .grade{position:absolute;left:0;right:0;top:180px;height:720px;background:radial-gradient(ellipse at 50% 50%,rgba(255,190,90,.10),rgba(120,60,10,.42) 75%,rgba(40,15,0,.75) 100%);mix-blend-mode:multiply}
-  #western .warm{position:absolute;left:0;right:0;top:180px;height:720px;background:rgba(255,170,60,.16);mix-blend-mode:overlay}
-  #western canvas.grain{position:absolute;left:0;right:0;top:180px;width:1920px;height:720px;opacity:.11;mix-blend-mode:screen}
-  #western .title{position:absolute;left:50%;top:640px;transform:translateX(-50%) scale(.92);font-family:'Rye','Cinzel',serif;font-size:62px;color:#f3d27a;letter-spacing:.06em;text-shadow:0 0 30px rgba(0,0,0,.9),0 6px 0 #3a1a05;white-space:nowrap;opacity:0;transition:opacity 1.5s 1.2s,transform 6s 1.2s}
-  #western.on .title{opacity:1;transform:translateX(-50%) scale(1)}
-  #western .sub{position:absolute;left:50%;top:735px;transform:translateX(-50%);font-family:'Cinzel',serif;font-size:16px;letter-spacing:.5em;color:#e8c56b;opacity:0;transition:opacity 1.5s 2.4s} #western.on .sub{opacity:1}
+  #western .bar{position:absolute;left:0;right:0;height:0;background:#000;transition:height 1.6s cubic-bezier(.2,.8,.2,1)} #western .bar.t{top:0} #western .bar.b{bottom:0} #western.on .bar{height:132px}
+  #western .grade{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 45%,rgba(0,0,0,0) 40%,rgba(0,0,0,.55) 100%)}
+  #western .warm{position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,196,110,.10),rgba(255,160,70,.12));mix-blend-mode:overlay}
+  #western .contrast{position:absolute;inset:0;backdrop-filter:contrast(1.18) saturate(.82) sepia(.18) brightness(1.02)}
+  #western canvas.grain{position:absolute;inset:0;width:1920px;height:1080px;opacity:.07;mix-blend-mode:screen}
+  #western .title{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(.96);font-family:'Rye','Cinzel',serif;font-size:96px;color:#f3d27a;letter-spacing:.04em;text-shadow:0 0 40px rgba(0,0,0,.95),0 8px 0 #3a1a05;white-space:nowrap;opacity:0;transition:opacity .25s,transform 3.5s}
+  #western.title-on .title{opacity:1;transform:translate(-50%,-50%) scale(1)}
+  #western .sub{position:absolute;left:50%;top:calc(50% + 78px);transform:translateX(-50%);font-family:'Cinzel',serif;font-size:18px;letter-spacing:.6em;color:#e8c56b;opacity:0;transition:opacity 1s .6s} #western.title-on .sub{opacity:1}
+  #western .flash{position:absolute;inset:0;background:#fff;opacity:0} #western.title-on .flash{animation:gunflash .5s ease-out} @keyframes gunflash{from{opacity:.85}to{opacity:0}}
   #cam-rest{position:absolute;right:24px;top:786px;z-index:6;padding:3px 12px;background:rgba(10,8,20,.85);border:1px solid rgba(217,182,91,.5);border-radius:999px;color:#f2d27a;font-family:'Cinzel',serif;font-size:11px;letter-spacing:.22em}
   .win.reel{box-shadow:inset 0 0 0 2px rgba(217,182,91,.55),inset 0 0 60px rgba(0,0,0,.5)}
   #ripframe{position:absolute;pointer-events:none;opacity:0;transition:opacity .8s;border:3px solid #c9a24d;border-radius:12px;box-shadow:0 0 0 6px rgba(20,8,14,.85),0 18px 50px rgba(0,0,0,.65),inset 0 0 40px rgba(0,0,0,.35)}
@@ -689,14 +692,16 @@
     el.style.left = f.x + 'px'; el.style.top = f.y + 'px'; el.style.width = f.w + 'px'; el.style.height = f.h + 'px'; el.classList.toggle('table', f.mode === 'table');
     document.getElementById('ripframe-lbl').textContent = f.mode === 'table' ? '✦ THE CARD TABLE ✦' : '◈ EAGLE EYE ◈'; el.classList.add('on'); }).catch(() => {}); }
   setInterval(ripframePoll, 3000); ripframePoll();
-  // ---- the showdown (overlay/showdown.json from the bot): 14 s of spaghetti western over the stage
+  // ---- the showdown (overlay/showdown.json from the bot): cinema mode for the length of the cut; the title lands at title_at
   let showTs = 0;
   function showdownPoll() { fetch('showdown.json?' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(f => { if (!f || !f.ts || f.ts === showTs || Date.now() / 1000 - f.ts > 60) return; showTs = f.ts;
-    let w = document.getElementById('western'); if (!w) { w = document.createElement('div'); w.id = 'western'; w.innerHTML = '<div class="bar t"></div><div class="bar b"></div><div class="grade"></div><div class="warm"></div><canvas class="grain" width="480" height="180"></canvas><div class="title"></div><div class="sub"></div>'; document.body.appendChild(w);
-      const c = w.querySelector('canvas.grain'), g = c.getContext('2d'); (function grain() { if (w.classList.contains('on')) { const im = g.createImageData(480, 180); for (let i = 0; i < im.data.length; i += 4) { const v = Math.random() * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; } g.putImageData(im, 0, 0); } requestAnimationFrame(grain); })(); }
-    w.querySelector('.title').textContent = f.title || 'THE GOOD, THE BAD AND THE SCALY'; w.querySelector('.sub').textContent = f.sub || 'A STANDOFF AT THE GLASS'; w.classList.add('on');
-    setTimeout(() => { if (showTs === f.ts) w.classList.remove('on'); }, 14000); }).catch(() => {}); }
-  setInterval(showdownPoll, 2000);
+    let w = document.getElementById('western'); if (!w) { w = document.createElement('div'); w.id = 'western'; w.innerHTML = '<div class="contrast"></div><div class="warm"></div><div class="grade"></div><canvas class="grain" width="480" height="270"></canvas><div class="bar t"></div><div class="bar b"></div><div class="flash"></div><div class="title"></div><div class="sub"></div>'; document.body.appendChild(w);
+      const c = w.querySelector('canvas.grain'), g = c.getContext('2d'); (function grain() { if (w.classList.contains('on')) { const im = g.createImageData(480, 270); for (let i = 0; i < im.data.length; i += 4) { const v = Math.random() * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; } g.putImageData(im, 0, 0); } requestAnimationFrame(grain); })(); }
+    const late = Math.max(0, Date.now() / 1000 - f.ts); w.querySelector('.title').textContent = f.title || 'THE GOOD, THE BAD AND THE SCALY'; w.querySelector('.sub').textContent = f.sub || 'A STANDOFF AT THE GLASS';
+    document.body.classList.add('cinema'); w.classList.add('on'); w.classList.remove('title-on');
+    setTimeout(() => { if (showTs === f.ts) w.classList.add('title-on'); }, Math.max(0, ((f.title_at || 12) - late) * 1000));
+    setTimeout(() => { if (showTs === f.ts) { w.classList.remove('on', 'title-on'); document.body.classList.remove('cinema'); } }, Math.max(0, ((f.end || 16) - late) * 1000)); }).catch(() => {}); }
+  setInterval(showdownPoll, 1000);
   // ---- the consultation: someone said 'tarot'; the ball wakes and she asks what the cards should speak to (overlay/tarot_pending.json)
   let pendTs = 0;
   function pendingPoll() { fetch('tarot_pending.json?' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(f => { if (!f || !f.ts || f.ts === pendTs || Date.now() / 1000 - f.ts > 100) return; pendTs = f.ts;
