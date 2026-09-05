@@ -31,7 +31,7 @@ video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;backgr
 /* start screen */
 #start{position:absolute;inset:0;z-index:5;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:radial-gradient(ellipse at 50% 30%,#2a1730,#0b0710 70%);padding:30px;text-align:center}
 #start h2{font-family:Cinzel,serif;font-size:22px;letter-spacing:.2em;color:var(--gold2)}#start p{color:var(--muted);font-size:14px;line-height:1.5;max-width:320px}
-.modes-big{display:flex;flex-direction:column;gap:12px;width:100%;max-width:360px}.modes-big .mode{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:16px 18px;border-radius:16px;border:2px solid var(--gold);background:linear-gradient(180deg,#2a1730,#170c1f);text-align:left;text-transform:none;letter-spacing:0;white-space:normal}.modes-big .mode b{font-family:Cinzel,serif;font-size:18px;color:var(--gold2);letter-spacing:.06em}.modes-big .mode span{font-family:-apple-system,system-ui,sans-serif;font-size:13px;line-height:1.4;color:var(--ink);font-weight:400}
+.modes-big{display:flex;flex-direction:column;gap:12px;width:100%;max-width:360px}.modes-big .mode{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:16px 18px;border-radius:16px;border:2px solid var(--gold);background:linear-gradient(180deg,#2a1730,#170c1f);text-align:left;text-transform:none;letter-spacing:0;white-space:normal}.modes-big .mode b{font-family:Cinzel,serif;font-size:18px;color:var(--gold2);letter-spacing:.06em}.modes-big .mode span{font-family:-apple-system,system-ui,sans-serif;font-size:13px;line-height:1.4;color:var(--ink);font-weight:400}.modes-big .mode.back{padding:10px 18px;border-color:rgba(217,182,91,.4)}.modes-big .mode.back b{font-size:13px;color:var(--muted)}
 #start.hide{display:none}
 /* verdict sheet */
 #sheet{position:absolute;left:0;right:0;bottom:0;z-index:4;transform:translateY(110%);transition:transform .35s cubic-bezier(.2,.8,.2,1);background:linear-gradient(180deg,#22132f,#12091a);border-top:2px solid var(--gold);border-radius:22px 22px 0 0;padding:14px 18px calc(env(safe-area-inset-bottom) + 18px)}
@@ -52,10 +52,14 @@ video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;backgr
     <div class="chips"><button id="fix-no">not a holo</button><button id="fix-yes">it is a holo</button><button id="close" class="x">next card</button></div></div>
 </div>
 <div id="start"><h2>THE QUEEN'S EYE</h2><p>Your phone becomes a camera on the stream. Pick what you are doing:</p>
-  <div class="modes-big">
-    <button class="mode" data-m="table"><b>🃏 Cards</b><span>Judge cards one by one. Your phone stays off the stream. Snap a card, she names it, prices it and passes judgement.</span></button>
-    <button class="mode" data-m="rip"><b>🎴 Rip Night</b><span>Your phone IS the table, live on the stream. Snap cards and boxes, she judges, prices, and heckles the court between packs.</span></button>
-    <button class="mode" data-m="eagle"><b>🐍 Live POV</b><span>Your phone is the main picture. Get her best angles. No judging.</span></button>
+  <div class="modes-big" id="step1">
+    <button class="mode" data-go="eagle"><b>🐍 Live mode</b><span>Macro views. Your phone becomes the main picture on the stream, get her best angles. No judging.</span></button>
+    <button class="mode" data-step="2"><b>🃏 Card mode</b><span>Pokémon at the table: she names, prices and judges every card you snap.</span></button>
+  </div>
+  <div class="modes-big" id="step2" hidden>
+    <button class="mode" data-go="rip"><b>🎴 Rip Night</b><span>Interactive. Your phone is the table, live on the stream. She judges, prices, and heckles the court between packs.</span></button>
+    <button class="mode" data-go="table"><b>🔎 Just evaluate</b><span>Quiet. Your phone stays off the stream. Snap a card, get the verdict and the price.</span></button>
+    <button class="mode back" data-step="1"><b>← back</b></button>
   </div><p style="font-size:12px">Tap one to start the camera. Keep this page open while you use it.</p></div>
 </div>
 <canvas id="c" hidden></canvas>
@@ -81,7 +85,7 @@ async function start(){
 }
 function stop(){ on=false; try{pc&&pc.close()}catch{} try{stream&&stream.getTracks().forEach(t=>t.stop())}catch{} $('v').srcObject=null; fetch('/cmd',{method:'POST',body:JSON.stringify({stop:true})}).catch(()=>{}); $('start').classList.remove('hide'); $('sheet').classList.remove('on'); ui(); }
 function ui(){ $('badge').className='badge'+(on?' on':''); $('badge').innerHTML='<i></i>'+(on?'ON AIR':'OFF'); $('shutter').disabled=!on||mode==='eagle'; }
-document.querySelectorAll('.modes-big .mode').forEach(b=>b.onclick=()=>{ mode=b.dataset.m; if(on){ setMode(mode); $('start').classList.add('hide'); } else start(); }); $('switch').onclick=()=>$('start').classList.remove('hide'); $('stop').onclick=stop;
+document.querySelectorAll('.modes-big .mode').forEach(b=>b.onclick=()=>{ if(b.dataset.step){ $('step1').hidden=b.dataset.step!=='1'; $('step2').hidden=b.dataset.step!=='2'; return; } mode=b.dataset.go; if(on){ setMode(mode); $('start').classList.add('hide'); } else start(); }); $('switch').onclick=()=>$('start').classList.remove('hide'); $('stop').onclick=stop;
 const MODE_TEXT={table:['CARDS','Your phone stays off the stream. Snap each card: she names, prices and judges it.'],rip:['RIP NIGHT','Your phone is LIVE on the stream as the table. Snap cards and boxes: she judges, prices, and heckles the court between packs.'],eagle:['LIVE · POV','Your phone is the main picture. Get her best angles. No judging in this mode.']};
 const MODE_NAME={table:'✦ CARDS',rip:'🎴 RIP NIGHT',eagle:'🐍 LIVE POV'};
 function setMode(m){ mode=m; $('modename').textContent=MODE_NAME[m]; ui(); $('sheet').classList.remove('on'); fetch('/cmd',{method:'POST',body:JSON.stringify({mode:m})}).catch(()=>{}); toast(MODE_TEXT[m][0],MODE_TEXT[m][1]+(m==='table'?'':' Takes up to 30 s to switch on stream.')); }
