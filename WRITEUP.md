@@ -214,3 +214,7 @@ In this kit: `chatbot/cleobot.py` `cam_move()` / `cam_home()` (via the decoder p
   player that offers `sendrecv`, which the stock bridge player gets wrong.
 - If you improve on this (a proper bridge integration, Linux units, a Home Assistant add-on), please open an issue
   or PR so the next Pan V4 owner finds one place with everything.
+
+## 7c. Wyze Cam OG: it's Agora too (2026-09-04)
+
+The Wyze Cam OG (`GW_GC1`) is "not supported" by docker-wyze-bridge (no TUTK), and the Kinesis signaling the Pan V3 answers gets no reply from an OG. A debug Chrome (`--remote-debugging-port`) logged into the Wyze web portal showed why: the portal plays OG cameras over **Agora** (`wrtc_stats` / `traffic_stats` frames, an Agora `sid`/`uid`), the same "lake" provider as the Pan V4. So the Pan V4 recipe carries over unchanged: `app/v4/camera/get-streams` with provider `lake` (the provisioner), the Agora web SDK in a headless Chrome (`lake.html?cam=<slug>`), WHIP into mediamtx. `LAKE_CAMS` just gains the OG nicknames. Two OGs cost nothing extra: one headless Chrome each.
