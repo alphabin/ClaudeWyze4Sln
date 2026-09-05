@@ -402,8 +402,12 @@ def glass_guard(reason="move"):
         bad = bool(j.get("person")) or (bool(j.get("room")) and not j.get("snake")) or (bool(j.get("roof")) and not j.get("inside"))   # the room is tolerated when she is in the shot; a person never
         bf = f"{ROOT}/overlay/blackout.json"
         if bad:
-            json.dump({"cool": True, "why": f"glass guard: room={j.get('room')} roof={j.get('roof')} ({reason})", "ts": int(time.time())}, open(bf, "w")); log(f"GLASS GUARD: cool cam shows the room/roof -> blacked out ({reason})")
-        else: log(f"glass guard: cool cam is inside the enclosure ({reason})")
+            json.dump({"cool": True, "why": f"glass guard: person={j.get('person')} room={j.get('room')} roof={j.get('roof')} ({reason})", "ts": int(time.time())}, open(bf, "w")); log(f"GLASS GUARD: cool cam shows a person/the room/roof -> blacked out ({reason})")
+        else:
+            log(f"glass guard: cool cam is inside the enclosure ({reason})")
+            if os.path.exists(bf):
+                try: os.remove(bf); log("glass guard: view is clean again, blackout lifted")
+                except Exception: pass
     except Exception as e: log("glass guard error:", type(e).__name__, str(e)[:60])
 def glass_guard_soon():
     """Debounced: 8 s after the last move."""
@@ -1816,6 +1820,10 @@ class Bot:
                     self._title_dead = dead_cam()
                     try: self.apply_show(force=True); log(f"show re-applied for dead cam = {dead_cam()}")
                     except Exception as e: log("apply_show error:", e)
+                try:
+                    bo = os.path.exists(f"{ROOT}/overlay/blackout.json")
+                    if now - _guard.get("last", 0) > (180 if bo else 600) and not _guard.get("timer_on"): threading.Thread(target=glass_guard, args=("periodic" + (" while blacked out" if bo else ""),), daemon=True).start()
+                except Exception as e: log("guard schedule error:", e)
                 try: director_look(self)
                 except Exception as e: log("director error:", e)
                 if PATROL_ON and TRACK_ON and dead_cam() == "hot" and not _patrol["on"] and not _track["on"] and now - _patrol["last"] > 600:
