@@ -43,7 +43,7 @@ def obs(requests):
 import subprocess
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); FFPROBE = ENV.get("CLEOBOT_FFMPEG", "/opt/homebrew/bin/ffmpeg").replace("ffmpeg", "ffprobe")
 CAMS = {"hot": ("Hot Side (Relay)", "hotcam"), "cool": ("Cool Side (Relay)", "coolcam"), "hothide": ("Hot Hide (OG)", "hothide"), "coldhide": ("Cold Hide (OG)", "coldhide")}
-LABELS = {"hot": "Hot side", "cool": "Cool side", "hothide": "Hot hide", "coldhide": "Cold hide", "reel": "Highlight reel · her on the move", "soon": "Hot side · camera returning"}
+LABELS = {"hot": "Hot side", "cool": "Cool side", "hothide": "Hot hide", "coldhide": "Cold hide", "hothide_off": "Hot hide · reconnecting", "coldhide_off": "Cold hide · reconnecting", "reel": "Highlight reel · her on the move", "soon": "Hot side · camera returning"}
 _dead = {k: 3 for k in CAMS}; _layout = {"key": None}          # every camera starts "dead" until a probe succeeds: no black cell at startup
 def cam_alive(path):
     try: return subprocess.run([FFPROBE, "-v", "error", "-rtsp_transport", "tcp", "-select_streams", "v", "-show_entries", "stream=width", "-of", "csv=p=0", f"rtsp://127.0.0.1:8555/{path}"], capture_output=True, timeout=12).returncode == 0
@@ -55,19 +55,19 @@ def she_settled():
         return not m.get("moving") and time.time() - m.get("lastMove", 0) > 600
     except Exception: return True
 def plan(alive, settled):
-    """Which source goes in which cell. Stage = 1920x540 at y=270. Hero (960x540) left; 2x2 grid (480x270) right.
-    Both pan cams alive: the classic split, hides underneath the... no — hides always get the grid; the hero is the cool V4 (or the hot side when the V4 is gone)."""
+    """Compact stage 1920x720 at y=180: hero 1280x720 left; right column 640x360 x2. The reel pops up as a framed picture-in-picture over the
+    hero's lower right when she is settled. With both pan cams alive the right column is the other pan cam + the two hides as 640x240 strips."""
     cells = []
     hero = "cool" if alive["cool"] else "hot" if alive["hot"] else None
-    if hero: cells.append((hero, 0, 270, 960, 540))
-    grid = [(960, 270), (1440, 270), (960, 540), (1440, 540)]; slots = []
-    for k in ("hot", "cool"):
-        if k != hero and alive[k]: slots.append(k)
-    for k in ("hothide", "coldhide"):
-        if alive[k]: slots.append(k)
-    if not alive["hot"]: slots.append("reel" if settled and os.path.exists(f"{ROOT}/overlay/reel.mp4") else "moving")
-    if not alive["hot"] and len(slots) < 4: slots.append("soon")
-    for k, (x, y) in zip(slots[:4], grid): cells.append((k, x, y, 480, 270))
+    if hero: cells.append((hero, 0, 180, 1280, 720))
+    col = [k for k in ("hot", "cool") if k != hero and alive[k]] + [k for k in ("hothide", "coldhide") if alive[k]]
+    for k in ("hothide", "coldhide"):                                                   # a hide cam that dropped out keeps its slot as a card, never a black hole
+        if not alive[k] and len(col) < 2: col.append(k + "_off")
+    if len(col) <= 2:
+        for k, y in zip(col, (180, 540)): cells.append((k, 1280, y, 640, 360))
+    else:
+        for k, y in zip(col[:3], (180, 420, 660)): cells.append((k, 1280, y, 640, 240))
+    if settled and os.path.exists(f"{ROOT}/overlay/reel.mp4"): cells.append(("reel", 780, 610, 480, 270))
     return cells
 def apply_layout(cells, alive):
     scene = obs([("GetCurrentProgramScene", None)])[0]["currentProgramSceneName"]; items = {i["sourceName"]: i["sceneItemId"] for i in obs([("GetSceneItemList", {"sceneName": scene})])[0]["sceneItems"]}
@@ -78,10 +78,12 @@ def apply_layout(cells, alive):
         if key in placed:
             x, y, w, h = placed[key]
             reqs += [("SetSceneItemIndex", {"sceneName": scene, "sceneItemId": iid, "sceneItemIndex": 0}), ("SetSceneItemEnabled", {"sceneName": scene, "sceneItemId": iid, "sceneItemEnabled": True}),
-                     ("SetSceneItemTransform", {"sceneName": scene, "sceneItemId": iid, "sceneItemTransform": {"positionX": x, "positionY": y, "boundsType": "OBS_BOUNDS_SCALE_INNER", "boundsWidth": w, "boundsHeight": h, "boundsAlignment": 0, "cropTop": 0, "cropBottom": 0, "cropLeft": 0, "cropRight": 0}})]
+                     ("SetSceneItemTransform", {"sceneName": scene, "sceneItemId": iid, "sceneItemTransform": {"positionX": x, "positionY": y, "boundsType": "OBS_BOUNDS_SCALE_INNER" if abs(w / h - 16 / 9) < 0.05 else "OBS_BOUNDS_SCALE_OUTER", "boundsWidth": w, "boundsHeight": h, "boundsAlignment": 0, "cropTop": 0, "cropBottom": 0, "cropLeft": 0, "cropRight": 0}})]
         else: reqs.append(("SetSceneItemEnabled", {"sceneName": scene, "sceneItemId": iid, "sceneItemEnabled": False}))
+    reel = items.get("Highlights")
+    if reel and "reel" in placed: reqs.append(("SetSceneItemIndex", {"sceneName": scene, "sceneItemId": reel, "sceneItemIndex": len([k for k in placed if k != "reel"])}))   # above the cameras, under the overlay
     obs(reqs)
-    json.dump({"cells": [{"key": k, "label": LABELS.get(k, k), "x": x, "y": y, "w": w, "h": h, "live": k in CAMS} for k, x, y, w, h in cells], "dead": [k for k in CAMS if not alive[k]], "ts": int(time.time())}, open(f"{ROOT}/overlay/layout.json", "w"))
+    json.dump({"compact": True, "cells": [{"key": k, "label": LABELS.get(k, k), "x": x, "y": y, "w": w, "h": h, "live": k in CAMS} for k, x, y, w, h in cells], "dead": [k for k in CAMS if not alive[k]], "ts": int(time.time())}, open(f"{ROOT}/overlay/layout.json", "w"))
     json.dump({"dead": "hot" if not alive["hot"] else None, "reel": any(k == "reel" for k, *_ in cells), "ts": int(time.time())}, open(f"{ROOT}/overlay/cams.json", "w"))   # kept for the bot + old overlay code
 _reel = {"building": False}
 def reel_refresh():

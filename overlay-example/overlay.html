@@ -242,6 +242,17 @@
   #cells .cell .chip{position:absolute;left:18px;top:18px} #cells .cell.small .chip{left:10px;top:10px;transform:scale(.8);transform-origin:left top}
   #cells .cell .card{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:24px;text-align:center;background:radial-gradient(ellipse at 50% 40%,#2a1730,#0b0710 75%)}
   #cells .cell .card b{font-family:'Cinzel',serif;font-size:16px;letter-spacing:.24em;color:#f2d27a} #cells .cell .card span{font-size:13px;color:#b7a9c4;max-width:380px;line-height:1.4}
+  /* ---- compact: header and footer at two thirds, the stage grows to 1920x720 (y 180-900) so the cameras get the room ---- */
+  body.compact #head{left:0;right:auto;width:2880px;padding:0 60px;box-sizing:border-box;transform:scale(.6667);transform-origin:top left}
+  body.compact #stars{transform:scale(.6667);transform-origin:top left;width:2880px}
+  body.compact #show{top:150px} body.compact #kills{top:150px}
+  body.compact #rule{top:906px} body.compact #facts{top:912px;height:30px} body.compact #fact{font-size:22px} body.compact #fact .cmd{font-size:13px}
+  body.compact #cards{top:950px;bottom:14px;gap:16px} body.compact .card{grid-template-rows:14px 40px 1fr;row-gap:5px;padding:9px 18px 8px}
+  body.compact .big{font-size:34px} body.compact .big.act{font-size:22px;padding-top:6px} body.compact .aside{font-size:13px} body.compact .foot{font-size:12px;gap:3px}
+  body.compact canvas.spark{height:32px;width:140px} body.compact .vit{grid-template-columns:1fr 140px}
+  body.compact #pull{top:900px;height:180px;padding:12px 60px 12px 70px} body.compact #pull .img{width:114px;height:160px} body.compact #pull .nm{font-size:30px} body.compact #pull .vd{font-size:18px} body.compact #pull .val{font-size:26px}
+  body.compact #cam-rest{top:876px} body.compact #menu{top:430px}
+  #cells .cell.reel{box-shadow:0 0 0 3px #c9a24d,0 18px 50px rgba(0,0,0,.7);z-index:4}
   #cam-rest{position:absolute;right:24px;top:786px;z-index:6;padding:3px 12px;background:rgba(10,8,20,.85);border:1px solid rgba(217,182,91,.5);border-radius:999px;color:#f2d27a;font-family:'Cinzel',serif;font-size:11px;letter-spacing:.22em}
   .win.reel{box-shadow:inset 0 0 0 2px rgba(217,182,91,.55),inset 0 0 60px rgba(0,0,0,.5)}
   #ripframe{position:absolute;pointer-events:none;opacity:0;transition:opacity .8s;border:3px solid #c9a24d;border-radius:12px;box-shadow:0 0 0 6px rgba(20,8,14,.85),0 18px 50px rgba(0,0,0,.65),inset 0 0 40px rgba(0,0,0,.35)}
@@ -402,12 +413,13 @@
   }
   // ---- compositing: static parts (sky, horizon, glows) are rendered once per phase; the moving layers
   //      (trees, vines, mist, light, leaves, birds) are redrawn ~20x per second with slow, independent motion ----
+  const ST = { top: 270, h: 540 };                                  // the camera stage (compact mode: 180 / 720 — set from layout.json)
   const baseCanvas = document.createElement('canvas'); baseCanvas.width = 1920; baseCanvas.height = 1080;
   function renderBase(s) {
     const g = baseCanvas.getContext('2d'); g.globalCompositeOperation = 'source-over'; g.clearRect(0, 0, 1920, 1080);
     const grad = g.createLinearGradient(0, 0, 0, 1080); s.sky.forEach((c, i) => grad.addColorStop(i / (s.sky.length - 1), c)); g.fillStyle = grad; g.fillRect(0, 0, 1920, 1080);
     if (s.horizon) { const h = g.createLinearGradient(0, 0, 0, 320); h.addColorStop(0, s.horizon[0]); h.addColorStop(1, s.horizon[1]); g.fillStyle = h; g.fillRect(0, 0, 1920, 320); }
-    const glow = (x, color) => { g.save(); g.shadowColor = color; g.shadowBlur = 120; g.fillStyle = color; g.fillRect(x, 270, 960, 540); g.restore(); };
+    const glow = (x, color) => { g.save(); g.shadowColor = color; g.shadowBlur = 120; g.fillStyle = color; g.fillRect(x, ST.top, 960, ST.h); g.restore(); };
     glow(0, s.hot); glow(960, s.cool);
   }
   const gust = t => 1 + 0.9 * Math.pow(Math.max(0, Math.sin(t / 23000)), 3);                        // an occasional soft gust
@@ -422,12 +434,12 @@
       g.fillStyle = m; g.fillRect(x, y, 1400, 60); }
     g.drawImage(scene.near, swayNear, 0);
     VINES.forEach(v => drawVine(g, v, s.vine, Math.sin(t / (2600 + v.len * 5) + v.sway) * 9 * G));
-    g.save(); g.beginPath(); g.rect(0, 0, 1920, 270); g.clip();                                        // header band: light + rare events
+    g.save(); g.beginPath(); g.rect(0, 0, 1920, ST.top); g.clip();                                        // header band: light + rare events
     if (curPhase !== 'night') { for (let k = 0; k < 3; k++) { const x = ((t / (110 + k * 40)) + k * 700) % 2300 - 300, w = 220 + k * 60;
-      const ray = g.createLinearGradient(x, 0, x + w, 270); ray.addColorStop(0, 'rgba(255,240,190,0)'); ray.addColorStop(0.5, alphaOf(s.rim, '0.10')); ray.addColorStop(1, 'rgba(255,240,190,0)');
-      g.fillStyle = ray; g.fillRect(x - 200, 0, w + 400, 270); } }
-    else { const sh = 0.05 + 0.03 * Math.sin(t / 5000); const mg = g.createRadialGradient(1500, -60, 40, 1500, -60, 700); mg.addColorStop(0, `rgba(200,215,255,${sh})`); mg.addColorStop(1, 'rgba(200,215,255,0)'); g.fillStyle = mg; g.fillRect(0, 0, 1920, 270); }
-    const rim = g.createLinearGradient(0, 0, 0, 270); rim.addColorStop(0, s.rim); rim.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = rim; g.fillRect(0, 0, 1920, 270);
+      const ray = g.createLinearGradient(x, 0, x + w, ST.top); ray.addColorStop(0, 'rgba(255,240,190,0)'); ray.addColorStop(0.5, alphaOf(s.rim, '0.10')); ray.addColorStop(1, 'rgba(255,240,190,0)');
+      g.fillStyle = ray; g.fillRect(x - 200, 0, w + 400, ST.top); } }
+    else { const sh = 0.05 + 0.03 * Math.sin(t / 5000); const mg = g.createRadialGradient(1500, -60, 40, 1500, -60, 700); mg.addColorStop(0, `rgba(200,215,255,${sh})`); mg.addColorStop(1, 'rgba(200,215,255,0)'); g.fillStyle = mg; g.fillRect(0, 0, 1920, ST.top); }
+    const rim = g.createLinearGradient(0, 0, 0, ST.top); rim.addColorStop(0, s.rim); rim.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = rim; g.fillRect(0, 0, 1920, ST.top);
     if (!leaf && t > nextLeaf) { leaf = { x: 200 + Math.random() * 1500, t0: t, dur: 9000 + Math.random() * 5000, ph: Math.random() * 6 }; nextLeaf = t + 40000 + Math.random() * 60000; }
     if (leaf) { const k = (t - leaf.t0) / leaf.dur; if (k > 1) leaf = null; else { const x = leaf.x + Math.sin(t / 700 + leaf.ph) * 40 + k * 120, y = -10 + k * 300;
       g.save(); g.translate(x, y); g.rotate(t / 900 + leaf.ph); g.fillStyle = s.vine; g.globalAlpha = 0.85; g.beginPath(); g.ellipse(0, 0, 12, 5, 0, 0, 7); g.fill(); g.restore(); } }
@@ -435,7 +447,7 @@
     if (bird) { const k = (t - bird.t0) / bird.dur; if (k > 1) bird = null; else { const x = bird.dir > 0 ? -40 + k * 2000 : 1960 - k * 2000, y = bird.y + Math.sin(k * 12) * 6, flap = Math.sin(t / 90) * 3;
       g.strokeStyle = s.near; g.lineWidth = 1.6; g.globalAlpha = 0.7; g.beginPath(); g.moveTo(x - 7, y + flap); g.quadraticCurveTo(x, y - 2, x + 7, y + flap); g.stroke(); g.globalAlpha = 1; } }
     g.restore();
-    g.globalCompositeOperation = 'destination-out'; g.fillStyle = '#000'; g.fillRect(0, 270, 1920, 540);   // the camera windows
+    g.globalCompositeOperation = 'destination-out'; g.fillStyle = '#000'; g.fillRect(0, ST.top, 1920, ST.h);   // the camera windows
     g.globalCompositeOperation = 'source-over';
   }
   let curPhase = null, front = document.getElementById('frameA'), back = document.getElementById('frameB');
@@ -457,7 +469,7 @@
   setInterval(() => { if (curPhase && !document.hidden) paint(back.style.opacity === '1' ? back : front, SCENE[curPhase], performance.now()); }, 100);   // 10 fps is plenty for slow motion
   (function tickFx() { const now = performance.now(), night = curPhase === 'night' || curPhase === 'dusk'; fg.clearRect(0, 0, 1920, 1080);
     if (!document.hidden && curPhase) for (const m of motes) { m.x += Math.sin(now / 3000 + m.p) * .25 * m.s; m.y += (night ? Math.cos(now / 4200 + m.p) * .18 : -0.06) * m.s;
-      if (m.y > 270 && m.y < 810) m.y = m.y < 540 ? 265 : 815; if (m.y < -5) m.y = 1075; if (m.x < 0) m.x = 1920; if (m.x > 1920) m.x = 0;
+      if (m.y > ST.top && m.y < ST.top + ST.h) m.y = m.y < ST.top + ST.h / 2 ? ST.top - 5 : ST.top + ST.h + 5; if (m.y < -5) m.y = 1075; if (m.x < 0) m.x = 1920; if (m.x > 1920) m.x = 0;
       const a = night ? (0.15 + 0.85 * Math.pow(Math.max(0, Math.sin(now / 1100 + m.p * 3)), 6)) * .85 : .26;
       fg.fillStyle = night ? `rgba(220,240,160,${a})` : `rgba(255,236,190,${a})`; fg.beginPath(); fg.arc(m.x, m.y, night ? 1.6 * m.s : 1.1 * m.s, 0, 7); fg.fill(); }
     requestAnimationFrame(() => setTimeout(tickFx, 100)); })();
@@ -626,11 +638,11 @@
     document.getElementById('ripframe-lbl').textContent = f.mode === 'table' ? '✦ THE CARD TABLE ✦' : '◈ EAGLE EYE ◈'; el.classList.add('on'); }).catch(() => {}); }
   setInterval(ripframePoll, 3000); ripframePoll();
   // ---- stage layout (overlay/layout.json from obs/watchdog.py): a chip + frame per cell; hero left, grid right
-  function layoutPoll() { fetch('layout.json?' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(f => { if (!f || !f.cells) return;
+  function layoutPoll() { fetch('layout.json?' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(f => { if (!f || !f.cells) return; const wasC = document.body.classList.contains('compact'); document.body.classList.toggle('compact', !!f.compact); ST.top = f.compact ? 180 : 270; ST.h = f.compact ? 720 : 540; if (wasC !== !!f.compact && curPhase) { try { renderBase(SCENE[curPhase]); } catch (e) {} }
     document.getElementById('win-hot').style.display = 'none'; document.getElementById('win-cool').style.display = 'none';
     let box = document.getElementById('cells'); if (!box) { box = document.createElement('div'); box.id = 'cells'; document.body.appendChild(box); }
     box.innerHTML = f.cells.map(c => `<div class="cell ${c.key}${c.w < 900 ? ' small' : ''}" style="left:${c.x}px;top:${c.y}px;width:${c.w}px;height:${c.h}px">` +
-      (c.key === 'moving' ? `<div class="card"><b>SHE IS ON THE MOVE</b><span>the live cameras have her — the reel waits</span></div>` : c.key === 'soon' ? `<div class="card"><b>HOT SIDE CAMERA</b><span>temporarily unavailable due to python constriction · a new one is on the way</span></div>` : '') +
+      (c.key.endsWith('_off') ? `<div class="card"><b>${c.key.startsWith('hot') ? 'HOT' : 'COLD'} HIDE</b><span>camera reconnecting…</span></div>` : c.key === 'moving' ? `<div class="card"><b>SHE IS ON THE MOVE</b><span>the live cameras have her — the reel waits</span></div>` : c.key === 'soon' ? `<div class="card"><b>HOT SIDE CAMERA</b><span>temporarily unavailable due to python constriction · a new one is on the way</span></div>` : '') +
       `<div class="chip side"><i></i><span class="label">${esc(c.label)}</span></div></div>`).join('');
     let tag = document.getElementById('cam-rest'); if (!tag) { tag = document.createElement('div'); tag.id = 'cam-rest'; document.body.appendChild(tag); }
     const dead = (f.dead || []).filter(k => k === 'hot' || k === 'cool'); tag.textContent = dead.length ? ('◆ ' + dead.map(k => k.toUpperCase()).join(' + ') + ' SIDE CAM TEMPORARILY UNAVAILABLE DUE TO PYTHON CONSTRICTION') : ''; tag.style.display = dead.length ? '' : 'none'; }).catch(() => {}); }
