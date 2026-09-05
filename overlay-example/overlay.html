@@ -278,7 +278,8 @@
   #ledger .sum b{font-size:20px;letter-spacing:.04em;color:#fff} #ledger .sum span{font-size:10px;letter-spacing:.24em;color:#c9a24d}
   /* ---- glass shade: when the pan camera is aimed where the front glass shows the room (overlay/cam_pos.json: pan < 320 and tilt > 150), fog the upper part of its window */
   #cells .cell .shade{position:absolute;left:0;right:0;top:0;height:58%;border-radius:12px 12px 0 0;background:linear-gradient(180deg,rgba(14,8,22,.96) 0%,rgba(14,8,22,.93) 70%,rgba(14,8,22,0) 100%);backdrop-filter:blur(18px);display:none;pointer-events:none}
-  #cells .cell.glass .shade{display:block} #cells .cell .shade b{position:absolute;left:50%;top:38%;transform:translateX(-50%);font-family:'Cinzel',serif;font-size:12px;letter-spacing:.3em;color:rgba(242,210,122,.55);white-space:nowrap}
+  #cells .cell.glass .shade{display:block}
+  #cells .cell.corner .shade{display:block;height:56%;width:31%;right:auto;border-radius:12px 0 24px 0;background:linear-gradient(135deg,rgba(14,8,22,.97) 0%,rgba(14,8,22,.95) 78%,rgba(14,8,22,0) 100%)} #cells .cell.corner .shade b{left:50%;top:44%;font-size:10px} #cells .cell .shade b{position:absolute;left:50%;top:38%;transform:translateX(-50%);font-family:'Cinzel',serif;font-size:12px;letter-spacing:.3em;color:rgba(242,210,122,.55);white-space:nowrap}
   #cam-rest{position:absolute;right:24px;top:786px;z-index:6;padding:3px 12px;background:rgba(10,8,20,.85);border:1px solid rgba(217,182,91,.5);border-radius:999px;color:#f2d27a;font-family:'Cinzel',serif;font-size:11px;letter-spacing:.22em}
   .win.reel{box-shadow:inset 0 0 0 2px rgba(217,182,91,.55),inset 0 0 60px rgba(0,0,0,.5)}
   #ripframe{position:absolute;pointer-events:none;opacity:0;transition:opacity .8s;border:3px solid #c9a24d;border-radius:12px;box-shadow:0 0 0 6px rgba(20,8,14,.85),0 18px 50px rgba(0,0,0,.65),inset 0 0 40px rgba(0,0,0,.35)}
@@ -678,6 +679,13 @@
     el.style.left = f.x + 'px'; el.style.top = f.y + 'px'; el.style.width = f.w + 'px'; el.style.height = f.h + 'px'; el.classList.toggle('table', f.mode === 'table');
     document.getElementById('ripframe-lbl').textContent = f.mode === 'table' ? '✦ THE CARD TABLE ✦' : '◈ EAGLE EYE ◈'; el.classList.add('on'); }).catch(() => {}); }
   setInterval(ripframePoll, 3000); ripframePoll();
+  // ---- the consultation: someone said 'tarot'; the ball wakes and she asks what the cards should speak to (overlay/tarot_pending.json)
+  let pendTs = 0;
+  function pendingPoll() { fetch('tarot_pending.json?' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(f => { if (!f || !f.ts || f.ts === pendTs || Date.now() / 1000 - f.ts > 100) return; pendTs = f.ts;
+    const o = document.getElementById('oracle'), q = document.getElementById('oq'), a = document.getElementById('oa'); document.getElementById('card').classList.remove('out');
+    q.innerHTML = '<b>' + esc(f.user) + '</b> approaches the table'; a.innerHTML = 'The mist gathers. What should the cards speak to?'; o.classList.add('on');
+    setTimeout(() => { if (pendTs === f.ts && !document.getElementById('tarot').classList.contains('on')) o.classList.remove('on'); }, 95000); }).catch(() => {}); }
+  setInterval(pendingPoll, 2000);
   // ---- stage layout (overlay/layout.json from obs/watchdog.py): a chip + frame per cell; hero left, grid right
   let layoutKey = '';
   function layoutPoll() { fetch('layout.json?' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(f => { if (!f || !f.cells) return; document.body.classList.toggle('compact', !!f.compact); ST.top = f.compact ? 180 : 270; ST.h = f.compact ? 720 : 540; const k = JSON.stringify(f.cells) + (f.dead || []).join(); if (k === layoutKey) return; layoutKey = k;   // the class every poll (the phase code rewrites body's classes); redraw only when the layout really changes
@@ -703,7 +711,8 @@
   setInterval(statusPoll, 10000); setTimeout(statusPoll, 1500);
   // ---- glass shade follows the pan camera's pose (overlay/cam_pos.json from the bot)
   function shadePoll() { fetch('cam_pos.json?' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(p => { const [pan, tilt] = (p && p.coolcam) || [0, 0]; const glass = pan < 320 && tilt > 150;
-    document.querySelectorAll('#cells .cell.cool').forEach(el => el.classList.toggle('glass', glass)); }).catch(() => {}); }
+    const corner = !glass && tilt >= 200;                                     // at the vista the room shows only in the top-left corner (through the front glass)
+    document.querySelectorAll('#cells .cell.cool').forEach(el => { el.classList.toggle('glass', glass); el.classList.toggle('corner', corner); }); }).catch(() => {}); }
   setInterval(shadePoll, 4000); shadePoll();
   setInterval(() => document.body.classList.toggle('busy', ['tarot', 'oracle', 'haiku', 'menu', 'pull'].some(id => document.getElementById(id).classList.contains('on'))), 300);   // a special on stage: the cell plates step aside
   // ---- cameras destroyed (overlay/kills.json): the queen's trophy count, in the header

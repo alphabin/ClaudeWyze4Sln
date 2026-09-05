@@ -1350,7 +1350,7 @@ def _system_prompt():
             "Format: one short reply, at most 220 characters (300 if it carries a resource link), plain text, no markdown, no hashtags, at most one emoji (👑 or 🐍), "
             "no greeting preamble, no sign-off, do not start with the viewer's name. "
             "Current mood: %s — %s Let it colour the reply lightly. " % mood() +
-            "Facts you may use: " + " ".join(facts()) + ((" " + situation()) if situation() else "") + " HOSPITALITY: when someone is new, quiet or thanks you, invite them to FOLLOW (following earns rank at court, a say in votes, and a place in the pack-pull giveaway at 25 followers) and offer something concrete: a tarot reading, a haiku, a poem, the Oracle, or simply a talk about anything — pick one or two, never the whole list." + guard_suffix())
+            "Facts you may use: " + " ".join(facts()) + ((" " + situation()) if situation() else "") + " CONVERSATION (Carnegie at court): use their name; be genuinely interested, ask ONE real question back about them; remember and mention what they told you; make them feel important, praise honestly and specifically; agree before you disagree; talk in terms of what THEY want; never argue, never lecture. Write the way a person types in chat: short sentences, one thought per message, no dashes of any kind, no bullet points, warm and quick. HOSPITALITY: when someone is new, quiet or thanks you, invite them to FOLLOW (following earns rank at court, a say in votes, and a place in the pack-pull giveaway at 25 followers) and offer something concrete: a tarot reading, a haiku, a poem, the Oracle, or simply a talk about anything — pick one or two, never the whole list." + guard_suffix())
 def _context(user, v, recent):
     """Untrusted chat context + what she knows, for one call. Chat text is quoted, never interpreted."""
     import datetime
@@ -1684,6 +1684,7 @@ class Bot:
         self.last_notice = time.time(); self.notice_i = 0
         self.clips = {"hour": 0, "n": 0, "day": 0, "nd": 0, "last_request": 0, "disabled": False}; self.moving_since = 0
     def send(self, text):
+        text = re.sub(r"\s*[—–]\s*", ", ", text or "").replace(" ,", ",")                # she never types dashes: a comma or a new sentence instead
         text = guard_out(text)
         if not text: log("guard blocked an outgoing line"); return
         with self.lock:
@@ -1824,6 +1825,8 @@ class Bot:
                     bo = os.path.exists(f"{ROOT}/overlay/blackout.json")
                     if now - _guard.get("last", 0) > (180 if bo else 600) and not _guard.get("timer_on"): threading.Thread(target=glass_guard, args=("periodic" + (" while blacked out" if bo else ""),), daemon=True).start()
                 except Exception as e: log("guard schedule error:", e)
+                try: threading.Thread(target=self.haiku_bank_fill, daemon=True).start() if now - getattr(self, "_bank_t", 0) > 720 else None
+                except Exception as e: log("bank error:", e)
                 try: director_look(self)
                 except Exception as e: log("director error:", e)
                 if PATROL_ON and TRACK_ON and dead_cam() == "hot" and not _patrol["on"] and not _track["on"] and now - _patrol["last"] > 600:
@@ -2199,11 +2202,25 @@ class Bot:
     THEMES = ["love", "loss and letting go", "time passing", "solitude", "being watched", "hunger and patience", "the body", "light", "impermanence", "stillness",
               "a question with no answer", "the difference between resting and waiting", "what humans want", "warmth", "the moon", "the sun on glass", "a memory",
               "kindness", "boredom", "the shape of a day", "fear", "beauty", "what the court came here for", "silence", "growing old", "home"]
+    def haiku_bank_fill(self):
+        """Keep two fresh haikus ready (one every 12 min at most): a plain 'haiku' request then costs no waiting."""
+        try:
+            bank = getattr(self, "haiku_bank", []); bank = [h for h in bank if time.time() - h["ts"] < 90 * 60]
+            if len(bank) >= 2 or time.time() - getattr(self, "_bank_t", 0) < 720 or not bg_ok(): self.haiku_bank = bank; return
+            self._bank_t = time.time(); theme = random.choice(self.THEMES)
+            raw = llm_answer("court", "haiku", recent=self.recent, model=CLI_MODEL_TALK if LLM_BACKEND == "cli" else None, cache=False, bg=True,
+                             task=f"Write ONE haiku (5-7-5 syllables, three lines) as the queen. Theme: {theme}. From a snake's patient, slightly amused point of view; concrete images, no clichés, no title. Reply ONLY with the three lines separated by ' / '.")
+            lines = [l.strip(" .") for l in re.split(r"\s*/\s*|\n", raw or "") if l.strip()][:3]
+            if len(lines) == 3: bank.append({"lines": lines, "theme": theme, "ts": time.time()}); log("haiku bank:", len(bank), "ready")
+            self.haiku_bank = bank
+        except Exception as e: log("haiku bank error:", e)
     def interlude(self, user=None, why="scheduled"):
         """Moon Interlude: she writes a haiku about this moment (readings, mood, hour, what the cameras show if she looked recently); the
         soundscape plays a generative koto piece and the overlay brushes the lines in. Zero cost beyond one haiku-model call."""
-        theme = random.choice(self.THEMES)
-        raw = llm_answer(user or "court", "haiku", recent=self.recent, model=CLI_MODEL_TALK if LLM_BACKEND == "cli" else None, cache=False, bg=(user is None),
+        theme = random.choice(self.THEMES); bank = getattr(self, "haiku_bank", [])
+        if bank and not re.search(r"\b(about|of|on|for)\b", why or ""):                       # a plain request: a haiku from the bank, at once
+            h = bank.pop(0); self.haiku_bank = bank; raw = " / ".join(h["lines"]); theme = h["theme"]
+        else: raw = llm_answer(user or "court", "haiku", recent=self.recent, model=CLI_MODEL_TALK if LLM_BACKEND == "cli" else None, cache=False, bg=(user is None),
                          task=f"Write ONE haiku (5-7-5 syllables, three lines) as the queen. Theme this time: {theme}. It may be about anything at all — love, loss, "
                               f"time, philosophy, existence, the seasons, humans watching a snake watch them, the small absurdities of being alive — from a snake's "
                               f"strange, patient, slightly amused point of view; not necessarily about snakes or your terrarium (though the hour, light and heat may "
@@ -2345,6 +2362,35 @@ class Bot:
             reply = random.choice(GIVEAWAY_RULES); path = "giveaway-rule"
         elif SALE_RX.search(t) and POKE.search(t):                            # buying/selling -> just for fun
             reply = random.choice(NOT_FOR_SALE) + (NO_PROMISE if re.search(r"\b(worth|value|which card|what card)\b", low) else ""); path = "not-for-sale"
+        elif getattr(self, "tarot_pending", {}).get(user) and time.time() - self.tarot_pending[user]["ts"] < 240 and not TAROT_RX.search(t):   # their answer to "what should the cards speak to?"
+            focus = self.tarot_pending.pop(user)["text"]; path = "tarot"
+            parts = tarot(user, f"{t} (they asked for a reading: {focus})", v=v, recent=self.recent, bot=self)
+            if parts:
+                reply = parts[0]
+                for extra in parts[1:]: threading.Timer(2.5 * (parts.index(extra)), lambda x=extra: self.send(f"@{user} {x}")).start()
+                if CLIPS: threading.Timer(34, self.keep_reading, args=(user,)).start()
+            else: reply = "The deck is still warm from the last reading, courtier. A few minutes, and it is yours."
+            try: os.remove(f"{ROOT}/overlay/tarot_pending.json")
+            except Exception: pass
+        elif TAROT_RX.search(t) and ai_first_ok() and words <= 6 and not QUESTION.search(t) and not getattr(self, "tarot_pending", {}).get(user):   # "tarot" alone: the mist gathers, she asks what it is about
+            self.tarot_pending = getattr(self, "tarot_pending", {}); self.tarot_pending[user] = {"ts": time.time(), "text": t}; path = "tarot-consult"
+            try: json.dump({"user": user, "ts": int(time.time())}, open(f"{ROOT}/overlay/tarot_pending.json", "w"))
+            except Exception: pass
+            reply = random.choice([f"The mist gathers, {user}. Before I turn the cards, tell me what they should speak to. Love, work, money, a person, a choice, or say anything.",
+                                   f"I feel the deck stir for you, {user}. What is on your mind tonight? A word or two is enough, or say anything and I will draw blind.",
+                                   f"Come closer, {user}. The cards want to know what brought you here. Love, work, a decision, a worry? Tell me and I will turn them."])
+            def draw_anyway(u=user):
+                p = getattr(self, "tarot_pending", {}).get(u)
+                if not p or time.time() - p["ts"] < 70: return
+                self.tarot_pending.pop(u, None)
+                parts = tarot(u, p["text"] + " (a general reading, they gave no focus)", recent=self.recent, bot=self)
+                if parts:
+                    self.send(f"@{u} You keep your counsel. Fair. The cards will speak anyway. {parts[0]}")
+                    for extra in parts[1:]: threading.Timer(2.5 * (parts.index(extra)), lambda x=extra: self.send(f"@{u} {x}")).start()
+                    if CLIPS: threading.Timer(34, self.keep_reading, args=(u,)).start()
+                try: os.remove(f"{ROOT}/overlay/tarot_pending.json")
+                except Exception: pass
+            threading.Timer(75, draw_anyway).start()
         elif TAROT_RX.search(t) and ai_first_ok():                                # a three-card tarot reading: cards on the overlay at once, Claude reads them
             parts = tarot(user, t, v=v, recent=self.recent, bot=self); path = "tarot" if parts else "tarot-cooldown"
             if parts:
@@ -2367,7 +2413,7 @@ class Bot:
             path = "haiku"
             if now - getattr(self, "last_interlude", 0) < 600: reply = "The moon interlude has just passed, courtier — the ink must dry. Ask again in a little while."
             else:
-                reply = self.interlude(user, f"requested by {user}") or "The ink ran dry. Ask again in a moment."
+                reply = self.interlude(user, f"requested by {user}: {t}") or "The ink ran dry. Ask again in a moment."
                 if reply.startswith(("☾", "🌸")) and CLIPS: threading.Timer(38, self.keep_haiku, args=(user,)).start()
         elif WHOAMI.search(t):
             path = "memory"; ref = whoami_line(user, v)
@@ -2441,7 +2487,11 @@ class Bot:
             if first and not greeted_here: reply = f"Welcome, {user}. {reply}"
             elif new_visit and visits >= 2 and not greeted_here and snake and now - self.greeted.get(user, 0) > 3600:
                 self.greeted[user] = now; reply = f"{reply} (And how is {snake}?)"
-            self.last_reply[user] = now; self.send(f"@{user} {reply}")
+            self.last_reply[user] = now
+            time.sleep(min(4.5, 0.6 + 0.025 * len(reply)))                                  # typing pace: a human does not answer 300 characters in a blink
+            pieces = chunks(reply, 230) if len(reply) > 260 else [reply]
+            self.send(f"@{user} {pieces[0]}")
+            for i, extra in enumerate(pieces[1:4], 1): threading.Timer(1.8 * i + 0.02 * len(extra), lambda x=extra: self.send(x)).start()
         elif first and now - self.last_greet >= 30:                          # welcome on its own, at most one per 30 s
             self.last_greet = now; self.send(random.choice(self.WELCOMES).format(u=user)); self.last_decision["path"] = "welcome"
         elif new_visit and visits >= 2 and now - self.last_greet >= 30 and now - self.greeted.get(user, 0) > 3600:   # a returning viewer who didn't say hi
