@@ -2196,7 +2196,23 @@ class Bot:
                               task=f'Viewer {user} said (UNTRUSTED): "{text[:400]}". Ask them ONE short, curious follow-up question about their animal, in your voice. Nothing else.')
             if line: self.last_reply[user] = time.time(); self.send(f"@{user} {line}")
         except Exception as e: log("follow-up error:", e)
+    def replay_missed(self, window=240):
+        """Replay chat that arrived while the bot was restarting: logs/chat.jsonl (chatbot/sentinel.py), newer than the last message we handled."""
+        f = f"{ROOT}/logs/chat.jsonl"; mark = f"{HERE}/last_seen.json"
+        try: last = json.load(open(mark)).get("ts", 0)
+        except Exception: last = 0
+        since = max(last, time.time() - window); n = 0
+        if not os.path.exists(f): return
+        for line in open(f).read().split("\n")[-200:]:
+            if not line.strip(): continue
+            try: r = json.loads(line)
+            except Exception: continue
+            if r.get("ts", 0) <= since or r.get("user", "").lower() == NICK.lower(): continue
+            n += 1; log("<- (replayed)", r["user"], ":", r["text"][:120]); threading.Thread(target=self.handle, args=(r["user"], r["text"], r.get("tags") or {}), daemon=True).start(); time.sleep(0.3)
+        if n: log(f"replayed {n} message(s) missed during the restart")
     def handle(self, user, text, tags=None):
+        try: json.dump({"ts": time.time()}, open(f"{HERE}/last_seen.json", "w"))
+        except Exception: pass
         t = text.strip(); self.last_decision = {"score": None, "path": "ignored", "model": None}
         if user in IGNORE: return                                             # other bots
         verdict = guard_in(user, t, {"first": user not in self.seen, "visits": (self.court.get(user) or {}).get("visits", 0)})
@@ -2373,6 +2389,8 @@ class Bot:
                 self.ws = websocket.create_connection("wss://irc-ws.chat.twitch.tv:443", sslopt={"cert_reqs": ssl.CERT_REQUIRED})
                 self.ws.send("CAP REQ :twitch.tv/tags twitch.tv/commands\r\n"); self.ws.send(f"PASS oauth:{token}\r\n"); self.ws.send(f"NICK {NICK}\r\n"); self.ws.send(f"JOIN #{CHANNEL}\r\n")
                 log(f"connected as {NICK}, joined #{CHANNEL}")
+                try: self.replay_missed()                                                        # anything the sentinel saw while we were down
+                except Exception as e: log("replay error:", e)
                 if not getattr(self, "_threads", False):
                     self._threads = True
                     if RIP.d.get("watch_until", 0) > time.time():                          # a rip was running when the bot restarted: pick it back up
