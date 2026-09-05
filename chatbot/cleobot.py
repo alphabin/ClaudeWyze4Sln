@@ -132,13 +132,13 @@ NOTICE_HOURS = float(CFG.get("CLEOBOT_NOTICE_HOURS", "2.5"))              # rota
 # and sets Twitch category + title + tags to match (needs channel:manage:broadcast). Overlay shows the block from overlay/show.json.
 SHOWS_ON = CFG.get("CLEOBOT_SHOWS", "1") != "0"
 SHOWS = {   # key: (category id, category name, title, tags)  — hours are local; sunset shifts 'oracle' automatically
-    "court":   ("272263131", "Animals, Aquariums, and Zoos", "Ball Python 24/7 Live Cam 🐍 Princess Cleo talks back · say 'tarot' for a reading 🃏 · 25 followers = Pokémon pack rip 🎴",
+    "court":   ("272263131", "Animals, Aquariums, and Zoos", "🐍 Ball Python 24/7 · Princess Cleo TALKS BACK & speaks aloud 🔊 · tarot 🃏 fortunes 🔮 haiku & poems 🌸 · Pokémon rip at 25 followers 🎴",
                 ["Animals", "AnimalCam", "24HourStream", "FamilyFriendly", "Snake", "BallPython", "Reptile", "Relaxing", "ASMR", "Tarot"]),
-    "oracle":  ("83418", "Tarot", "🔮 ORACLE HOURS · tarot & fortunes read live by a ball python queen 🐍 say 'tarot' or 'will I ever…' in chat 🃏 24/7 snake cam",
+    "oracle":   ("83418", "Tarot", "🔮 ORACLE HOURS · a ball python reads tarot & tells fortunes LIVE, out loud 🔊 say 'tarot' · 'will I ever…' · 'haiku' · 'poem' 🐍 24/7 cam",
                 ["Tarot", "Fortune", "Oracle", "Interactive", "AnimalCam", "Snake", "BallPython", "Relaxing", "FamilyFriendly", "English"]),
-    "night":   ("499973", "Always On", "🌙 Night Watch · ball python patrols after dark, live 24/7 🐍 talks back in chat, tarot on request 🃏 generative jungle soundscape",
+    "night":   ("499973", "Always On", "🌙 NIGHT WATCH · ball python on the prowl 24/7 🐍 she talks & speaks 🔊 tarot 🃏 fortunes 🔮 haiku & poems 🌸 live jungle soundscape",
                 ["AlwaysOn", "24HourStream", "AnimalCam", "Snake", "BallPython", "Relaxing", "ASMR", "Sleep", "Cozy", "Tarot"]),
-    "rip":     ("9618", "Pokémon Trading Card Game", "🎴 PACK RIP NIGHT at the snake's glass · a ball python judges every pull 🐍 First Partner packs · a pull mailed to a random follower",
+    "rip":   ("9618", "Pokémon Trading Card Game", "🎴 PACK RIP NIGHT · a ball python judges every pull out loud 🔊 · tarot 🃏 haiku 🌸 between packs 🐍 · a pull mailed to a random follower",
                 ["Pokemon", "PokemonTCG", "PackOpening", "Giveaway", "AnimalCam", "Snake", "BallPython", "FamilyFriendly", "Interactive", "Tarot"]),
 }
 def current_show(now=None):
@@ -318,7 +318,7 @@ def ripcam_tick(rip_active, bot=None):
         bot._cmd_seen = cmd.get("ts"); log("rip cam: judge-now from the phone" + (" (snapshot)" if cmd.get("shot") else "")); bot.judge_shot = cmd.get("shot"); bot.judge_next = True
     if bot is not None and fresh and cmd.get("holo") is not None and not getattr(bot, "_cmd_seen", 0) == cmd.get("ts"):
         bot._cmd_seen = cmd.get("ts"); bot.fix_holo(bool(cmd.get("holo")))
-    want = cmd.get("mode") if time.time() - cmd.get("ts", 0) < 6 * 3600 and cmd.get("mode") in ("table", "eagle") else None   # the phone's switch wins
+    want = cmd.get("mode") if time.time() - cmd.get("ts", 0) < 6 * 3600 and cmd.get("mode") in ("table", "rip", "eagle") else None   # the phone's switch wins: Cards / Rip / Live
     if bot is not None and want != "eagle":
         if (live or shot_queue_next()) and not getattr(bot, "rip_until", 0) > time.time():
             bot.rip_until = time.time() + 20 * 60; bot.rip_auto = True; threading.Thread(target=bot.rip_watch, daemon=True).start()
@@ -327,7 +327,8 @@ def ripcam_tick(rip_active, bot=None):
             bot.rip_until = 0; bot.rip_auto = False; log("rip cam: phone stopped, table closed")
         elif live and getattr(bot, "rip_until", 0) > time.time(): bot.rip_until = max(bot.rip_until, time.time() + 20 * 60); rip_active = True   # keep the watch alive while the phone is up
     if bot is not None and want == "eagle" and getattr(bot, "rip_until", 0) > time.time(): bot.rip_until = 0; bot.rip_auto = False; log("rip cam: phone live on stream, table closed")   # eagle eye = no judging, ever
-    if bot is not None and want == "table" and live and not getattr(bot, "rip_until", 0) > time.time(): bot.rip_until = time.time() + 20 * 60; bot.rip_auto = True; threading.Thread(target=bot.rip_watch, daemon=True).start()
+    if bot is not None and want in ("table", "rip") and live and not getattr(bot, "rip_until", 0) > time.time(): bot.rip_until = time.time() + 20 * 60; bot.rip_auto = True; threading.Thread(target=bot.rip_watch, daemon=True).start()
+    if bot is not None: bot.rip_mode = want or "table"
     mode = (want or ("table" if rip_active else "eagle")) if live else None
     if live and not _ripcam["live"]: _ripcam["portrait"] = ripcam_orient()
     if (live, mode) != (_ripcam["live"], _ripcam["mode"]):
@@ -414,6 +415,7 @@ def cam_home(cam):
     while y:
         c = min(60, abs(y)); ok &= cam_move(cam, "down" if y > 0 else "up", c); y = y - c if y > 0 else y + c; time.sleep(0.6)
     _cam_pos[cam] = [0, 0]; _save_pos(); return ok
+_cam_sess = threading.Lock()                                                     # ONE mover at a time: patrol, tracking, searching and presence checks all take this or skip
 TRACK_ON = CFG.get("CLEOBOT_TRACK", "1") != "0"; TRACK_MINUTES = float(CFG.get("CLEOBOT_TRACK_MINUTES", "10"))   # vision-guided 'keep her in frame' on the cool cam
 def where_is_she():
     """SECURITY BOUNDARY like describe_cams: Read tool on one still, no chat text. Returns 'center'|'left'|'right'|'up'|'down'|'none'."""
@@ -435,7 +437,7 @@ _track = {"on": False, "last_motion": 0, "nudges": []}
 def track_session(motion_fn):
     """Follow her head while the hub keeps seeing cool-side motion: a look every TRACK_EVERY s, one small nudge when her head is off-centre
     (max 8 nudges per 10 min so we never fight the camera's own tracking), and 'home' after TRACK_HOME_AFTER quiet minutes."""
-    if _track["on"]: return
+    if _track["on"] or not _cam_sess.acquire(blocking=False): return
     _track["on"] = True; log("track session started")
     try:
         while True:
@@ -452,7 +454,7 @@ def track_session(motion_fn):
                 elif w == "none" and quiet < 120 and time.time() - _search["last"] > SEARCH_MINUTES * 60: search_for_her()   # the camera's own tracking lost her: go to her spots
             time.sleep(TRACK_EVERY)
     except Exception as e: log("track session error:", e)
-    finally: _track["on"] = False; log("track session ended")
+    finally: _cam_sess.release(); _track["on"] = False; log("track session ended")
 def describe_spot():
     """SECURITY BOUNDARY like describe_cams: Read tool on one still, fixed prompt. JSON: {landmarks:[...], snake: none|body|head, head_pos: ...}"""
     import subprocess
@@ -604,7 +606,7 @@ PATROL_ON = CFG.get("CLEOBOT_PATROL", "1") != "0"; PATROL_ALWAYS = CFG.get("CLEO
 def patrol_session(bot=None, minutes=20, step=8, every=18):
     """One camera for two sides (the hot cam is dead, 2026-09-04): while she is awake, the cool cam drifts slowly edge to edge across the
     enclosure so viewers see the whole landscape. A look every ~3 min: seen -> stop, frame her, hold 4 min. Hub motion -> hand over to track_session."""
-    if _patrol["on"] or _track["on"]: return
+    if _patrol["on"] or _track["on"] or not _cam_sess.acquire(blocking=False): return
     _patrol["on"] = True; _track["on"] = True; started = time.time(); direction = "left"; legs = 0; last_look = 0; log("patrol: started (one eye for two sides)")
     try:
         cam_goto("coolcam", VISTA[0], VISTA[1])                                       # start from the vista, then drift left toward the base and back
@@ -612,7 +614,7 @@ def patrol_session(bot=None, minutes=20, step=8, every=18):
             if bot is not None and getattr(bot, "rip_until", 0) > time.time(): break
             try:
                 if bool(((hub() or {}).get("motion") or {}).get("cool", {}).get("moving")):
-                    log("patrol: she is moving, handing over to tracking"); _track["on"] = False; _track["last_motion"] = time.time()
+                    log("patrol: she is moving, handing over to tracking"); _track["on"] = False; _track["last_motion"] = time.time(); _patrol["on"] = False; _patrol["last"] = time.time(); _cam_sess.release(); _patrol["handed"] = True
                     threading.Thread(target=track_session, args=(lambda: bool(((hub() or {}).get("motion") or {}).get("cool", {}).get("moving")),), daemon=True).start(); return
             except Exception: pass
             if time.time() - last_look > 180 and vision_ok():
@@ -630,7 +632,9 @@ def patrol_session(bot=None, minutes=20, step=8, every=18):
             time.sleep(every)
         cam_vista(); log("patrol: resting at the vista")
     except Exception as e: log("patrol error:", e)
-    finally: _patrol["on"] = False; _track["on"] = False; _patrol["last"] = time.time(); log("patrol: ended")
+    finally:
+        if _patrol.pop("handed", False): log("patrol: ended (handed over)")
+        else: _patrol["on"] = False; _track["on"] = False; _patrol["last"] = time.time(); _cam_sess.release(); log("patrol: ended")
 def track_once(step=12, max_nudges=3):
     """Nudge the cool cam toward her until she is centred (or give up and go home). Returns the final word."""
     w = where_is_she(); log(f"track: head is {w}")
@@ -1482,7 +1486,7 @@ def fortune(user, text, v=None, recent=()):
     except Exception as e: log("fortune.json error:", e)
     return "🔮 " + ans + " (The Oracle speaks on the stream.)"
 # ---------- tarot: a real three-card reading from a full 78-card deck (chatbot/tarot.json), interpreted by Claude ----------
-TAROT_RX = re.compile(r"\b(tarot|tarrot|taro|read my cards|pull (a|some|three|3) cards?|card reading|draw (a|three|3) cards?|three.card|3.card|past present future)\b", re.I)
+TAROT_RX = re.compile(r"\b(tarr?ots?|taros?|tarrots?|read my cards|pull (a|some|three|3) cards?|card reading|draw (a|three|3) cards?|three.card|3.card|past present future)\b", re.I)
 _tarot = {"users": {}, "last": 0, "deck": None}
 def tarot_deck():
     if _tarot["deck"] is None:
@@ -1738,9 +1742,12 @@ class Bot:
                         and now - getattr(self, "last_presence", 0) > PRESENCE_MINUTES * 60 and bg_ok():
                     self.last_presence = now
                     def presence():
-                        w = where_is_she(); log(f"presence: head is {w}")
-                        if w in ("center", "left", "right", "up", "down", "body"): remember_sighting(w); frame_her() if w != "body" else None
-                        elif w == "none": search_for_her()
+                        if not _cam_sess.acquire(blocking=False): return
+                        try:
+                            w = where_is_she(); log(f"presence: head is {w}")
+                            if w in ("center", "left", "right", "up", "down", "body"): remember_sighting(w); frame_her() if w != "body" else None
+                            elif w == "none": search_for_her()
+                        finally: _cam_sess.release()
                     threading.Thread(target=presence, daemon=True).start()
                 if TRACK_ON and not _track["on"] and not getattr(self, "rip_until", 0) > now:
                     try:
@@ -1977,6 +1984,15 @@ class Bot:
                     self.show_pull({"shot": shot}, "", "", len(seen) + 1, stage="none")
                     bl = "A card, but the print swims. Closer, flatter, more light — and snap again."; self.send(bl); threading.Thread(target=speak, args=(bl, "rip"), daemon=True).start()
             except Exception as e: log("rip watch error:", e)
+            if getattr(self, "rip_mode", "table") == "rip" and time.time() - getattr(self, "_banter_t", 0) > 150 and time.time() - last_activity > 45 and bg_ok():
+                self._banter_t = time.time()
+                try:
+                    L = json.load(open(f"{ROOT}/overlay/pulls.json")) if os.path.exists(f"{ROOT}/overlay/pulls.json") else {}
+                    ctx = f"Rip Night is live: {len(L.get('cards') or [])} cards judged so far, ledger ${L.get('total', 0)}, best pull {L.get('best') or 'none yet'}. The human is opening packs at your table with the phone camera on you."
+                    line = llm_answer("court", "rip-banter", recent=self.recent, model=CLI_MODEL_TALK if LLM_BACKEND == "cli" else None, cache=False, bg=True,
+                                      task=f"{ctx} Say ONE short line to the court between packs as the queen-seer: a pun or a sassy jab about the pulls, a dare for chat ('holo or bust?', 'call the next pull'), or a prophecy about the next pack. Under 160 characters, no emoji, nothing for sale.")
+                    if line: self.send(f"🎴 {line}")
+                except Exception as e: log("banter error:", e)
             wait = (RIP_WATCH_EVERY if time.time() - last_activity < 600 else 30) if not _ripcam.get("live") else 3600   # phone live: no polling at all — she looks when the phone snaps
             for _ in range(int(wait * 2)):
                 if shot_queue_next(): last_activity = time.time(); break                            # the phone's snaps wait in overlay/shots/, judged in order

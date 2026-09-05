@@ -15,7 +15,7 @@ video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;backgr
 #top h1{font-family:Cinzel,serif;font-size:13px;letter-spacing:.18em;color:var(--gold2);flex:1;white-space:nowrap}
 .badge{padding:5px 11px;border-radius:999px;background:rgba(10,8,20,.75);border:1px solid rgba(217,182,91,.5);color:var(--gold2);font-family:Cinzel,serif;font-size:10px;letter-spacing:.18em}
 .badge i{display:inline-block;width:7px;height:7px;border-radius:50%;background:#666;margin-right:6px}.badge.on i{background:var(--red);box-shadow:0 0 8px var(--red)}
-#livebtn{padding:6px 10px;border-radius:999px;border:1px solid rgba(217,182,91,.5);background:rgba(10,8,20,.75);color:var(--muted);font-size:11px}#livebtn.on{background:var(--red);color:#fff;border-color:var(--red)}
+#modes{display:flex;border:1px solid rgba(217,182,91,.5);border-radius:999px;overflow:hidden;background:rgba(10,8,20,.75)}#modes button{padding:6px 11px;border:0;background:transparent;color:var(--muted);font-size:11px;font-family:Cinzel,serif;letter-spacing:.08em}#modes button.sel{background:var(--gold2);color:#2a0b1a}#modes button[data-m=eagle].sel{background:var(--red);color:#fff}
 /* toast */
 #toast{position:absolute;left:14px;right:14px;top:calc(env(safe-area-inset-top) + 58px);z-index:3;padding:10px 14px;border-radius:12px;background:rgba(12,8,20,.82);border:1px solid rgba(201,162,77,.4);backdrop-filter:blur(8px);transition:opacity .3s}
 #toast b{display:block;font-family:Cinzel,serif;font-size:11px;letter-spacing:.2em;color:var(--gold2);margin-bottom:2px}#toast span{font-size:14px;line-height:1.35}
@@ -44,7 +44,7 @@ video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;backgr
 #sheet .chips{display:flex;gap:8px;margin-top:12px}#sheet .chips button{flex:1;padding:11px 6px;border-radius:999px;border:1px solid var(--gold);background:transparent;color:var(--gold2);font-size:12px}#sheet .chips button.x{border-color:rgba(255,255,255,.3);color:#fff}
 </style></head><body><div id="app">
 <div id="stage"><video id="v" autoplay muted playsinline></video><div id="flash"></div>
-  <div id="top"><h1>✦ CLEO'S CARD TABLE</h1><span class="badge" id="badge"><i></i>OFF</span><button id="livebtn">phone on stream</button></div>
+  <div id="top"><h1>✦ CLEO'S CARD TABLE</h1><span class="badge" id="badge"><i></i>OFF</span><div id="modes"><button data-m="table" class="sel">Cards</button><button data-m="rip">Rip</button><button data-m="eagle">Live</button></div></div>
   <div id="toast"><b id="t1">READY</b><span id="t2">Fill the picture with a card and press the shutter.</span></div>
   <div id="ctl"><div id="zooms"><button data-z="1" class="sel">1×</button><button data-z="2">2×</button><button data-z="3">3×</button></div>
     <div id="bar"><button id="stop">stop</button><button id="shutter" aria-label="snap"></button><div id="last"></div></div></div>
@@ -75,16 +75,17 @@ async function start(){
   }catch(e){ $('start').classList.remove('hide'); toast('COULD NOT START', e.message+(location.protocol!=='https:'?' (needs https)':'')); alert('Could not start: '+e.message); }
 }
 function stop(){ on=false; try{pc&&pc.close()}catch{} try{stream&&stream.getTracks().forEach(t=>t.stop())}catch{} $('v').srcObject=null; fetch('/cmd',{method:'POST',body:JSON.stringify({stop:true})}).catch(()=>{}); $('start').classList.remove('hide'); $('sheet').classList.remove('on'); ui(); }
-function ui(){ $('badge').className='badge'+(on?' on':''); $('badge').innerHTML='<i></i>'+(on?'ON AIR':'OFF'); $('shutter').disabled=!on||mode!=='table'; }
+function ui(){ $('badge').className='badge'+(on?' on':''); $('badge').innerHTML='<i></i>'+(on?'ON AIR':'OFF'); $('shutter').disabled=!on||mode==='eagle'; }
 $('go').onclick=start; $('stop').onclick=stop;
-$('livebtn').onclick=()=>setMode(mode==='table'?'eagle':'table');
-function setMode(m){ mode=m; $('livebtn').classList.toggle('on',m==='eagle'); $('livebtn').textContent=m==='eagle'?'phone on stream: ON':'phone on stream'; ui(); $('sheet').classList.remove('on'); fetch('/cmd',{method:'POST',body:JSON.stringify({mode:m})}).catch(()=>{}); if(m==='eagle') toast('PHONE ON STREAM','Viewers see your phone live (about 30 s to switch). No judging until you turn it off.'); else toast('CARD TABLE','Fill the picture with a card and press the shutter.'); }
+document.querySelectorAll('#modes button').forEach(b=>b.onclick=()=>setMode(b.dataset.m));
+const MODE_TEXT={table:['CARDS','Your phone stays off the stream. Snap each card: she names, prices and judges it.'],rip:['RIP NIGHT','Your phone is LIVE on the stream as the table. Snap cards and boxes: she judges, prices, and heckles the court between packs.'],eagle:['LIVE · POV','Your phone is the main picture. Get her best angles. No judging in this mode.']};
+function setMode(m){ mode=m; document.querySelectorAll('#modes button').forEach(b=>b.classList.toggle('sel',b.dataset.m===m)); ui(); $('sheet').classList.remove('on'); fetch('/cmd',{method:'POST',body:JSON.stringify({mode:m})}).catch(()=>{}); toast(MODE_TEXT[m][0],MODE_TEXT[m][1]+(m==='table'?'':' Takes up to 30 s to switch on stream.')); }
 // zoom: real camera zoom when the phone has it, otherwise the snapshot is cropped to what you see
 document.querySelectorAll('#zooms button').forEach(b=>b.onclick=()=>{ zoom=parseFloat(b.dataset.z); document.querySelectorAll('#zooms button').forEach(x=>x.classList.toggle('sel',x===b)); applyZoom(); });
 function applyZoom(){ if(nativeZoom&&stream){ stream.getVideoTracks()[0].applyConstraints({advanced:[{zoom}]}).catch(()=>{}); $('v').style.transform='none'; } else $('v').style.transform='scale('+zoom+')'; }
 // the snap: a full-size JPEG straight from the camera, posted to the Mac
 async function snap(why){
-  if(!on||mode!=='table'||Date.now()-lastSnap<1200) return; const v=$('v'); if(!v.videoWidth) return; lastSnap=Date.now();
+  if(!on||mode==='eagle'||Date.now()-lastSnap<1200) return; const v=$('v'); if(!v.videoWidth) return; lastSnap=Date.now();
   const c=$('c'); const z=nativeZoom?1:zoom; const sw=v.videoWidth/z, sh=v.videoHeight/z; c.width=Math.round(sw); c.height=Math.round(sh); c.getContext('2d').drawImage(v,(v.videoWidth-sw)/2,(v.videoHeight-sh)/2,sw,sh,0,0,c.width,c.height);
   $('flash').classList.add('on'); setTimeout(()=>$('flash').classList.remove('on'),40); if(navigator.vibrate) navigator.vibrate(30);
   $('last').style.backgroundImage='url('+c.toDataURL('image/jpeg',.5)+')'; $('sheet').classList.remove('on');
@@ -96,7 +97,7 @@ $('shutter').onclick=()=>snap('shutter');
 const mc=document.createElement('canvas'); mc.width=48; mc.height=36; const mx=mc.getContext('2d',{willReadFrequently:true});
 function sig(){ const v=$('v'); if(!v.videoWidth) return null; mx.drawImage(v,0,0,48,36); return mx.getImageData(0,0,48,36).data; }
 function diff(a,b){ if(!a||!b) return 0; let s=0; for(let i=0;i<a.length;i+=4) s+=Math.abs(a[i]-b[i])+Math.abs(a[i+1]-b[i+1])+Math.abs(a[i+2]-b[i+2]); return s/(a.length/4)/3; }
-setInterval(()=>{ if(!on||mode!=='table') return; const s=sig(); const d=diff(s,prev); prev=s; if(!s) return;
+setInterval(()=>{ if(!on||mode==='eagle') return; const s=sig(); const d=diff(s,prev); prev=s; if(!s) return;
   if(d>14){ moved=true; still=0; return; }
   if(d<7) still++; else still=0;
   if(moved&&still>=4&&Date.now()-lastSnap>5000&&diff(s,lastShotSig)>10){ moved=false; lastShotSig=s; snap('held steady'); }

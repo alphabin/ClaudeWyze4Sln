@@ -64,7 +64,7 @@ def director():
 def phone_live():
     """overlay/ripcam.json from the bot: the phone is publishing and set to 'phone live on stream' (eagle)."""
     try:
-        r = json.load(open(f"{ROOT}/overlay/ripcam.json")); return r if r.get("live") and r.get("mode") == "eagle" and time.time() - r.get("ts", 0) < 180 else None
+        r = json.load(open(f"{ROOT}/overlay/ripcam.json")); return r if r.get("live") and r.get("mode") in ("eagle", "rip") and time.time() - r.get("ts", 0) < 180 else None
     except Exception: return None
 def plan(alive, settled):
     """Stage 1920x720 at y=180 with 16 px gutters: hero left (1223x688), a right column of two 597x336 windows (three 597x218 strips when both
@@ -108,7 +108,9 @@ def apply_layout(cells, alive):
     reel = items.get("Highlights")
     if reel and "reel" in placed: reqs.append(("SetSceneItemIndex", {"sceneName": scene, "sceneItemId": reel, "sceneItemIndex": len([k for k in placed if k != "reel"])}))   # above the cameras, under the overlay
     obs(reqs)
-    dr = director(); here = dr.get("where") if dr.get("where") in CAMS else None
+    dr = director(); here = dr.get("where") if dr.get("where") in CAMS else None; ph = phone_live() or {}
+    if ph.get("mode") == "rip": LABELS["phone"] = "Rip cam · the queen's table · live"
+    else: LABELS["phone"] = "Phone cam · handheld · live"
     json.dump({"compact": True, "cells": [{"key": k, "label": LABELS.get(k, k), "x": x, "y": y, "w": w, "h": h, "live": k in CAMS, "hero": i == 0, "here": k == here} for i, (k, x, y, w, h) in enumerate(cells)], "dead": [k for k in CAMS if not alive[k]], "here": here, "ts": int(time.time())}, open(f"{ROOT}/overlay/layout.json", "w"))
     json.dump({"dead": "hot" if not alive["hot"] else None, "reel": any(k == "reel" for k, *_ in cells), "ts": int(time.time())}, open(f"{ROOT}/overlay/cams.json", "w"))   # kept for the bot + old overlay code
 _reel = {"building": False}
@@ -140,7 +142,7 @@ def solo_tick():
         if _dead[key] >= 3 and key != "hot": reload_player(key)          # the hot cam is physically dead (2026-09-04): do not thrash it
     alive = {k: _dead[k] < 3 for k in CAMS}
     if not alive["hot"]: reel_refresh()
-    cells = plan(alive, she_settled()); key = json.dumps(cells) + str(director().get("where")) + str(bool(phone_live()))
+    cells = plan(alive, she_settled()); key = json.dumps(cells) + str(director().get("where")) + str((phone_live() or {}).get("mode"))
     if key != _layout["key"]:
         apply_layout(cells, alive); _layout["key"] = key; log("layout: " + ", ".join(f"{k}@{x},{y}" for k, x, y, *_ in cells) + " | dead: " + ",".join(k for k in CAMS if not alive[k]))
 strikes = 0; log(f"watchdog for #{CHANNEL}, restart after {STRIKES} offline minutes")
