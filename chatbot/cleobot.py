@@ -427,12 +427,12 @@ def showdown_plan():
     fresh_head = time.time() - dr.get("ts", 0) < 180 and dr.get("where") == H                      # only lean the zoom toward her head when that look is recent and from this camera
     ox, oy = {"left": (-0.5, 0), "right": (0.5, 0), "up": (0, -0.5), "down": (0, 0.5)}.get(str(dr.get("head") or ""), (0, 0)) if fresh_head else (0, 0)
     others = [c["key"] for c in cells if c.get("live") and c["key"] != H][:2]
-    shots = [{"t": 0.0, "cam": H, "z": 1.0, "push": 1.22, "dur": 6.0},               # the wide, a long slow push
-             {"t": 6.4, "cam": H, "z": 2.0, "ox": ox, "oy": oy},                          # her eyes
-             {"t": 9.4, "cam": H, "z": 1.3},
-             {"t": 11.4, "cam": H, "z": 2.2, "ox": ox * 0.8, "oy": oy - 0.15},
-             {"t": 13.9, "cam": H, "z": 1.15, "push": 1.4, "dur": 2.6}]                   # back out, and in again
-    t = 16.8; gaps = [0.7, 0.6, 0.5, 0.44, 0.38, 0.32, 0.28, 0.24, 0.21, 0.19, 0.17, 0.15, 0.14, 0.13]
+    shots = [{"t": 0.0, "cam": H, "z": 1.0, "push": 1.22, "dur": 6.0},               # the wide, one long slow push, held
+             {"t": 6.6, "cam": H, "z": 1.9, "ox": ox, "oy": oy}]                          # her eyes, held
+    tt = 10.2
+    for o in others: shots.append({"t": round(tt, 2), "cam": o, "z": 1.5}); tt += 2.2   # the others at the table, one look each
+    shots.append({"t": round(tt, 2), "cam": H, "z": 1.3})                                 # back to her, medium, held until the spin
+    t = max(16.8, tt + 2.4); gaps = [0.7, 0.6, 0.5, 0.44, 0.38, 0.32, 0.28, 0.24, 0.21, 0.19, 0.17, 0.15, 0.14, 0.13]
     ring = ([{"cam": H, "z": 1.9, "ox": ox, "oy": oy}] + [{"cam": o, "z": 1.7} for o in others]) or [{"cam": H, "z": 1.9}]
     if len(ring) == 1: ring = [{"cam": H, "z": 2.0, "ox": ox, "oy": oy}, {"cam": H, "z": 1.4}, {"cam": H, "z": 2.2, "ox": -ox, "oy": oy}]
     for k, g in enumerate(gaps): shots.append({"t": round(t, 2), **ring[k % len(ring)]}); t += g     # the spin
