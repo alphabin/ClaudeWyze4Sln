@@ -59,7 +59,7 @@ def director():
     """overlay/director.json from the bot: where she was last seen ({"where": cam, "head": cam, "ts"}). Fresh for 12 min."""
     try:
         d = json.load(open(f"{ROOT}/overlay/director.json"))
-        return d if time.time() - d.get("ts", 0) < 720 else {}
+        return d if time.time() - d.get("ts", 0) < 420 else {}
     except Exception: return {}
 def phone_live():
     """overlay/ripcam.json from the bot: the phone is publishing and set to 'phone live on stream' (eagle)."""
@@ -70,6 +70,10 @@ def plan(alive, settled):
     """Stage 1920x720 at y=180 with 16 px gutters: hero left (1223x688), a right column of two 597x336 windows (three 597x218 strips when both
     pan cams are up). DIRECTOR MODE: the camera that has her becomes the hero; the reel pops up over the hero's lower right when she is settled."""
     cells = []; where = director().get("where"); ph = phone_live()
+    try:
+        m = json.load(urllib.request.urlopen("http://127.0.0.1:5090/state.json", timeout=4)).get("motion", {}).get("cool", {})
+        if m.get("moving") or time.time() - m.get("lastMove", 0) < 180: where = "cool"      # she is moving on the cool side right now: that camera is the hero, whatever the last look said
+    except Exception: pass
     if ph:                                                                             # the handheld phone is the hero: it goes where no fixed camera can
         x, y, w, h = G["hero"]
         if ph.get("portrait"): pw = int(h * 9 / 16); cells.append(("phone", x + (w - pw) // 2, y, pw, h))

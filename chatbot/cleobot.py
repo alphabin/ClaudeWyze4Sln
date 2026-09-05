@@ -377,7 +377,10 @@ def cam_goto(cam, pan, tilt):
     while dy:
         c = min(60, abs(dy)); ok &= cam_move(cam, "up" if dy > 0 else "down", c); dy -= c if dy > 0 else -c; time.sleep(0.6)
     return ok
-def cam_vista(cam="coolcam"): return cam_goto(cam, *VISTA)
+HYBRID = CFG.get("CLEOBOT_HYBRID", "0") == "1"                                    # the camera's own Wyze tracking is ON: our ledger is only approximate, so no absolute moves (vista/home), nudges + framing only
+def cam_vista(cam="coolcam"):
+    if HYBRID: return True
+    return cam_goto(cam, *VISTA)
 _guard = {"timer": None, "last": 0}
 def glass_guard(reason="move"):
     """PRIVACY GUARD: after any cool-cam move (debounced) and at start, one vision look at the cool cam's picture. If it shows the room through
@@ -400,6 +403,8 @@ def glass_guard(reason="move"):
             m = re.search(r"\{.*\}", txt or "", re.S); j = json.loads(m.group(0)) if m else {}
         finally: _cli_lock.release()
         bad = bool(j.get("person")) or (bool(j.get("room")) and not j.get("snake")) or (bool(j.get("roof")) and not j.get("inside"))   # the room is tolerated when she is in the shot; a person never
+        try: json.dump({"room": bool(j.get("room")), "snake": bool(j.get("snake")), "ts": int(time.time())}, open(f"{ROOT}/overlay/glass.json", "w"))   # the overlay shades the glass when the room shows
+        except Exception: pass
         bf = f"{ROOT}/overlay/blackout.json"
         if bad:
             json.dump({"cool": True, "why": f"glass guard: person={j.get('person')} room={j.get('room')} roof={j.get('roof')} ({reason})", "ts": int(time.time())}, open(bf, "w")); log(f"GLASS GUARD: cool cam shows a person/the room/roof -> blacked out ({reason})")
@@ -449,6 +454,7 @@ def cam_move(cam, direction, step=10, speed=5):
     except Exception as e: log("cam_move error:", type(e).__name__, str(e)[:60]); return False
 def cam_home(cam):
     """Undo the ledger: move back by what we moved."""
+    if HYBRID: return True
     x, y = _cam_pos.get(cam, [0, 0]); ok = True
     while x:                                                                       # the camera takes at most 60 per command: chunk the way back
         c = min(60, abs(x)); ok &= cam_move(cam, "left" if x > 0 else "right", c); x = x - c if x > 0 else x + c; time.sleep(0.6)
