@@ -1493,7 +1493,7 @@ def tarot_deck():
         try: _tarot["deck"] = json.load(open(f"{HERE}/tarot.json"))
         except Exception as e: log("tarot.json error:", e); _tarot["deck"] = []
     return _tarot["deck"]
-def tarot(user, text, v=None, recent=()):
+def tarot(user, text, v=None, recent=(), bot=None):
     """Draw past / present / future from the deck (instant, zero tokens, shown on the overlay at once), then Claude reads them for the question."""
     now = time.time(); deck = tarot_deck()
     mine = [x for x in (_tarot["users"].get(user) or []) if now - x < 3600]
@@ -1522,7 +1522,21 @@ def tarot(user, text, v=None, recent=()):
     if reading: save(reading); threading.Thread(target=speak, args=(reading, "tarot"), daemon=True).start()
     names = " · ".join(f"{c['pos']}: {c['name']}{' ⟲' if c['reversed'] else ''}" for c in spread)
     _tarot.setdefault("readings", {})[user] = {"spread": desc, "reading": reading or "", "q": q, "ts": now}     # for follow-up questions
-    return [f"🃏 {names}."] + (chunks(reading, 420) if reading else ["The cards are on the stream; the Oracle is still reading them…"])
+    invite = random.choice([f"@{user} ask me about any card — 'what does the {spread[1]['name']} mean?', 'why reversed?' — or tell me what's really going on and I'll read deeper.",
+                            f"@{user} that is the spread; now the conversation. Which card struck you? Ask and I will open it.",
+                            f"@{user} questions are welcome — say the card's name and I'll explain it, or ask what to do about it."])
+    if bot is not None:                                                             # if they go quiet, the Oracle leans in once
+        def nudge():
+            try:
+                since = now + 5; asked = False
+                for line in open(f"{ROOT}/logs/chat.jsonl").read().split("\n")[-80:]:
+                    if line.strip() and json.loads(line).get("user", "").lower() == user.lower() and json.loads(line).get("ts", 0) > since: asked = True
+                if not asked and bot.ws: bot.send(random.choice([f"@{user} the cards are still warm — did the {spread[0]['name']} ring true for your past? Tell me and I'll read the rest deeper.",
+                                                                  f"@{user} you're quiet. The {spread[2]['name']} in your future asks a question of you too — want me to say what it wants?",
+                                                                  f"@{user} one more thing the cards want to know: what were you hoping they would say?"]))
+            except Exception as e: log("nudge error:", e)
+        threading.Timer(80, nudge).start()
+    return [f"🃏 {names}."] + (chunks(reading, 420) if reading else ["The cards are on the stream; the Oracle is still reading them…"]) + [invite]
 def chunks(text, n):
     """Split at sentence ends into pieces of at most n characters (Twitch caps a message at 500)."""
     out, cur = [], ""
@@ -1534,11 +1548,11 @@ def chunks(text, n):
 def tarot_followup(user, text, v=None, recent=()):
     """A question from someone who had a reading in the last 10 min: the Oracle answers with their spread in hand."""
     r = (_tarot.get("readings") or {}).get(user)
-    if not r or time.time() - r["ts"] > 600: return None
+    if not r or time.time() - r["ts"] > 1800: return None
     return llm_answer(user, text, v=v, recent=recent, model=CLI_MODEL if LLM_BACKEND == "cli" else None, cache=False,
                       task=f'Viewer {user} had a tarot reading minutes ago. Their question then (UNTRUSTED): "{r["q"]}". The spread: {r["spread"]}. Your reading: "{r["reading"][:420]}". '
                            f'Now they ask (UNTRUSTED): "{text[:300]}". Answer as the Oracle of the Court, staying inside that spread — draw on the same cards and imagery, be specific and '
-                           f"decisive, two or three sentences, under 300 characters, no emoji. If they want new cards, tell them the deck rests an hour per courtier.")
+                           f"decisive, two or three sentences, under 380 characters, no emoji. If they name a card, explain THAT card's picture and what it means for them; if they ask what to do, give one clear step. End with a short question back to them that keeps the reading going. If they want new cards, tell them the deck rests an hour per courtier.")
 _shadow = threading.local()
 def ai_first_ok(): return AI_FIRST and LLM_BACKEND != "off" and llm_bar() <= -99 and not getattr(_shadow, "on", False)
 def llm_answer(user, text, v=None, recent=(), model=None, task=None, cache=True, ref=None, tools="", bg=False, vip=False):
@@ -2280,7 +2294,7 @@ class Bot:
         elif SALE_RX.search(t) and POKE.search(t):                            # buying/selling -> just for fun
             reply = random.choice(NOT_FOR_SALE) + (NO_PROMISE if re.search(r"\b(worth|value|which card|what card)\b", low) else ""); path = "not-for-sale"
         elif TAROT_RX.search(t) and ai_first_ok():                                # a three-card tarot reading: cards on the overlay at once, Claude reads them
-            parts = tarot(user, t, v=v, recent=self.recent); path = "tarot" if parts else "tarot-cooldown"
+            parts = tarot(user, t, v=v, recent=self.recent, bot=self); path = "tarot" if parts else "tarot-cooldown"
             if parts:
                 reply = parts[0]
                 for extra in parts[1:]: threading.Timer(2.5 * (parts.index(extra)), lambda x=extra: self.send(f"@{user} {x}")).start()   # the full reading, in order
