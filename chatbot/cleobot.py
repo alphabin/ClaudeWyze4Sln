@@ -491,6 +491,9 @@ def track_session(motion_fn):
                 if w in ("center", "left", "right", "up", "down", "body"): remember_sighting(w)
                 recent = [t for t in _track["nudges"] if time.time() - t < 600]; _track["nudges"] = recent
                 if w in ("left", "right", "up", "down") and len(recent) < 8: cam_move("coolcam", w, TRACK_STEP); _track["nudges"].append(time.time())
+                elif w in ("body", "center") and len(recent) < 8 and time.time() - _track.get("framed", 0) > 120:   # she is in the shot but not composed (half a body at the bottom): ask the framing eye for the nudge
+                    _track["framed"] = time.time(); f = frame_her(max_nudges=2, step=16) or {}
+                    if f: _track["nudges"].append(time.time()); log(f"track: framed, head {f.get('head')} body {f.get('body')} good {f.get('good')}")
                 elif w == "none" and quiet < 120 and time.time() - _search["last"] > SEARCH_MINUTES * 60: search_for_her()   # the camera's own tracking lost her: go to her spots
             time.sleep(TRACK_EVERY)
     except Exception as e: log("track session error:", e)
