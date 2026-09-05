@@ -1395,6 +1395,15 @@ def oracle_ok():
     if _oracle["hour"] != h: _oracle.update(hour=h, n=0)
     if _oracle["n"] >= ORACLE_PER_HOUR: return False
     _oracle["n"] += 1; return True
+def _ink_check(j):
+    """Out of Claude credit / rate limited: the CLI answers with an error. Mark the ink as out for 15 min so she says so instead of going silent."""
+    try:
+        txt = json.dumps(j)[:600].lower() if isinstance(j, (dict, list)) else str(j).lower()
+        if isinstance(j, dict) and (j.get("is_error") or j.get("subtype", "").startswith("error")) or re.search(r"usage limit|rate limit|out of credit|credit balance|insufficient|quota|billing|too many requests|overloaded", txt):
+            if time.time() > _llm.get("ink_out", 0): log("OUT OF INK: the model is unavailable (limit/credit) — templates only for 15 min")
+            _llm["ink_out"] = time.time() + 900
+    except Exception: pass
+def ink_out(): return time.time() < _llm.get("ink_out", 0)
 def cli_call(args, stdin_text=None, timeout=45):
     """Run the claude CLI with --output-format json and return the result text as soon as the JSON is complete, killing the process
     (after a tools call the next process can answer in 2 s and then hang on exit for a minute; waiting for exit made replies 'hang')."""
@@ -1412,13 +1421,13 @@ def cli_call(args, stdin_text=None, timeout=45):
             if not chunk: break
             buf += chunk
             try:
-                j = json.loads(buf.strip()); out = j.get("result") if isinstance(j, dict) else None; break
+                j = json.loads(buf.strip()); out = j.get("result") if isinstance(j, dict) else None; _ink_check(j); break
             except ValueError: pass
         elif p.poll() is not None: break
     try: p.kill()
     except Exception: pass
     if out is None and buf.strip():
-        try: j = json.loads(buf.strip()); out = j.get("result") if isinstance(j, dict) else None
+        try: j = json.loads(buf.strip()); out = j.get("result") if isinstance(j, dict) else None; _ink_check(j)
         except ValueError: out = None
     if out is None and time.time() - t0 >= timeout: raise TimeoutError("claude cli %.0f s" % timeout)
     return out or ""
@@ -1710,7 +1719,7 @@ def tarot_followup(user, text, v=None, recent=()):
                            f'Now they ask (UNTRUSTED): "{text[:300]}". Answer as the Oracle of the Court, staying inside that spread — draw on the same cards and imagery, be specific and '
                            f"decisive, two or three sentences, under 380 characters, no emoji. If they name a card, explain THAT card's picture and what it means for them; if they ask what to do, give one clear step. End with a short question back to them that keeps the reading going. If they want new cards, tell them the deck rests an hour per courtier.")
 _shadow = threading.local()
-def ai_first_ok(): return AI_FIRST and LLM_BACKEND != "off" and llm_bar() <= -99 and not getattr(_shadow, "on", False)
+def ai_first_ok(): return AI_FIRST and LLM_BACKEND != "off" and llm_bar() <= -99 and not getattr(_shadow, "on", False) and not ink_out()
 def llm_answer(user, text, v=None, recent=(), model=None, task=None, cache=True, ref=None, tools="", bg=False, vip=False):
     """One Claude call, if the budget allows. task=None answers the viewer's message; otherwise `task` is an instruction (proactive lines)."""
     if LLM_BACKEND == "off": return None                                          # kill switch
@@ -2440,6 +2449,12 @@ class Bot:
         if re.match(r"^(hi+|hello+|hey+|yo|sup|hola|howdy|good (morning|evening|night|afternoon))\b[!. ]*$", t, re.I) and user != NICK and not shadow:
             first = user not in self.seen; self.seen.add(user) if hasattr(self.seen, "add") else None; self._answered[user] = "yes"; path = "hello"
             self.send(f"@{user} " + random.choice([f"hello {user}, welcome to my court. 👑 Say tarot for a reading, haiku for a poem, or tell me what brought you in.", f"{user}, welcome. Pull up a stone. Tarot, a haiku, or just talk, your choice.", f"hello {user}. The queen sees you. What do you want tonight, cards, a poem, or company?"] if first else [f"hello again, {user}. Good to have you back. What is on your mind?", f"{user} returns. Welcome back. Cards, a haiku, or talk?"]))
+            return
+        if ink_out() and user != NICK and (QUESTION.search(t) or DIRECTED.search(t) or TAROT_RX.search(t) or re.search(r"\b(haiku|poem|fortune|predict)\b", t, re.I)):
+            self._ink_told = getattr(self, "_ink_told", {})
+            if time.time() - self._ink_told.get(user, 0) > 600:
+                self._ink_told[user] = time.time(); self._answered[user] = "yes"
+                self.send(f"@{user} " + random.choice(["my scribe has run out of ink for a little while. I am still here, watching. Give it a few minutes and ask again, the cards and I will be back.", "the ink is dry for a moment, courtier. The court is open, the cameras are on, and I will answer properly in a bit. Try me again soon."]))
             return
         if t in self.own_recent or (user == NICK and t.startswith("@")): return   # echoes of its own lines (the bot posts as the channel account; the owner's own chat still counts)
         now = time.time()
