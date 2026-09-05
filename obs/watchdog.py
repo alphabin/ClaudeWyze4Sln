@@ -127,6 +127,23 @@ def reel_refresh():
         finally: _reel["building"] = False
     import threading; threading.Thread(target=run, daemon=True).start()
 CDP = {"cool": 9224, "hot": 9225, "hothide": 9226, "coldhide": 9227}; _reloaded = {}
+AGENT = {"cool": "com.snakecam.coolcam", "hot": "com.snakecam.hotcam", "hothide": "com.snakecam.hothide", "coldhide": "com.snakecam.coldhide"}
+WYZE = {"cool": "snake-cam-cool", "hot": "snake-cam-hot", "hothide": "hot-hide-cam", "coldhide": "cold-hide-cam"}
+_heal = {}                                                                     # key -> {"reloads": n, "kicked": ts, "rebooted": ts, "since": ts}
+def self_heal(key):
+    """Escalation ladder for a relay that stays dead: reload the player page (every 5 min) -> after 3 reloads, restart its launchd agent
+    (fresh Chrome) -> if still dead 10 min later, reboot the camera through the bridge's power API (Wyze cloud) -> repeat every 30 min."""
+    h = _heal.setdefault(key, {"reloads": 0, "kicked": 0, "rebooted": 0, "since": time.time()}); now = time.time()
+    if now - _reloaded.get(key, 0) >= 300: reload_player(key); h["reloads"] += 1
+    if h["reloads"] >= 3 and now - h["kicked"] > 1200:
+        h["kicked"] = now; h["reloads"] = 0
+        try: subprocess.run(["launchctl", "kickstart", "-k", f"gui/{os.getuid()}/{AGENT[key]}"], capture_output=True, timeout=20); log(f"{key}: player agent restarted (self-heal)")
+        except Exception as e: log(f"{key}: agent restart failed: {str(e)[:60]}")
+    if h["kicked"] and now - h["kicked"] > 600 and now - h["rebooted"] > 1800 and key != "hot":
+        h["rebooted"] = now
+        try:
+            r = urllib.request.urlopen(f"http://127.0.0.1:5050/api/{WYZE[key]}/power/restart", timeout=20).read()[:120]; log(f"{key}: camera rebooted through the bridge (self-heal): {r}")
+        except Exception as e: log(f"{key}: camera reboot failed: {str(e)[:60]}")
 def reload_player(key):
     """A dead relay with a live Chrome behind it: reload that player page (Agora/Kinesis sessions stall now and then; a reload re-joins). At most every 5 min."""
     port = CDP.get(key)
@@ -139,7 +156,8 @@ def reload_player(key):
 def solo_tick():
     for key, (_, path) in CAMS.items():
         _dead[key] = 0 if cam_alive(path) else _dead[key] + 1
-        if _dead[key] >= 3 and key != "hot": reload_player(key)          # the hot cam is physically dead (2026-09-04): do not thrash it
+        if _dead[key] >= 3 and key != "hot": self_heal(key)              # the hot cam is physically dead (2026-09-04): do not thrash it
+        elif _dead[key] == 0 and key in _heal: log(f"{key}: back, self-heal ladder reset"); _heal.pop(key, None)
     alive = {k: _dead[k] < 3 for k in CAMS}
     try: bo = json.load(open(f"{ROOT}/overlay/blackout.json")); alive = {k: (v and not bo.get(k)) for k, v in alive.items()}   # a camera blacked out on purpose (privacy) counts as dead
     except Exception: pass

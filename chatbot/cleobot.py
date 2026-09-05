@@ -1782,6 +1782,14 @@ class Bot:
                 now = time.time()
                 if not self.ws: continue
                 active = now - self.last_human < 7200 or now - self.viewers_ts < 7200
+                try:                                                                        # the operator's voice: overlay/say.json {"text", "ts"} is spoken once in chat
+                    sf = f"{ROOT}/overlay/say.json"
+                    if os.path.exists(sf):
+                        sj = json.load(open(sf)); os.remove(sf)
+                        if sj.get("text") and now - sj.get("ts", 0) < 300:
+                            self.send(str(sj["text"])[:450]); log("said (operator):", str(sj["text"])[:80])
+                            if sj.get("voice", True): threading.Thread(target=speak, args=(re.sub(r"^@(\S+)", r"\1,", str(sj["text"])), "court"), daemon=True).start()   # the operator's lines are spoken too
+                except Exception as e: log("say error:", e)
                 try: ripcam_tick(getattr(self, "rip_until", 0) > now, self)
                 except Exception as e: log("ripcam tick error:", e)
                 if getattr(self, "rip_until", 0) > now: continue                            # Rip Night: no idle lines, looks, games, notices, interludes
