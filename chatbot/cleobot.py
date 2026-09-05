@@ -2297,8 +2297,14 @@ class Bot:
             n += 1; log("<- (replayed)", r["user"], ":", r["text"][:120]); threading.Thread(target=self.handle, args=(r["user"], r["text"], r.get("tags") or {}), daemon=True).start(); time.sleep(0.3)
         if n: log(f"replayed {n} message(s) missed during the restart")
     def handle(self, user, text, tags=None):
+        self._inflight = getattr(self, "_inflight", 0) + 1; mid = time.time(); self._answered = getattr(self, "_answered", {}); self._answered[user] = None
+        def filler():                                                               # 9 s and still thinking: a human would say so
+            if self._answered.get(user) is None and user != NICK and not text.startswith("!"):
+                self._answered[user] = "filler"; self.send(f"@{user} " + random.choice(["one moment, I am looking at you through the glass.", "hold that thought, the answer is coming.", "I heard you. Give me a breath."]))
+        threading.Timer(9, filler).start()
         try: self._handle(user, text, tags)
         finally:
+            self._inflight -= 1
             try: json.dump({"ts": time.time()}, open(f"{HERE}/last_seen.json", "w"))
             except Exception: pass
     def _handle(self, user, text, tags=None):
@@ -2307,6 +2313,10 @@ class Bot:
         verdict = guard_in(user, t, {"first": user not in self.seen, "visits": (self.court.get(user) or {}).get("visits", 0)})
         if verdict == "drop": self.last_decision["path"] = "guard-drop"; return
         shadow = verdict == "shadow"                                          # templates only, silently
+        if re.match(r"^(hi+|hello+|hey+|yo|sup|hola|howdy|good (morning|evening|night|afternoon))\b[!. ]*$", t, re.I) and user != NICK and not shadow:
+            first = user not in self.seen; self.seen.add(user) if hasattr(self.seen, "add") else None; self._answered[user] = "yes"; path = "hello"
+            self.send(f"@{user} " + random.choice([f"hello {user}, welcome to my court. 👑 Say tarot for a reading, haiku for a poem, or tell me what brought you in.", f"{user}, welcome. Pull up a stone. Tarot, a haiku, or just talk, your choice.", f"hello {user}. The queen sees you. What do you want tonight, cards, a poem, or company?"] if first else [f"hello again, {user}. Good to have you back. What is on your mind?", f"{user} returns. Welcome back. Cards, a haiku, or talk?"]))
+            return
         if t in self.own_recent or (user == NICK and t.startswith("@")): return   # echoes of its own lines (the bot posts as the channel account; the owner's own chat still counts)
         now = time.time()
         first = GREET_ON and self._first_time(user)                           # first message ever from this viewer -> a welcome
@@ -2493,7 +2503,7 @@ class Bot:
             if first and not greeted_here: reply = f"Welcome, {user}. {reply}"
             elif new_visit and visits >= 2 and not greeted_here and snake and now - self.greeted.get(user, 0) > 3600:
                 self.greeted[user] = now; reply = f"{reply} (And how is {snake}?)"
-            self.last_reply[user] = now
+            self.last_reply[user] = now; self._answered[user] = "yes"
             time.sleep(min(4.5, 0.6 + 0.025 * len(reply)))                                  # typing pace: a human does not answer 300 characters in a blink
             pieces = chunks(reply, 230) if len(reply) > 260 else [reply]
             self.send(f"@{user} {pieces[0]}")
@@ -2534,10 +2544,17 @@ class Bot:
             except Exception as e:
                 log("connection error:", e); time.sleep(10)
 
+def _graceful(sig, frame):
+    """SIGTERM: let replies in flight finish (up to 20 s), then exit. Restart with: launchctl kill SIGTERM gui/<uid>/com.snakecam.chatbot"""
+    log("SIGTERM: finishing replies in flight…"); t0 = time.time()
+    while time.time() - t0 < 20 and getattr(BOT_REF.get("bot"), "_inflight", 0) > 0: time.sleep(0.5)
+    log("bye"); os._exit(0)
+BOT_REF = {}
+import signal; signal.signal(signal.SIGTERM, _graceful)
 if __name__ == "__main__":
     if not (CLIENT_ID and CHANNEL and NICK): sys.exit("set TWITCH_CLIENT_ID, TWITCH_CHANNEL and TWITCH_BOT_NICK in .env (then run auth.py)")
     budget = "budget %d + %d/viewer per hour (ceiling %d), %d/day, %d per viewer (%d regulars)" % (LLM_BASE_PER_HOUR, LLM_PER_VIEWER, LLM_PER_HOUR, LLM_PER_DAY, LLM_PER_USER_DAY, LLM_PER_REGULAR_DAY)
     tier = ("OFF (kill switch)" if LLM_BACKEND == "off" else ('ON via claude CLI (%s for questions, %s for talk), %s' % (CLI_MODEL, CLI_MODEL_TALK, budget)) if LLM_BACKEND == "cli"
             else (('ON via API (%s), %s' % (LLM_MODEL, budget)) if os.environ.get("ANTHROPIC_API_KEY") else "off (no ANTHROPIC_API_KEY)"))
     log(f"CleoBot starting; AI-first {'on (floor %d%%)' % (AI_FIRST_FLOOR * 100) if AI_FIRST else 'off'}, ambient {'model-written' if AMBIENT_LLM else 'templated'} (max {AMBIENT_PER_HOUR}/h), games {'on' if GAMES else 'off'}; Claude tier {tier}; ambient every {AMBIENT_MINUTES:g} min of quiet, greet {'on' if GREET_ON else 'off'}, follow thanks {'on' if FOLLOW_THANKS else 'off'}")
-    Bot().run()
+    _b = Bot(); BOT_REF["bot"] = _b; _b.run()
