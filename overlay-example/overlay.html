@@ -238,21 +238,28 @@
   #pull .holo-tag{display:inline-block;margin:0;vertical-align:middle;padding:2px 10px;border:1px solid #9fd8ff;border-radius:999px;color:#bfe6ff;font-family:var(--display);font-size:12px;letter-spacing:.2em}
   /* the companion phone cam: a drawn frame around the OBS 'Rip Cam' source — Card Table during a rip, Eagle Eye otherwise */
   #kills{position:absolute;right:430px;top:212px;z-index:6;display:flex;align-items:center;gap:10px;padding:3px 12px 3px 14px;background:rgba(10,8,20,.55);border:1px solid rgba(217,182,91,.5);border-radius:999px;font-family:'Cinzel',serif;letter-spacing:.22em} #kills .k{font-size:11px;color:#f2d27a} #kills .n{font-size:16px;font-weight:700;color:#fff;text-shadow:0 0 12px rgba(224,72,60,.8)}
-  #cells .cell{position:absolute;pointer-events:none;box-shadow:inset 0 0 0 1px rgba(217,182,91,.45)} #cells .cell.small{box-shadow:inset 0 0 0 1px rgba(217,182,91,.55),inset 0 0 30px rgba(0,0,0,.35)}
-  #cells .cell .chip{position:absolute;left:18px;top:18px} #cells .cell.small .chip{left:10px;top:10px;transform:scale(.8);transform-origin:left top}
-  #cells .cell .card{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:24px;text-align:center;background:radial-gradient(ellipse at 50% 40%,#2a1730,#0b0710 75%)}
+  #cells .cell{position:absolute;pointer-events:none;border-radius:12px;box-shadow:0 0 0 1.5px rgba(217,182,91,.55),0 0 0 5px rgba(8,5,12,.9),0 0 0 6px rgba(217,182,91,.22),0 18px 40px rgba(0,0,0,.55)}
+  #cells .cell:after{content:"";position:absolute;left:0;right:0;bottom:0;height:64px;border-radius:0 0 12px 12px;background:linear-gradient(180deg,rgba(6,4,10,0),rgba(6,4,10,.88))}   /* hides the cameras' own burned-in clocks */
+  #cells .cell .plate{position:absolute;left:14px;top:12px;display:flex;align-items:center;gap:8px;padding:5px 12px 5px 10px;border-radius:6px;background:linear-gradient(180deg,rgba(24,14,30,.92),rgba(10,6,16,.92));border:1px solid rgba(217,182,91,.55);box-shadow:0 4px 14px rgba(0,0,0,.5);font-family:'Cinzel',serif;font-size:13px;letter-spacing:.2em;color:#f2d27a;text-transform:uppercase}
+  #cells .cell .plate b{font-size:14px;line-height:1;color:#e8c56b;font-weight:400} #cells .cell.hothide .plate b,#cells .cell.hot .plate b{color:#e0a83b} #cells .cell.coldhide .plate b,#cells .cell.cool .plate b{color:#8fd0ff}
+  #cells .cell.small .plate{font-size:11px;padding:4px 10px 4px 8px;left:10px;top:10px}
+  #cells .cell .here{position:absolute;right:14px;top:12px;display:flex;align-items:center;gap:8px;padding:5px 12px;border-radius:999px;background:rgba(10,6,16,.9);border:1px solid #f2d27a;font-family:'Cinzel',serif;font-size:12px;letter-spacing:.22em;color:#f2d27a;box-shadow:0 0 18px rgba(242,210,122,.35)}
+  #cells .cell .here i{width:8px;height:8px;border-radius:50%;background:#f2d27a;box-shadow:0 0 10px #f2d27a;animation:pulse 1.6s ease-out infinite}
+  #cells .cell.small .here{font-size:10px;padding:3px 9px;right:10px;top:10px}
+  #cells .cell.reel{box-shadow:0 0 0 2px #c9a24d,0 0 0 8px rgba(8,5,12,.92),0 0 0 9px rgba(217,182,91,.35),0 22px 50px rgba(0,0,0,.75);z-index:4}
+  #cells .cell.reel:before{content:"";position:absolute;inset:0;border-radius:12px;background:repeating-linear-gradient(90deg,rgba(0,0,0,0) 0 22px,rgba(0,0,0,.55) 22px 30px);height:10px;top:-12px;opacity:.9}
+  #cells .cell .card{position:absolute;inset:0;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:24px;text-align:center;background:radial-gradient(ellipse at 50% 40%,#2a1730,#0b0710 75%)}
   #cells .cell .card b{font-family:'Cinzel',serif;font-size:16px;letter-spacing:.24em;color:#f2d27a} #cells .cell .card span{font-size:13px;color:#b7a9c4;max-width:380px;line-height:1.4}
   /* ---- compact: header and footer at two thirds, the stage grows to 1920x720 (y 180-900) so the cameras get the room ---- */
   body.compact #head{left:0;right:auto;width:2880px;padding:0 60px;box-sizing:border-box;transform:scale(.6667);transform-origin:top left}
   body.compact #stars{transform:scale(.6667);transform-origin:top left;width:2880px}
-  body.compact #show{top:150px} body.compact #kills{top:150px}
+  body.compact #show{top:136px;right:40px} body.compact #kills{top:136px;right:300px}
   body.compact #rule{top:906px} body.compact #facts{top:912px;height:30px} body.compact #fact{font-size:22px} body.compact #fact .cmd{font-size:13px}
   body.compact #cards{top:950px;bottom:14px;gap:16px} body.compact .card{grid-template-rows:14px 40px 1fr;row-gap:5px;padding:9px 18px 8px}
   body.compact .big{font-size:34px} body.compact .big.act{font-size:22px;padding-top:6px} body.compact .aside{font-size:13px} body.compact .foot{font-size:12px;gap:3px}
   body.compact canvas.spark{height:32px;width:140px} body.compact .vit{grid-template-columns:1fr 140px}
   body.compact #pull{top:900px;height:180px;padding:12px 60px 12px 70px} body.compact #pull .img{width:114px;height:160px} body.compact #pull .nm{font-size:30px} body.compact #pull .vd{font-size:18px} body.compact #pull .val{font-size:26px}
-  body.compact #cam-rest{top:876px} body.compact #menu{top:430px}
-  #cells .cell.reel{box-shadow:0 0 0 3px #c9a24d,0 18px 50px rgba(0,0,0,.7);z-index:4}
+  body.compact #cam-rest{top:884px;right:50px;font-size:10px} body.compact #menu{top:430px}
   #cam-rest{position:absolute;right:24px;top:786px;z-index:6;padding:3px 12px;background:rgba(10,8,20,.85);border:1px solid rgba(217,182,91,.5);border-radius:999px;color:#f2d27a;font-family:'Cinzel',serif;font-size:11px;letter-spacing:.22em}
   .win.reel{box-shadow:inset 0 0 0 2px rgba(217,182,91,.55),inset 0 0 60px rgba(0,0,0,.5)}
   #ripframe{position:absolute;pointer-events:none;opacity:0;transition:opacity .8s;border:3px solid #c9a24d;border-radius:12px;box-shadow:0 0 0 6px rgba(20,8,14,.85),0 18px 50px rgba(0,0,0,.65),inset 0 0 40px rgba(0,0,0,.35)}
@@ -413,6 +420,7 @@
   }
   // ---- compositing: static parts (sky, horizon, glows) are rendered once per phase; the moving layers
   //      (trees, vines, mist, light, leaves, birds) are redrawn ~20x per second with slow, independent motion ----
+  let CELLS = null;
   const ST = { top: 270, h: 540 };                                  // the camera stage (compact mode: 180 / 720 — set from layout.json)
   const baseCanvas = document.createElement('canvas'); baseCanvas.width = 1920; baseCanvas.height = 1080;
   function renderBase(s) {
@@ -447,7 +455,11 @@
     if (bird) { const k = (t - bird.t0) / bird.dur; if (k > 1) bird = null; else { const x = bird.dir > 0 ? -40 + k * 2000 : 1960 - k * 2000, y = bird.y + Math.sin(k * 12) * 6, flap = Math.sin(t / 90) * 3;
       g.strokeStyle = s.near; g.lineWidth = 1.6; g.globalAlpha = 0.7; g.beginPath(); g.moveTo(x - 7, y + flap); g.quadraticCurveTo(x, y - 2, x + 7, y + flap); g.stroke(); g.globalAlpha = 1; } }
     g.restore();
-    g.globalCompositeOperation = 'destination-out'; g.fillStyle = '#000'; g.fillRect(0, ST.top, 1920, ST.h);   // the camera windows
+    if (CELLS && CELLS.length) {                                                   // compact: felt across the stage, a rounded window per camera
+      const felt = g.createLinearGradient(0, ST.top, 0, ST.top + ST.h); felt.addColorStop(0, '#120a16'); felt.addColorStop(1, '#0b070f'); g.globalCompositeOperation = 'source-over'; g.fillStyle = felt; g.fillRect(0, ST.top, 1920, ST.h);
+      g.globalCompositeOperation = 'destination-out'; g.fillStyle = '#000';
+      for (const [x, y, w, h] of CELLS) { g.beginPath(); g.roundRect(x, y, w, h, 12); g.fill(); }
+    } else { g.globalCompositeOperation = 'destination-out'; g.fillStyle = '#000'; g.fillRect(0, ST.top, 1920, ST.h); }   // the camera windows
     g.globalCompositeOperation = 'source-over';
   }
   let curPhase = null, front = document.getElementById('frameA'), back = document.getElementById('frameB');
@@ -638,12 +650,14 @@
     document.getElementById('ripframe-lbl').textContent = f.mode === 'table' ? '✦ THE CARD TABLE ✦' : '◈ EAGLE EYE ◈'; el.classList.add('on'); }).catch(() => {}); }
   setInterval(ripframePoll, 3000); ripframePoll();
   // ---- stage layout (overlay/layout.json from obs/watchdog.py): a chip + frame per cell; hero left, grid right
-  function layoutPoll() { fetch('layout.json?' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(f => { if (!f || !f.cells) return; const wasC = document.body.classList.contains('compact'); document.body.classList.toggle('compact', !!f.compact); ST.top = f.compact ? 180 : 270; ST.h = f.compact ? 720 : 540; if (wasC !== !!f.compact && curPhase) { try { renderBase(SCENE[curPhase]); } catch (e) {} }
+  function layoutPoll() { fetch('layout.json?' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(f => { if (!f || !f.cells) return; document.body.classList.toggle('compact', !!f.compact); ST.top = f.compact ? 180 : 270; ST.h = f.compact ? 720 : 540;
     document.getElementById('win-hot').style.display = 'none'; document.getElementById('win-cool').style.display = 'none';
     let box = document.getElementById('cells'); if (!box) { box = document.createElement('div'); box.id = 'cells'; document.body.appendChild(box); }
+    const ICON = { hot: '🔥', cool: '❄', hothide: '⌂', coldhide: '⌂', reel: '▶', hothide_off: '⌂', coldhide_off: '⌂' };
     box.innerHTML = f.cells.map(c => `<div class="cell ${c.key}${c.w < 900 ? ' small' : ''}" style="left:${c.x}px;top:${c.y}px;width:${c.w}px;height:${c.h}px">` +
-      (c.key.endsWith('_off') ? `<div class="card"><b>${c.key.startsWith('hot') ? 'HOT' : 'COLD'} HIDE</b><span>camera reconnecting…</span></div>` : c.key === 'moving' ? `<div class="card"><b>SHE IS ON THE MOVE</b><span>the live cameras have her — the reel waits</span></div>` : c.key === 'soon' ? `<div class="card"><b>HOT SIDE CAMERA</b><span>temporarily unavailable due to python constriction · a new one is on the way</span></div>` : '') +
-      `<div class="chip side"><i></i><span class="label">${esc(c.label)}</span></div></div>`).join('');
+      (c.key.endsWith('_off') ? `<div class="card"><b>${c.key.startsWith('hot') ? 'HOT' : 'COLD'} HIDE</b><span>camera reconnecting…</span></div>` : '') +
+      `<div class="plate"><b>${ICON[c.key] || '◆'}</b>${esc(c.label)}</div>` + (c.here ? `<div class="here"><i></i>SHE'S HERE</div>` : '') + `</div>`).join('');
+    CELLS = f.cells.filter(c => c.live || c.key === 'reel').map(c => [c.x, c.y, c.w, c.h]); if (curPhase) { try { renderBase(SCENE[curPhase]); } catch (e) {} }
     let tag = document.getElementById('cam-rest'); if (!tag) { tag = document.createElement('div'); tag.id = 'cam-rest'; document.body.appendChild(tag); }
     const dead = (f.dead || []).filter(k => k === 'hot' || k === 'cool'); tag.textContent = dead.length ? ('◆ ' + dead.map(k => k.toUpperCase()).join(' + ') + ' SIDE CAM TEMPORARILY UNAVAILABLE DUE TO PYTHON CONSTRICTION') : ''; tag.style.display = dead.length ? '' : 'none'; }).catch(() => {}); }
   setInterval(layoutPoll, 5000); layoutPoll();

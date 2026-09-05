@@ -54,20 +54,25 @@ def she_settled():
         m = json.load(urllib.request.urlopen("http://127.0.0.1:5090/state.json", timeout=4)).get("motion", {}).get("cool", {})
         return not m.get("moving") and time.time() - m.get("lastMove", 0) > 600
     except Exception: return True
+G = {"hero": (34, 196, 1223, 688), "col2": [(1273, 196, 597, 336), (1273, 548, 597, 336)], "col3": [(1273, 196, 597, 218), (1273, 431, 597, 218), (1273, 666, 597, 218)], "reel": (793, 616, 448, 252)}
+def director():
+    """overlay/director.json from the bot: where she was last seen ({"where": cam, "head": cam, "ts"}). Fresh for 12 min."""
+    try:
+        d = json.load(open(f"{ROOT}/overlay/director.json"))
+        return d if time.time() - d.get("ts", 0) < 720 else {}
+    except Exception: return {}
 def plan(alive, settled):
-    """Compact stage 1920x720 at y=180: hero 1280x720 left; right column 640x360 x2. The reel pops up as a framed picture-in-picture over the
-    hero's lower right when she is settled. With both pan cams alive the right column is the other pan cam + the two hides as 640x240 strips."""
-    cells = []
-    hero = "cool" if alive["cool"] else "hot" if alive["hot"] else None
-    if hero: cells.append((hero, 0, 180, 1280, 720))
-    col = [k for k in ("hot", "cool") if k != hero and alive[k]] + [k for k in ("hothide", "coldhide") if alive[k]]
+    """Stage 1920x720 at y=180 with 16 px gutters: hero left (1223x688), a right column of two 597x336 windows (three 597x218 strips when both
+    pan cams are up). DIRECTOR MODE: the camera that has her becomes the hero; the reel pops up over the hero's lower right when she is settled."""
+    cells = []; where = director().get("where")
+    hero = where if where in alive and alive.get(where) else "cool" if alive["cool"] else "hot" if alive["hot"] else None
+    if hero: cells.append((hero, *G["hero"]))
+    col = [k for k in ("cool", "hot", "hothide", "coldhide") if k != hero and alive[k]]
     for k in ("hothide", "coldhide"):                                                   # a hide cam that dropped out keeps its slot as a card, never a black hole
         if not alive[k] and len(col) < 2: col.append(k + "_off")
-    if len(col) <= 2:
-        for k, y in zip(col, (180, 540)): cells.append((k, 1280, y, 640, 360))
-    else:
-        for k, y in zip(col[:3], (180, 420, 660)): cells.append((k, 1280, y, 640, 240))
-    if settled and os.path.exists(f"{ROOT}/overlay/reel.mp4"): cells.append(("reel", 780, 610, 480, 270))
+    if settled and os.path.exists(f"{ROOT}/overlay/reel.mp4") and len(col) < 3: col.append("reel")     # the reel joins the column as a strip: it never covers the hero
+    slots = G["col2"] if len(col) <= 2 else G["col3"]
+    for k, (x, y, w, h) in zip(col[:3], slots): cells.append((k, x, y, w, h))
     return cells
 def apply_layout(cells, alive):
     scene = obs([("GetCurrentProgramScene", None)])[0]["currentProgramSceneName"]; items = {i["sourceName"]: i["sceneItemId"] for i in obs([("GetSceneItemList", {"sceneName": scene})])[0]["sceneItems"]}
@@ -83,7 +88,8 @@ def apply_layout(cells, alive):
     reel = items.get("Highlights")
     if reel and "reel" in placed: reqs.append(("SetSceneItemIndex", {"sceneName": scene, "sceneItemId": reel, "sceneItemIndex": len([k for k in placed if k != "reel"])}))   # above the cameras, under the overlay
     obs(reqs)
-    json.dump({"compact": True, "cells": [{"key": k, "label": LABELS.get(k, k), "x": x, "y": y, "w": w, "h": h, "live": k in CAMS} for k, x, y, w, h in cells], "dead": [k for k in CAMS if not alive[k]], "ts": int(time.time())}, open(f"{ROOT}/overlay/layout.json", "w"))
+    dr = director(); here = dr.get("where") if dr.get("where") in CAMS else None
+    json.dump({"compact": True, "cells": [{"key": k, "label": LABELS.get(k, k), "x": x, "y": y, "w": w, "h": h, "live": k in CAMS, "hero": i == 0, "here": k == here} for i, (k, x, y, w, h) in enumerate(cells)], "dead": [k for k in CAMS if not alive[k]], "here": here, "ts": int(time.time())}, open(f"{ROOT}/overlay/layout.json", "w"))
     json.dump({"dead": "hot" if not alive["hot"] else None, "reel": any(k == "reel" for k, *_ in cells), "ts": int(time.time())}, open(f"{ROOT}/overlay/cams.json", "w"))   # kept for the bot + old overlay code
 _reel = {"building": False}
 def reel_refresh():
@@ -114,7 +120,7 @@ def solo_tick():
         if _dead[key] >= 3 and key != "hot": reload_player(key)          # the hot cam is physically dead (2026-09-04): do not thrash it
     alive = {k: _dead[k] < 3 for k in CAMS}
     if not alive["hot"]: reel_refresh()
-    cells = plan(alive, she_settled()); key = json.dumps(cells)
+    cells = plan(alive, she_settled()); key = json.dumps(cells) + str(director().get("where"))
     if key != _layout["key"]:
         apply_layout(cells, alive); _layout["key"] = key; log("layout: " + ", ".join(f"{k}@{x},{y}" for k, x, y, *_ in cells) + " | dead: " + ",".join(k for k in CAMS if not alive[k]))
 strikes = 0; log(f"watchdog for #{CHANNEL}, restart after {STRIKES} offline minutes")

@@ -667,6 +667,40 @@ def hub():
 def feeding():
     try: return json.load(open(f"{ROOT}/overlay/feeding.json"))
     except Exception: return {}
+_director = {"t": 0}
+DIRECTOR_MINUTES = float(CFG.get("CLEOBOT_DIRECTOR_MINUTES", "4"))
+def director_look(bot=None):
+    """Director mode: which camera has her? Hub motion on the cool side answers for free; otherwise one vision call over stills from every
+    live camera (cool, hot hide, cold hide). Writes overlay/director.json — the watchdog makes that camera the hero."""
+    if time.time() - _director["t"] < DIRECTOR_MINUTES * 60 or LLM_BACKEND != "cli": return
+    _director["t"] = time.time(); out = None
+    try:
+        m = ((hub() or {}).get("motion") or {}).get("cool", {})
+        if m.get("moving") and time.time() - m.get("lastMove", 0) < 60: out = {"where": "cool", "head": "cool", "how": "motion"}
+    except Exception: pass
+    if out is None:
+        if not vision_ok(): return
+        _vision["last"] = time.time()
+        cams = [c for c in ("coolcam", "hothide", "coldhide") if c != f"{dead_cam()}cam"]
+        got = grab_frames(cams, width=800)
+        if not got: return
+        files = ", ".join(f"frames/{c}.jpg" for c in got); names = {"coolcam": "cool", "hothide": "hothide", "coldhide": "coldhide"}
+        prompt = (f"Use the Read tool on exactly these files and nothing else: {files}. Each is a still from a different camera in a ball python's enclosure "
+                  f"(coolcam = the open cool side; hothide = inside the warm hide; coldhide = inside the cool hide). Reply ONLY with JSON: "
+                  f"{{\"snake\": [file names where any part of the snake is visible], \"head\": \"the one file where her head is clearest, or null\", \"sure\": true/false}}. A snake looks like patterned coils; leaves, bark and shadows are not a snake.")
+        if not _cli_lock.acquire(timeout=20): return
+        try:
+            os.chdir(f"{HERE}/cli-workdir")
+            txt = cli_call([CLI_BIN, "-p", prompt, "--model", CLI_MODEL, "--max-turns", "4", "--tools", "Read", "--no-session-persistence", "--system-prompt", "You describe images factually and reply only with JSON. You only read the files named in the prompt."], timeout=75)
+            mm = re.search(r"\{.*\}", txt or "", re.S); j = json.loads(mm.group(0)) if mm else {}
+        except Exception as e: log("director error:", type(e).__name__); j = {}
+        finally: _cli_lock.release()
+        _llm["rip_looks"] = _llm.get("rip_looks", 0) + 1
+        def key(f): return next((names[c] for c in names if c in str(f)), None)
+        seen = [key(f) for f in (j.get("snake") or []) if key(f)]; head = key(j.get("head")) if j.get("head") else None
+        where = head or (seen[0] if seen else None)
+        out = {"where": where, "head": head, "how": "vision", "seen": seen}
+    out["ts"] = int(time.time()); json.dump(out, open(f"{ROOT}/overlay/director.json", "w")); log(f"director: she is at {out.get('where')} ({out.get('how')})")
 def dead_cam():
     """'hot' | 'cool' | None from overlay/cams.json (obs/watchdog.py): a camera relay that has been dead for 3 checks."""
     try:
@@ -1670,6 +1704,8 @@ class Bot:
                     self._title_dead = dead_cam()
                     try: self.apply_show(force=True); log(f"show re-applied for dead cam = {dead_cam()}")
                     except Exception as e: log("apply_show error:", e)
+                try: director_look(self)
+                except Exception as e: log("director error:", e)
                 if PATROL_ON and TRACK_ON and dead_cam() == "hot" and not _patrol["on"] and not _track["on"] and now - _patrol["last"] > 600:
                     try:
                         m = ((hub() or {}).get("motion") or {}).get("cool", {}); awake = PATROL_ALWAYS or now - m.get("lastMove", 0) < 45 * 60 or current_show() in ("oracle", "night")
