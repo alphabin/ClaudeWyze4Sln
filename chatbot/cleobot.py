@@ -397,6 +397,7 @@ def showdown_cuts(cuts):
         def full(key, z, ox=0.0, oy=0.0):
             it = items[NAME[key]]; w, h = 1920 * z, 1080 * z; x = -(w - 1920) / 2 - ox * (w - 1920) / 2; y = -(h - 1080) / 2 - oy * (h - 1080) / 2
             obs_req("SetSceneItemTransform", {"sceneName": scene, "sceneItemId": it["sceneItemId"], "sceneItemTransform": {"positionX": x, "positionY": y, "boundsType": "OBS_BOUNDS_SCALE_INNER", "boundsWidth": w, "boundsHeight": h, "boundsAlignment": 0, "cropTop": 0, "cropBottom": 0, "cropLeft": 0, "cropRight": 0}})
+            if z == 1.0 or z > 2: log(f"showdown shot: {key} x{z:.2f}")
         def on_top(key): obs_req("SetSceneItemIndex", {"sceneName": scene, "sceneItemId": items[NAME[key]]["sceneItemId"], "sceneItemIndex": top})
         t0 = time.time()
         for c in cuts:
@@ -412,34 +413,37 @@ def showdown_cuts(cuts):
         log("showdown: cut, layout restored")
     except Exception as e: log("showdown cuts error:", type(e).__name__, str(e)[:80])
 def showdown_plan():
-    """The shot list, around the camera that HAS her. Zoom centres lean toward where her head was last seen. The hides only appear if she is in one."""
+    """The shot list, around the camera that HAS her. Wide + slow push, the eyes (zoom centred toward her head), then the three-way spin:
+    cuts between her and the two other cameras that get faster and faster until the crack, then the final wide with the title."""
     lay = json.load(open(f"{ROOT}/overlay/layout.json")); cells = lay.get("cells") or []
     try: dr = json.load(open(f"{ROOT}/overlay/director.json"))
     except Exception: dr = {}
     her = dr.get("where") if dr.get("where") in ("cool", "hot", "hothide", "coldhide") and time.time() - dr.get("ts", 0) < 600 else None
     try:
         m = ((hub() or {}).get("motion") or {}).get("cool", {})
-        if m.get("moving") or time.time() - m.get("lastMove", 0) < 240: her = "cool"                       # moving on the cool side right now beats an old look
+        if m.get("moving") or time.time() - m.get("lastMove", 0) < 240: her = "cool"
     except Exception: pass
-    hero = her or next((c["key"] for c in cells if c.get("hero")), "cool")
+    H = her or next((c["key"] for c in cells if c.get("hero")), "cool")
     ox, oy = {"left": (-0.6, 0), "right": (0.6, 0), "up": (0, -0.6), "down": (0, 0.6)}.get(str(dr.get("head") or ""), (0, 0))
-    if hero in ("cool", "hot") and her:                                                  # she is out on a pan camera: the whole duel is hers
-        H = hero
-        return [{"t": 0.0, "cam": H, "z": 1.0, "push": 1.18, "dur": 4.4},
-                {"t": 4.8, "cam": H, "z": 2.4, "ox": ox, "oy": oy},                          # the eyes
-                {"t": 7.2, "cam": H, "z": 1.35},
-                {"t": 8.8, "cam": H, "z": 2.9, "ox": ox * 0.8, "oy": oy - 0.2},
-                {"t": 10.2, "cam": H, "z": 1.5, "push": 1.8, "dur": 1.2}, {"t": 11.5, "cam": H, "z": 3.0, "ox": ox, "oy": oy}, {"t": 12.2, "cam": H, "z": 1.6}, {"t": 12.8, "cam": H, "z": 3.3, "ox": -ox, "oy": oy},
-                {"t": 13.3, "cam": H, "z": 1.7}, {"t": 13.7, "cam": H, "z": 3.6, "ox": ox, "oy": oy}, {"t": 14.0, "cam": H, "z": 1.8},
-                {"t": 14.4, "cam": H, "z": 1.0, "hold": 4.0}]
-    others = [c["key"] for c in cells if c.get("live") and c["key"] != hero][:2] or [hero]; a, b = others[0], others[-1]
-    return [{"t": 0.0, "cam": hero, "z": 1.0, "push": 1.18, "dur": 4.2}, {"t": 4.6, "cam": hero, "z": 2.2, "ox": ox, "oy": oy}, {"t": 7.0, "cam": a, "z": 1.9}, {"t": 8.8, "cam": hero, "z": 1.3},
-            {"t": 10.2, "cam": b, "z": 2.0}, {"t": 11.2, "cam": hero, "z": 2.6, "ox": ox, "oy": oy}, {"t": 12.0, "cam": a, "z": 2.4}, {"t": 12.6, "cam": hero, "z": 1.5}, {"t": 13.1, "cam": b, "z": 2.7}, {"t": 13.5, "cam": hero, "z": 3.0, "ox": ox, "oy": oy}, {"t": 13.8, "cam": hero, "z": 1.6},
-            {"t": 14.3, "cam": hero, "z": 1.0, "hold": 4.0}]
+    others = [c["key"] for c in cells if c.get("live") and c["key"] != H][:2]
+    shots = [{"t": 0.0, "cam": H, "z": 1.0, "push": 1.2, "dur": 4.4},               # the wide, and the slow push
+             {"t": 4.8, "cam": H, "z": 2.5, "ox": ox, "oy": oy},                          # her eyes
+             {"t": 7.2, "cam": H, "z": 1.35},
+             {"t": 8.6, "cam": H, "z": 3.0, "ox": ox * 0.8, "oy": oy - 0.2}]
+    t = 10.0; gaps = [0.6, 0.5, 0.42, 0.36, 0.3, 0.26, 0.22, 0.2, 0.18, 0.16, 0.15, 0.14]
+    ring = ([{"cam": H, "z": 3.0, "ox": ox, "oy": oy}] + [{"cam": o, "z": 2.3} for o in others]) or [{"cam": H, "z": 3.0}]
+    if len(ring) == 1: ring = [{"cam": H, "z": 3.2, "ox": ox, "oy": oy}, {"cam": H, "z": 1.6}, {"cam": H, "z": 3.6, "ox": -ox, "oy": oy}]
+    for k, g in enumerate(gaps): shots.append({"t": round(t, 2), **ring[k % len(ring)]}); t += g     # the spin
+    shots.append({"t": round(t + 0.2, 2), "cam": H, "z": 1.0, "hold": 4.0})                       # the crack, the wide, the title
+    return shots
 def showdown(bot=None, why="", say=True):
     """The spaghetti-western moment: letterbox, sun-baked grade and grain on the stage, a title card, an original whistle-and-twang sting.
     At most once per 20 min. Fires when she comes out of a hide, on 'showdown' in chat, and once a night on its own."""
     if time.time() - _showdown["last"] < 1200: return False
+    try:
+        tj = json.load(open(f"{ROOT}/overlay/tarot.json")); fj = json.load(open(f"{ROOT}/overlay/fortune.json")) if os.path.exists(f"{ROOT}/overlay/fortune.json") else {}
+        if time.time() - max(tj.get("ts", 0), fj.get("ts", 0)) < 120: log("showdown: a reading is on, postponed"); return False      # the cards come first
+    except Exception: pass
     _showdown["last"] = time.time(); title = random.choice(SHOWDOWN_TITLES)
     try: cuts = showdown_plan()
     except Exception as e: log("showdown plan error:", e); cuts = [{"t": 0.0, "cam": "cool", "z": 1.0, "hold": 12}]

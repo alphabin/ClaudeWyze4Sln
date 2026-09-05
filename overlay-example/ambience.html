@@ -261,6 +261,11 @@ function howl(L, out, f, s, dur, peak) { const o = ctx.createOscillator(), g = c
   f2.frequency.setValueAtTime(1200, s); f2.frequency.exponentialRampToValueAtTime(800, s + dur * 0.5); f2.frequency.exponentialRampToValueAtTime(1300, s + dur);
   g.gain.setValueAtTime(0, s); g.gain.linearRampToValueAtTime(peak, s + 0.05); g.gain.setValueAtTime(peak, s + dur - 0.15); g.gain.linearRampToValueAtTime(0, s + dur);
   o.connect(f1); o.connect(f2); f1.connect(mix); f2.connect(mix); mix.gain.value = 0.6; mix.connect(g); g.connect(out); o.start(s); o.stop(s + dur + 0.05); }
+function whoosh(L, out, s, dur, peak) { const n = ctx.createBufferSource(); n.buffer = noiseBuffer(dur + 0.1, 'white'); const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.2;
+  bp.frequency.setValueAtTime(300, s); bp.frequency.exponentialRampToValueAtTime(2600, s + dur * 0.55); bp.frequency.exponentialRampToValueAtTime(500, s + dur);
+  const g = ctx.createGain(); g.gain.setValueAtTime(0, s); g.gain.linearRampToValueAtTime(peak, s + dur * 0.45); g.gain.linearRampToValueAtTime(0, s + dur); n.connect(bp); bp.connect(g); g.connect(out); n.start(s); n.stop(s + dur + 0.1); }
+function bigdrum(L, out, s, peak) { const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.setValueAtTime(82, s); o.frequency.exponentialRampToValueAtTime(36, s + 0.5); g.gain.setValueAtTime(peak, s); g.gain.exponentialRampToValueAtTime(0.0004, s + 1.1); o.connect(g); g.connect(out); o.start(s); o.stop(s + 1.2);
+  const n = ctx.createBufferSource(); n.buffer = noiseBuffer(0.25, 'white'); const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 500; const ng = ctx.createGain(); ng.gain.setValueAtTime(peak * 0.7, s); ng.gain.exponentialRampToValueAtTime(0.0004, s + 0.25); n.connect(lp); lp.connect(ng); ng.connect(out); n.start(s); n.stop(s + 0.3); }
 function rattle(L, out, s, dur, peak) { for (let t = 0; t < dur; t += 0.045 + Math.random() * 0.02) { const n = ctx.createBufferSource(); n.buffer = noiseBuffer(0.03, 'white'); const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 5000;
   const g = ctx.createGain(); const p = peak * (0.5 + 0.5 * Math.sin(t / dur * Math.PI)); g.gain.setValueAtTime(p, s + t); g.gain.exponentialRampToValueAtTime(0.0003, s + t + 0.03); n.connect(hp); hp.connect(g); g.connect(out); n.start(s + t); n.stop(s + t + 0.04); } }
 function showdown(f) {
@@ -272,12 +277,12 @@ function showdown(f) {
   const cuts = (f && f.cuts) || [4.6, 7, 8.8, 10.2, 11.2, 12, 12.6, 13.1, 13.5, 13.8, 14.3], tAt = (f && f.title_at) || 14.3;
   let s = t + 0.4; for (const [i, len] of [[5, 0.6], [3, 0.55], [2, 0.55], [0, 1.9]]) { whistle(L, W, sc[i], s, len, 0.09); s += len + 0.06; }     // the call over the wide
   koto(L, G, d / 2, t + 0.2, 4, 0.12);
-  cuts.forEach((c, k) => { const peak = 0.12 + 0.02 * k; taiko(L, D, t + c, Math.min(0.26, peak));
-    if (k === 0) { howl(L, C, d * 2, t + c + 0.1, 0.55, 0.14); howl(L, C, d * 2, t + c + 0.75, 0.55, 0.14); howl(L, C, d * 2 * 6 / 5, t + c + 1.4, 0.9, 0.15); }   // the eyes: the call, three times, the last one lower
+  cuts.forEach((c, k) => { const peak = 0.12 + 0.02 * k; bigdrum(L, D, t + c, Math.min(0.3, peak)); whoosh(L, W, t + c - 0.18, 0.32, 0.05 + 0.006 * k);   // the cut: a whoosh into a deep hit
+    if (k === 0) { howl(L, C, d * 2, t + c + 0.1, 0.6, 0.15); howl(L, C, d * 2, t + c + 0.8, 0.6, 0.15); howl(L, C, d * 2 * 6 / 5, t + c + 1.5, 1.1, 0.16); }   // the eyes: the call, three times, the last one lower
     if (k >= 3 && c < tAt) rattle(L, R, t + c, Math.max(0.25, (cuts[k + 1] || tAt) - c), 0.03 + 0.01 * k); });
   // the climax: a crack (short bright noise), the low twang, the answer phrase under the title
   const n = ctx.createBufferSource(); n.buffer = noiseBuffer(0.12, 'white'); const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1800; const ng = ctx.createGain(); ng.gain.setValueAtTime(0.35, t + tAt); ng.gain.exponentialRampToValueAtTime(0.0003, t + tAt + 0.12); n.connect(hp); hp.connect(ng); ng.connect(D); n.start(t + tAt); n.stop(t + tAt + 0.15);
-  taiko(L, D, t + tAt + 0.02, 0.3); koto(L, G, d / 2, t + tAt + 0.05, 5, 0.18); koto(L, G, d / 2 * 3 / 2, t + tAt + 0.08, 4, 0.1);
+  bigdrum(L, D, t + tAt + 0.02, 0.36); koto(L, G, d / 2, t + tAt + 0.05, 6, 0.2); koto(L, G, d / 2 * 3 / 2, t + tAt + 0.08, 5, 0.11); koto(L, G, d / 4, t + tAt + 0.1, 7, 0.14);
   let s2 = t + tAt + 0.9; for (const [i, len] of [[3, 0.5], [2, 0.5], [1, 0.5], [0, 2.2]]) { whistle(L, W, sc[i] / 2, s2, len, 0.085); s2 += len + 0.06; }
   say('showdown ' + (f && f.title || ''));
 }
