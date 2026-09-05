@@ -359,12 +359,29 @@ def ripcam_live():
     return ok or (_ripcam["live"] and _ripcam["miss"] < 2)
 # ---------- pan/tilt over the camera's own command channel (Pan V4 via Agora data stream; discovered 2026-09-03) ----------
 CAM_PORTS = {"coolcam": int(CFG.get("CLEOBOT_COOLCAM_CDP", "9224")), "hotcam": int(CFG.get("CLEOBOT_HOTCAM_CDP", "9225"))}
-_cam_pos = {"coolcam": [0, 0], "hotcam": [0, 0]}; _cam_fail = {}                              # a step ledger so 'home' can undo moves
+_cam_pos = {"coolcam": [0, 0], "hotcam": [0, 0]}; _cam_fail = {}
+try: _cam_pos.update(json.load(open(f"{ROOT}/overlay/cam_pos.json")))                 # the ledger survives restarts: [pan, tilt] from the base position
+except Exception: pass
+TILT_MAX = int(CFG.get("CLEOBOT_TILT_MAX", "300"))                                # above this the Pan V4 sees the mesh roof and the ROOM (survey 2026-09-04) — never on stream
+VISTA = tuple(int(x) for x in CFG.get("CLEOBOT_VISTA", "500,250").split(","))    # the cinematic view of the land: pan +500, tilt +250 from the base (the cork log and vines)
+def _save_pos():
+    try: json.dump(_cam_pos, open(f"{ROOT}/overlay/cam_pos.json", "w"))
+    except Exception: pass
+def cam_goto(cam, pan, tilt):
+    """Move to an absolute ledger position (pan, tilt), in chunks of 60."""
+    x, y = _cam_pos.get(cam, [0, 0]); dx, dy = pan - x, tilt - y; ok = True
+    while dx:
+        c = min(60, abs(dx)); ok &= cam_move(cam, "right" if dx > 0 else "left", c); dx -= c if dx > 0 else -c; time.sleep(0.6)
+    while dy:
+        c = min(60, abs(dy)); ok &= cam_move(cam, "up" if dy > 0 else "down", c); dy -= c if dy > 0 else -c; time.sleep(0.6)
+    return ok
+def cam_vista(cam="coolcam"): return cam_goto(cam, *VISTA)                              # a step ledger so 'home' can undo moves
 def cam_move(cam, direction, step=10, speed=5):
     """Nudge a camera: direction left|right|up|down, step in the camera's units (10 ≈ a small nudge, 20 clearly visible). Returns True on the camera's ack."""
     port = CAM_PORTS.get(cam)
     if not port or direction not in ("left", "right", "up", "down"): return False
     step = max(1, min(60, int(step)))
+    if direction == "up" and _cam_pos.get(cam, [0, 0])[1] + step > TILT_MAX: log(f"cam {cam} up {step}: above the tilt ceiling ({TILT_MAX}), refused"); return False
     try:
         pg = [p for p in json.load(urllib.request.urlopen(f"http://localhost:{port}/json", timeout=5)) if p["type"] == "page"][0]
         d = websocket.create_connection(pg["webSocketDebuggerUrl"], timeout=10)
@@ -378,7 +395,7 @@ def cam_move(cam, direction, step=10, speed=5):
         ok = bool(re.search(r'result\\?":\s*1', acks))                          # the ack comes back JSON-escaped
         if ok:
             dx = {"left": -step, "right": step}.get(direction, 0); dy = {"up": step, "down": -step}.get(direction, 0)
-            _cam_pos[cam][0] += dx; _cam_pos[cam][1] += dy
+            _cam_pos[cam][0] += dx; _cam_pos[cam][1] += dy; _save_pos()
         log(f"cam {cam} {direction} {step}: {'ok' if ok else 'refused'}")
         _cam_fail[cam] = 0 if ok else _cam_fail.get(cam, 0) + 1
         if not ok and _cam_fail[cam] >= 3 and time.time() - _cam_fail.get(cam + "_reload", 0) > 900:   # no acks three times running: the control channel is stale (seen 2026-09-04 05:05-15:20) — reload the page
@@ -395,7 +412,7 @@ def cam_home(cam):
         c = min(60, abs(x)); ok &= cam_move(cam, "left" if x > 0 else "right", c); x = x - c if x > 0 else x + c; time.sleep(0.6)
     while y:
         c = min(60, abs(y)); ok &= cam_move(cam, "down" if y > 0 else "up", c); y = y - c if y > 0 else y + c; time.sleep(0.6)
-    _cam_pos[cam] = [0, 0]; return ok
+    _cam_pos[cam] = [0, 0]; _save_pos(); return ok
 TRACK_ON = CFG.get("CLEOBOT_TRACK", "1") != "0"; TRACK_MINUTES = float(CFG.get("CLEOBOT_TRACK_MINUTES", "10"))   # vision-guided 'keep her in frame' on the cool cam
 def where_is_she():
     """SECURITY BOUNDARY like describe_cams: Read tool on one still, no chat text. Returns 'center'|'left'|'right'|'up'|'down'|'none'."""
@@ -589,6 +606,7 @@ def patrol_session(bot=None, minutes=20, step=8, every=18):
     if _patrol["on"] or _track["on"]: return
     _patrol["on"] = True; _track["on"] = True; started = time.time(); direction = "left"; legs = 0; last_look = 0; log("patrol: started (one eye for two sides)")
     try:
+        cam_goto("coolcam", VISTA[0], VISTA[1])                                       # start from the vista, then drift left toward the base and back
         while time.time() - started < minutes * 60 and dead_cam() == "hot":
             if bot is not None and getattr(bot, "rip_until", 0) > time.time(): break
             try:
@@ -604,10 +622,12 @@ def patrol_session(bot=None, minutes=20, step=8, every=18):
                         if time.time() - started > minutes * 60: break
                         time.sleep(1)
                     continue
+            x = _cam_pos["coolcam"][0]
+            if (direction == "left" and x - step < 0) or (direction == "right" and x + step > VISTA[0]): direction = "right" if direction == "left" else "left"; legs = 0   # patrol the land between the base and the vista
             ok = cam_move("coolcam", direction, step); legs += 1
-            if not ok or legs >= 6: direction = "right" if direction == "left" else "left"; legs = 0   # an edge (refused) or a full leg: turn around
+            if not ok: direction = "right" if direction == "left" else "left"; legs = 0
             time.sleep(every)
-        if any(_cam_pos["coolcam"]): cam_home("coolcam"); log("patrol: camera home")
+        cam_vista(); log("patrol: resting at the vista")
     except Exception as e: log("patrol error:", e)
     finally: _patrol["on"] = False; _track["on"] = False; _patrol["last"] = time.time(); log("patrol: ended")
 def track_once(step=12, max_nudges=3):
@@ -1964,6 +1984,18 @@ class Bot:
         except Exception as e: log("judge_card error:", e)
     def presenting_idle(self):
         q = getattr(self, "_present_q", None); return (q is None or q.empty()) and not getattr(self, "_presenting", False) and time.time() > _speech_until["t"]
+    def ledger_add(self, d, name, val):
+        """The session ledger on stream: every judged card with its picture and price, and a running total (overlay/pulls.json)."""
+        try:
+            f = f"{ROOT}/overlay/pulls.json"
+            try: L = json.load(open(f))
+            except Exception: L = {"session": 0, "cards": []}
+            if time.time() - L.get("ts", 0) > 3 * 3600: L = {"session": int(time.time()), "cards": []}      # a new rip after 3 quiet hours
+            p = json.load(open(f"{ROOT}/overlay/pull.json")); hi = val[1] if val and val[1] > 0 else 0
+            L["cards"] = (L.get("cards") or [])[-23:] + [{"name": name, "image": p.get("image"), "value": hi, "holo": bool(d.get("holo")), "set": (val[2] if val else None), "ts": int(time.time())}]
+            L["total"] = round(sum(c.get("value") or 0 for c in L["cards"]), 2); L["best"] = max(L["cards"], key=lambda c: c.get("value") or 0)["name"]; L["ts"] = int(time.time())
+            json.dump(L, open(f, "w"))
+        except Exception as e: log("ledger error:", e)
     def present_pull(self, d, name, line, n, val):
         """Queue a judged card for the stream: each one gets the screen and her voice to itself (the eyes may run ahead of the mouth)."""
         import queue
@@ -1973,7 +2005,7 @@ class Bot:
                 while True:
                     d, name, line, n, val = self._present_q.get(); self._presenting = True
                     try:
-                        t0 = time.time(); self.show_pull(d, name, line, n, val); self.send(f"🎴 {line}")
+                        t0 = time.time(); self.show_pull(d, name, line, n, val); self.ledger_add(d, name, val); self.send(f"🎴 {line}")
                         speak(line, "rip")                                                     # blocks until it is her turn, then sets _speech_until
                         if CLIPS: threading.Timer(20, self.make_clip, args=(f"pull: {name}",)).start()
                         while time.time() < max(_speech_until["t"] + 1.5, t0 + 9): time.sleep(0.3)   # the card stays up until she has finished saying it

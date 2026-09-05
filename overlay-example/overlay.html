@@ -267,6 +267,12 @@
   body.compact #status{display:flex}
   #status .dot{width:12px;height:12px;border-radius:50%;background:#f2d27a;box-shadow:0 0 14px #f2d27a;animation:pulse 2s ease-out infinite} #status.lost .dot{background:#8a7a9a;box-shadow:none;animation:none}
   #status .k{font-family:'Cinzel',serif;font-size:11px;letter-spacing:.3em;color:#c9a24d} #status .v{font-family:'Cinzel',serif;font-size:19px;letter-spacing:.12em;color:#f6efdc;line-height:1.1} #status .s{font-size:12px;color:#b7a9c4;letter-spacing:.08em;margin-top:3px}
+  #ledger{position:absolute;left:0;right:0;top:840px;height:60px;z-index:19;display:flex;align-items:flex-end;justify-content:center;gap:8px;padding:0 60px;opacity:0;transform:translateY(20px);transition:opacity .6s,transform .6s;pointer-events:none}
+  #ledger.on{opacity:1;transform:none}
+  #ledger .c{position:relative;width:44px;height:60px;border-radius:4px;overflow:hidden;border:1px solid rgba(217,182,91,.6);background:#000;box-shadow:0 6px 16px rgba(0,0,0,.6)} #ledger .c img{width:100%;height:100%;object-fit:cover} #ledger .c.holo{border-color:#9fd8ff;box-shadow:0 0 12px rgba(159,216,255,.5)}
+  #ledger .c b{position:absolute;left:0;right:0;bottom:0;padding:1px 0;background:rgba(6,4,10,.85);color:#f2d27a;font-family:'Cinzel',serif;font-size:9px;text-align:center;letter-spacing:.04em}
+  #ledger .sum{display:flex;flex-direction:column;justify-content:flex-end;margin-left:18px;padding:6px 14px;border-radius:8px;background:linear-gradient(180deg,rgba(24,14,30,.95),rgba(10,6,16,.95));border:1px solid rgba(217,182,91,.55);font-family:'Cinzel',serif;color:#f2d27a}
+  #ledger .sum b{font-size:20px;letter-spacing:.04em;color:#fff} #ledger .sum span{font-size:10px;letter-spacing:.24em;color:#c9a24d}
   #cam-rest{position:absolute;right:24px;top:786px;z-index:6;padding:3px 12px;background:rgba(10,8,20,.85);border:1px solid rgba(217,182,91,.5);border-radius:999px;color:#f2d27a;font-family:'Cinzel',serif;font-size:11px;letter-spacing:.22em}
   .win.reel{box-shadow:inset 0 0 0 2px rgba(217,182,91,.55),inset 0 0 60px rgba(0,0,0,.5)}
   #ripframe{position:absolute;pointer-events:none;opacity:0;transition:opacity .8s;border:3px solid #c9a24d;border-radius:12px;box-shadow:0 0 0 6px rgba(20,8,14,.85),0 18px 50px rgba(0,0,0,.65),inset 0 0 40px rgba(0,0,0,.35)}
@@ -653,6 +659,13 @@
     const pv = document.getElementById('pull-val'); pv.hidden = !f.value || st !== 'done'; pv.innerHTML = f.value ? esc(f.value) + '<small>the ledgers whisper · TCGplayer market</small>' : ''; p.classList.toggle('holo', !!f.holo && st === 'done'); p.classList.add('on');
     setTimeout(() => { if (pullTs === f.ts) p.classList.remove('on'); }, st === 'reading' ? 90000 : st === 'none' ? 8000 : 30000); }).catch(() => {}); }
   setInterval(pullPoll, 2000); pullPoll();
+  // ---- the session ledger (overlay/pulls.json): every card judged this rip, its price, the running total — shown while the table is open
+  function ledgerPoll() { fetch('pulls.json?' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(L => { let el = document.getElementById('ledger'); if (!el) { el = document.createElement('div'); el.id = 'ledger'; document.body.appendChild(el); }
+    const fresh = L && L.ts && Date.now() / 1000 - L.ts < 40 * 60 && (L.cards || []).length > 1;
+    if (!fresh) { el.classList.remove('on'); return; }
+    const money = v => v >= 100 ? '$' + Math.round(v) : v >= 1 ? '$' + v.toFixed(0) : v > 0 ? '$' + v.toFixed(2) : '—';
+    el.innerHTML = L.cards.slice(-16).map(c => `<div class="c${c.holo ? ' holo' : ''}"><img src="${c.image}?${c.ts}" alt=""><b>${money(c.value)}</b></div>`).join('') + `<div class="sum"><span>THIS RIP · ${L.cards.length} CARDS</span><b>${money(L.total)}</b></div>`; el.classList.add('on'); }).catch(() => {}); }
+  setInterval(ledgerPoll, 4000); ledgerPoll();
   // ---- companion phone cam frame (overlay/ripcam.json from the bot) ----
   function ripframePoll() { fetch('ripcam.json?' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(f => { const el = document.getElementById('ripframe');
     if (!f || !f.live || f.mode === 'table' || Date.now() / 1000 - f.ts > 120) { el.classList.remove('on'); return; }   // card table: the snapped card is the star, no live box
