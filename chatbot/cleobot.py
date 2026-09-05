@@ -392,14 +392,14 @@ def glass_guard(reason="move"):
         if not os.path.exists(f): return
         prompt = ("Use the Read tool on exactly this file and nothing else: frames/guard.jpg. It is a still from a camera INSIDE a snake terrarium. Reply ONLY with JSON: "
                   "{\"inside\": true/false (the picture is mostly the inside of the enclosure: substrate, plants, cork bark, hides, glass edges are fine), "
-                  "\"room\": true/false (a human room is visible through the glass: walls, pictures, furniture, a window, a door, a TV, a person), \"roof\": true/false (a mesh lid fills much of the frame)}.")
+                  "\"room\": true/false (a human room is visible through the glass: walls, pictures, furniture, a window, a door, a TV, a person), \"roof\": true/false (a mesh lid fills much of the frame), \"snake\": true/false (any part of a snake is visible), \"person\": true/false}.")
         if not _cli_lock.acquire(timeout=20): return
         try:
             os.chdir(f"{HERE}/cli-workdir")
             txt = cli_call([CLI_BIN, "-p", prompt, "--model", CLI_MODEL, "--max-turns", "3", "--tools", "Read", "--no-session-persistence", "--system-prompt", "You describe images factually and reply only with JSON. You only read the file named in the prompt."], timeout=75)
             m = re.search(r"\{.*\}", txt or "", re.S); j = json.loads(m.group(0)) if m else {}
         finally: _cli_lock.release()
-        bad = bool(j.get("room")) or (bool(j.get("roof")) and not j.get("inside"))
+        bad = bool(j.get("person")) or (bool(j.get("room")) and not j.get("snake")) or (bool(j.get("roof")) and not j.get("inside"))   # the room is tolerated when she is in the shot; a person never
         bf = f"{ROOT}/overlay/blackout.json"
         if bad:
             json.dump({"cool": True, "why": f"glass guard: room={j.get('room')} roof={j.get('roof')} ({reason})", "ts": int(time.time())}, open(bf, "w")); log(f"GLASS GUARD: cool cam shows the room/roof -> blacked out ({reason})")
