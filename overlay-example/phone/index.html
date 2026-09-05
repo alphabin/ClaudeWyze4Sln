@@ -1,5 +1,5 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="theme-color" content="#000">
-<title>Cleo's Card Table</title>
+<title>The Queen's Eye</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap">
 <style>
 :root{--gold:#c9a24d;--gold2:#f2d27a;--ink:#f0e6d0;--muted:#b7a9c4;--red:#e0483c}
@@ -15,7 +15,7 @@ video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;backgr
 #top h1{font-family:Cinzel,serif;font-size:13px;letter-spacing:.18em;color:var(--gold2);flex:1;white-space:nowrap}
 .badge{padding:5px 11px;border-radius:999px;background:rgba(10,8,20,.75);border:1px solid rgba(217,182,91,.5);color:var(--gold2);font-family:Cinzel,serif;font-size:10px;letter-spacing:.18em}
 .badge i{display:inline-block;width:7px;height:7px;border-radius:50%;background:#666;margin-right:6px}.badge.on i{background:var(--red);box-shadow:0 0 8px var(--red)}
-#modes{display:flex;border:1px solid rgba(217,182,91,.5);border-radius:999px;overflow:hidden;background:rgba(10,8,20,.75)}#modes button{padding:6px 11px;border:0;background:transparent;color:var(--muted);font-size:11px;font-family:Cinzel,serif;letter-spacing:.08em}#modes button.sel{background:var(--gold2);color:#2a0b1a}#modes button[data-m=eagle].sel{background:var(--red);color:#fff}
+#switch{padding:6px 11px;border-radius:999px;border:1px solid rgba(217,182,91,.5);background:rgba(10,8,20,.75);color:var(--gold2);font-size:11px;font-family:Cinzel,serif;letter-spacing:.08em}
 /* toast */
 #toast{position:absolute;left:14px;right:14px;top:calc(env(safe-area-inset-top) + 58px);z-index:3;padding:10px 14px;border-radius:12px;background:rgba(12,8,20,.82);border:1px solid rgba(201,162,77,.4);backdrop-filter:blur(8px);transition:opacity .3s}
 #toast b{display:block;font-family:Cinzel,serif;font-size:11px;letter-spacing:.2em;color:var(--gold2);margin-bottom:2px}#toast span{font-size:14px;line-height:1.35}
@@ -30,8 +30,8 @@ video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;backgr
 #last{width:56px;height:56px;border-radius:12px;border:2px solid var(--gold);background:#111 center/cover;overflow:hidden}
 /* start screen */
 #start{position:absolute;inset:0;z-index:5;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:radial-gradient(ellipse at 50% 30%,#2a1730,#0b0710 70%);padding:30px;text-align:center}
-#start h2{font-family:Cinzel,serif;font-size:22px;letter-spacing:.2em;color:var(--gold2)}#start p{color:var(--muted);font-size:14px;line-height:1.5;max-width:300px}
-#go{padding:20px 40px;border-radius:999px;border:2px solid #6b4a12;background:linear-gradient(180deg,#e8c56b,#a97b23);color:#2a0b1a;font-family:Cinzel,serif;font-weight:700;font-size:16px;letter-spacing:.12em}
+#start h2{font-family:Cinzel,serif;font-size:22px;letter-spacing:.2em;color:var(--gold2)}#start p{color:var(--muted);font-size:14px;line-height:1.5;max-width:320px}
+.modes-big{display:flex;flex-direction:column;gap:12px;width:100%;max-width:360px}.modes-big .mode{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:16px 18px;border-radius:16px;border:2px solid var(--gold);background:linear-gradient(180deg,#2a1730,#170c1f);text-align:left;text-transform:none;letter-spacing:0;white-space:normal}.modes-big .mode b{font-family:Cinzel,serif;font-size:18px;color:var(--gold2);letter-spacing:.06em}.modes-big .mode span{font-family:-apple-system,system-ui,sans-serif;font-size:13px;line-height:1.4;color:var(--ink);font-weight:400}
 #start.hide{display:none}
 /* verdict sheet */
 #sheet{position:absolute;left:0;right:0;bottom:0;z-index:4;transform:translateY(110%);transition:transform .35s cubic-bezier(.2,.8,.2,1);background:linear-gradient(180deg,#22132f,#12091a);border-top:2px solid var(--gold);border-radius:22px 22px 0 0;padding:14px 18px calc(env(safe-area-inset-bottom) + 18px)}
@@ -44,14 +44,19 @@ video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;backgr
 #sheet .chips{display:flex;gap:8px;margin-top:12px}#sheet .chips button{flex:1;padding:11px 6px;border-radius:999px;border:1px solid var(--gold);background:transparent;color:var(--gold2);font-size:12px}#sheet .chips button.x{border-color:rgba(255,255,255,.3);color:#fff}
 </style></head><body><div id="app">
 <div id="stage"><video id="v" autoplay muted playsinline></video><div id="flash"></div>
-  <div id="top"><h1>✦ CLEO'S CARD TABLE</h1><span class="badge" id="badge"><i></i>OFF</span><div id="modes"><button data-m="table" class="sel">Cards</button><button data-m="rip">Rip</button><button data-m="eagle">Live</button></div></div>
+  <div id="top"><h1 id="modename">✦ CARDS</h1><span class="badge" id="badge"><i></i>OFF</span><button id="switch">switch mode</button></div>
   <div id="toast"><b id="t1">READY</b><span id="t2">Fill the picture with a card and press the shutter.</span></div>
   <div id="ctl"><div id="zooms"><button data-z="1" class="sel">1×</button><button data-z="2">2×</button><button data-z="3">3×</button></div>
     <div id="bar"><button id="stop">stop</button><button id="shutter" aria-label="snap"></button><div id="last"></div></div></div>
   <div id="sheet"><div class="grip"></div><div class="row"><img id="s-img" alt=""><div><b id="s-name"></b><div class="p" id="s-price"></div></div></div><div class="v" id="s-text"></div>
     <div class="chips"><button id="fix-no">not a holo</button><button id="fix-yes">it is a holo</button><button id="close" class="x">next card</button></div></div>
 </div>
-<div id="start"><h2>CLEO'S CARD TABLE</h2><p>Your phone becomes her eyes. Snap each card: she names it, prices it and passes judgement on the stream.</p><button id="go">OPEN THE TABLE</button><p style="font-size:12px">Keep this page open while you rip.</p></div>
+<div id="start"><h2>THE QUEEN'S EYE</h2><p>Your phone becomes a camera on the stream. Pick what you are doing:</p>
+  <div class="modes-big">
+    <button class="mode" data-m="table"><b>🃏 Cards</b><span>Judge cards one by one. Your phone stays off the stream. Snap a card, she names it, prices it and passes judgement.</span></button>
+    <button class="mode" data-m="rip"><b>🎴 Rip Night</b><span>Your phone IS the table, live on the stream. Snap cards and boxes, she judges, prices, and heckles the court between packs.</span></button>
+    <button class="mode" data-m="eagle"><b>🐍 Live POV</b><span>Your phone is the main picture. Get her best angles. No judging.</span></button>
+  </div><p style="font-size:12px">Tap one to start the camera. Keep this page open while you use it.</p></div>
 </div>
 <canvas id="c" hidden></canvas>
 <script>
@@ -68,7 +73,7 @@ async function start(){
     await new Promise(r=>{ if(pc.iceGatheringState==='complete') return r(); pc.onicegatheringstatechange=()=>pc.iceGatheringState==='complete'&&r(); setTimeout(r,1500); });
     const res=await fetch(WHIP,{method:'POST',headers:{'Content-Type':'application/sdp','Authorization':AUTH},body:pc.localDescription.sdp});
     if(!res.ok) throw new Error('relay said '+res.status);
-    await pc.setRemoteDescription({type:'answer',sdp:await res.text()}); on=true; $('start').classList.add('hide'); ui(); setMode('table');
+    await pc.setRemoteDescription({type:'answer',sdp:await res.text()}); on=true; $('start').classList.add('hide'); ui(); setMode(mode);
     try{ if(navigator.wakeLock) navigator.wakeLock.request('screen').catch(()=>{}); }catch{}
     try{ const cap=stream.getVideoTracks()[0].getCapabilities&&stream.getVideoTracks()[0].getCapabilities(); nativeZoom=!!(cap&&cap.zoom&&cap.zoom.max>=2); }catch{}
     pc.onconnectionstatechange=()=>{ if(['failed','disconnected','closed'].includes(pc.connectionState)&&on){ stop(); toast('LINK DROPPED','Open the table again.'); } };
@@ -76,10 +81,10 @@ async function start(){
 }
 function stop(){ on=false; try{pc&&pc.close()}catch{} try{stream&&stream.getTracks().forEach(t=>t.stop())}catch{} $('v').srcObject=null; fetch('/cmd',{method:'POST',body:JSON.stringify({stop:true})}).catch(()=>{}); $('start').classList.remove('hide'); $('sheet').classList.remove('on'); ui(); }
 function ui(){ $('badge').className='badge'+(on?' on':''); $('badge').innerHTML='<i></i>'+(on?'ON AIR':'OFF'); $('shutter').disabled=!on||mode==='eagle'; }
-$('go').onclick=start; $('stop').onclick=stop;
-document.querySelectorAll('#modes button').forEach(b=>b.onclick=()=>setMode(b.dataset.m));
+document.querySelectorAll('.modes-big .mode').forEach(b=>b.onclick=()=>{ mode=b.dataset.m; if(on){ setMode(mode); $('start').classList.add('hide'); } else start(); }); $('switch').onclick=()=>$('start').classList.remove('hide'); $('stop').onclick=stop;
 const MODE_TEXT={table:['CARDS','Your phone stays off the stream. Snap each card: she names, prices and judges it.'],rip:['RIP NIGHT','Your phone is LIVE on the stream as the table. Snap cards and boxes: she judges, prices, and heckles the court between packs.'],eagle:['LIVE · POV','Your phone is the main picture. Get her best angles. No judging in this mode.']};
-function setMode(m){ mode=m; document.querySelectorAll('#modes button').forEach(b=>b.classList.toggle('sel',b.dataset.m===m)); ui(); $('sheet').classList.remove('on'); fetch('/cmd',{method:'POST',body:JSON.stringify({mode:m})}).catch(()=>{}); toast(MODE_TEXT[m][0],MODE_TEXT[m][1]+(m==='table'?'':' Takes up to 30 s to switch on stream.')); }
+const MODE_NAME={table:'✦ CARDS',rip:'🎴 RIP NIGHT',eagle:'🐍 LIVE POV'};
+function setMode(m){ mode=m; $('modename').textContent=MODE_NAME[m]; ui(); $('sheet').classList.remove('on'); fetch('/cmd',{method:'POST',body:JSON.stringify({mode:m})}).catch(()=>{}); toast(MODE_TEXT[m][0],MODE_TEXT[m][1]+(m==='table'?'':' Takes up to 30 s to switch on stream.')); }
 // zoom: real camera zoom when the phone has it, otherwise the snapshot is cropped to what you see
 document.querySelectorAll('#zooms button').forEach(b=>b.onclick=()=>{ zoom=parseFloat(b.dataset.z); document.querySelectorAll('#zooms button').forEach(x=>x.classList.toggle('sel',x===b)); applyZoom(); });
 function applyZoom(){ if(nativeZoom&&stream){ stream.getVideoTracks()[0].applyConstraints({advanced:[{zoom}]}).catch(()=>{}); $('v').style.transform='none'; } else $('v').style.transform='scale('+zoom+')'; }

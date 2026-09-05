@@ -104,6 +104,19 @@
     border:3px solid #c9a24d;outline:2px solid #4a2a12;outline-offset:4px;border-radius:14px;
     box-shadow:0 24px 70px rgba(0,0,0,.7),inset 0 0 60px rgba(0,0,0,.6),0 0 0 8px rgba(20,8,14,.9);opacity:0;pointer-events:none;transition:opacity .9s ease,transform .9s ease}
   #oracle.on{opacity:1;transform:translateX(-50%) translateY(0)}
+  /* candles: a flame that breathes, a wick, a wax column with a slow drip; one each side of the table */
+  #oracle .candle{position:absolute;bottom:14px;width:44px;height:170px;pointer-events:none} #oracle .candle.l{left:-74px} #oracle .candle.r{right:-74px}
+  #oracle .candle .wax{position:absolute;left:6px;right:6px;bottom:0;height:112px;border-radius:6px 6px 3px 3px;background:linear-gradient(90deg,#d9c8a0,#f4ead0 40%,#c9b58a);box-shadow:inset 0 -14px 20px rgba(120,90,40,.35),0 10px 24px rgba(0,0,0,.6)}
+  #oracle .candle .drip{position:absolute;left:9px;top:58px;width:6px;height:0;border-radius:0 0 6px 6px;background:#f4ead0;animation:drip 9s ease-in infinite} #oracle .candle.r .drip{left:auto;right:9px;animation-delay:4s;animation-duration:12s}
+  @keyframes drip{0%{height:0;opacity:1}70%{height:34px;opacity:1}100%{height:38px;opacity:0}}
+  #oracle .candle .wick{position:absolute;left:50%;bottom:110px;width:2px;height:8px;background:#2a1a10;transform:translateX(-50%)}
+  #oracle .candle .flame{position:absolute;left:50%;bottom:116px;width:18px;height:44px;transform:translateX(-50%);border-radius:50% 50% 45% 45% / 62% 62% 38% 38%;background:radial-gradient(ellipse at 50% 75%,#fff7d0 0%,#ffd27a 28%,#ff8a1f 58%,rgba(255,80,10,.25) 80%,transparent 100%);filter:blur(.4px);box-shadow:0 0 22px 8px rgba(255,160,60,.45),0 0 70px 24px rgba(255,120,30,.18);animation:flame 1.7s ease-in-out infinite} #oracle .candle.r .flame{animation-duration:2.3s;animation-delay:.6s}
+  @keyframes flame{0%,100%{transform:translateX(-50%) scaleY(1) skewX(0)}30%{transform:translateX(-48%) scaleY(1.12) skewX(-4deg)}60%{transform:translateX(-52%) scaleY(.92) skewX(4deg)}80%{transform:translateX(-50%) scaleY(1.06) skewX(-2deg)}}
+  #oracle.on .candle .flame{animation-duration:.9s}
+  /* the skull on the table: eye sockets that glow when the Oracle wakes */
+  #skull{position:absolute;right:38px;bottom:22px;width:78px;pointer-events:none;filter:drop-shadow(0 8px 16px rgba(0,0,0,.7))} #skull svg{width:78px;height:86px;display:block}
+  #skull .eye{fill:rgba(190,140,255,0);transition:fill 1.2s} #oracle.on #skull .eye{fill:rgba(200,150,255,.95);animation:pulse 2.4s ease-in-out infinite}
+  #skull .mm{margin-top:2px;text-align:center;font-family:'Cinzel',serif;font-size:9px;letter-spacing:.3em;color:rgba(233,223,196,.6)}
   #oracle:before,#oracle:after{content:"";position:absolute;left:14px;right:14px;height:0;border-top:2px dotted #f2d27a;opacity:.85;filter:drop-shadow(0 0 6px #ffcf5a)}
   #oracle:before{top:8px}#oracle:after{bottom:8px}
   #oracle.on:before,#oracle.on:after{animation:marquee .9s steps(2) infinite}
@@ -239,7 +252,7 @@
   /* the companion phone cam: a drawn frame around the OBS 'Rip Cam' source — Card Table during a rip, Eagle Eye otherwise */
   #kills{position:absolute;right:430px;top:212px;z-index:6;display:flex;align-items:center;gap:10px;padding:3px 12px 3px 14px;background:rgba(10,8,20,.55);border:1px solid rgba(217,182,91,.5);border-radius:999px;font-family:'Cinzel',serif;letter-spacing:.22em} #kills .k{font-size:11px;color:#f2d27a} #kills .n{font-size:16px;font-weight:700;color:#fff;text-shadow:0 0 12px rgba(224,72,60,.8)}
   #cells{position:absolute;inset:0;z-index:2;pointer-events:none;transition:opacity .6s} body.busy #cells .plate,body.busy #cells .here{opacity:0;transition:opacity .4s}
-  #tarot,#oracle,#haiku,#menu,#pull,#moon,#petals,#dim,#fog,#flash{z-index:20} #cam-rest,#kills,#show{z-index:8}
+  #tarot,#oracle,#haiku,#menu,#pull,#moon,#petals,#dim,#fog,#flash{z-index:20} #bolt{z-index:22} #cam-rest,#kills,#show{z-index:8}
   @keyframes cellin{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:none}}
   #cells .cell{animation:cellin .7s ease both;position:absolute;pointer-events:none;border-radius:12px;box-shadow:0 0 0 1.5px rgba(217,182,91,.55),0 0 0 5px rgba(8,5,12,.9),0 0 0 6px rgba(217,182,91,.22),0 18px 40px rgba(0,0,0,.55)}
   #cells .cell:after{content:"";position:absolute;left:0;right:0;bottom:0;height:90px;border-radius:0 0 12px 12px;background:linear-gradient(180deg,rgba(6,4,10,0),rgba(6,4,10,.6) 45%,rgba(6,4,10,.96))}   /* hides the cameras' own burned-in clocks */
@@ -258,13 +271,13 @@
   /* ---- compact: header and footer at two thirds, the stage grows to 1920x720 (y 180-900) so the cameras get the room ---- */
   body.compact #head{left:0;right:auto;width:2880px;padding:0 60px;box-sizing:border-box;transform:scale(.6667);transform-origin:top left}
   body.compact #stars{transform:scale(.6667);transform-origin:top left;width:2880px}
-  body.compact #show{top:136px;right:40px} body.compact #kills{top:136px;right:440px}
+  body.compact #show{top:136px;right:40px} body.compact #kills{top:136px;right:470px}
   body.compact #rule{top:906px} body.compact #facts{top:912px;height:30px} body.compact #fact{font-size:22px} body.compact #fact .cmd{font-size:13px}
   body.compact #cards{top:950px;bottom:14px;gap:16px} body.compact .card{grid-template-rows:14px 40px 1fr;row-gap:5px;padding:9px 18px 8px}
   body.compact .big{font-size:34px} body.compact .big.act{font-size:22px;padding-top:6px} body.compact .aside{font-size:13px} body.compact .foot{font-size:12px;gap:3px}
   body.compact canvas.spark{height:32px;width:140px} body.compact .vit{grid-template-columns:1fr 140px}
   body.compact #pull{top:900px;height:180px;padding:12px 60px 12px 70px} body.compact #pull .img{width:114px;height:160px} body.compact #pull .nm{font-size:30px} body.compact #pull .vd{font-size:18px} body.compact #pull .val{font-size:26px}
-  body.compact #cam-rest{top:136px;right:680px;font-size:10px} body.compact #menu{top:430px}
+  body.compact #cam-rest{top:136px;right:730px;font-size:10px} body.compact #menu{top:430px}
   body.compact #tarot{top:330px} body.compact #oracle{top:400px} body.compact #haiku{top:370px}
   #status{position:absolute;left:500px;top:44px;z-index:8;display:none;align-items:center;gap:16px;padding:10px 18px 10px 14px;border-radius:10px;background:linear-gradient(180deg,rgba(24,14,30,.9),rgba(10,6,16,.92));border:1px solid rgba(217,182,91,.5);box-shadow:0 8px 24px rgba(0,0,0,.5)}
   body.compact #status{display:flex}
@@ -282,8 +295,9 @@
   #cells .cell.corner .shade{display:block;height:50%;width:34%;right:auto;border-radius:12px 0 30px 0;background:linear-gradient(135deg,rgba(14,8,22,.6) 0%,rgba(14,8,22,.35) 70%,rgba(14,8,22,0) 100%);-webkit-mask-image:linear-gradient(135deg,#000 60%,transparent 100%)}
   /* ---- the showdown, Leone cut: cinema mode hides the whole UI; one 2.35:1 frame, a hard warm grade, a whisper of grain, the title at the end ---- */
   body.cinema #head,body.cinema #stars,body.cinema #cells,body.cinema #rule,body.cinema #facts,body.cinema #cards,body.cinema #show,body.cinema #kills,body.cinema #cam-rest,body.cinema #status,body.cinema #frameA,body.cinema #frameB,body.cinema #fx,body.cinema #ripframe,body.cinema #pull,body.cinema #ledger{opacity:0 !important;transition:opacity .6s}
-  #western{position:absolute;inset:0;z-index:18;pointer-events:none;opacity:0;transition:opacity .8s}
-  #western.on{opacity:1}
+  #western{position:absolute;inset:0;z-index:18;pointer-events:none;opacity:0;transition:opacity .8s;visibility:hidden}
+  #western.on{opacity:1;visibility:visible}
+  #western .contrast{display:none} #western.on .contrast{display:block}
   #western .bar{position:absolute;left:0;right:0;height:0;background:#000;transition:height 1.6s cubic-bezier(.2,.8,.2,1)} #western .bar.t{top:0} #western .bar.b{bottom:0} #western.on .bar{height:132px}
   #western .grade{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 45%,rgba(0,0,0,0) 40%,rgba(0,0,0,.55) 100%)}
   #western .warm{position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,196,110,.10),rgba(255,160,70,.12));mix-blend-mode:overlay}
@@ -380,7 +394,9 @@
   <div class="slot"><div class="pos">PRESENT</div><div class="tcard" id="tc1"><div class="inner"><div class="back"></div><div class="face"></div></div></div></div>
   <div class="slot"><div class="pos">FUTURE</div><div class="tcard" id="tc2"><div class="inner"><div class="back"></div><div class="face"></div></div></div></div>
   <div id="treading"><div id="tq"></div><div id="tcardtext"><span class="wait">The Oracle shuffles… </span></div></div></div>
-<div id="oracle"><div id="marq">✦ THE ORACLE SPEAKS ✦</div><div id="ball"><div class="glow"></div><div class="glass"><div class="mist"></div><div class="mist b"></div></div><div class="hands"></div><div class="stand"></div></div>
+<div id="oracle"><div id="marq">✦ THE ORACLE SPEAKS ✦</div><div class="candle l"><div class="flame"></div><div class="wick"></div><div class="wax"></div><div class="drip"></div></div><div class="candle r"><div class="flame"></div><div class="wick"></div><div class="wax"></div><div class="drip"></div></div>
+  <div id="skull"><svg viewBox="0 0 100 110" aria-hidden="true"><path d="M50 4C24 4 10 22 10 46c0 12 5 22 13 29v13c0 5 4 9 9 9h4v-9h6v9h16v-9h6v9h4c5 0 9-4 9-9V75c8-7 13-17 13-29C90 22 76 4 50 4z" fill="#e9dfc4"/><ellipse cx="35" cy="47" rx="10" ry="12" fill="#1a0c16"/><ellipse cx="65" cy="47" rx="10" ry="12" fill="#1a0c16"/><path d="M50 56l-6 12h12z" fill="#1a0c16"/><path d="M36 84h28" stroke="#1a0c16" stroke-width="3"/><path d="M42 80v9M50 80v9M58 80v9" stroke="#1a0c16" stroke-width="2"/><circle class="eye" cx="35" cy="48" r="3"/><circle class="eye" cx="65" cy="48" r="3"/></svg><div class="mm">MEMENTO MORI</div></div>
+  <div id="ball"><div class="glow"></div><div class="glass"><div class="mist"></div><div class="mist b"></div></div><div class="hands"></div><div class="stand"></div></div>
   <div id="otext"><div id="oq"></div><div id="card"><div id="oa"></div></div></div></div>
 <div id="facts"><span class="label" id="fact-label">Did you know</span><div id="fact"></div></div>
 
@@ -722,7 +738,7 @@
       (c.key === 'cool' ? `<div class="shade"><b>◆ BEYOND THE GLASS ◆</b></div>` : '') + `<div class="plate"><b>${ICON[c.key] || '◆'}</b>${esc(c.label)}</div>` + (c.here ? `<div class="here"><i></i>SHE'S HERE</div>` : '') + `</div>`).join('');
     CELLS = f.cells.filter(c => c.live || c.key === 'reel').map(c => [c.x, c.y, c.w, c.h]); if (curPhase) { try { renderBase(SCENE[curPhase]); } catch (e) {} }
     let tag = document.getElementById('cam-rest'); if (!tag) { tag = document.createElement('div'); tag.id = 'cam-rest'; document.body.appendChild(tag); }
-    const dead = f.dead || []; tag.textContent = dead.includes('hot') ? '◆ HOT SIDE CAM TEMPORARILY UNAVAILABLE DUE TO PYTHON CONSTRICTION' : dead.includes('cool') ? '◆ COOL SIDE CAM · A MOMENT OF PRIVACY' : ''; tag.style.display = tag.textContent ? '' : 'none'; }).catch(() => {}); }
+    const dead = f.dead || []; tag.textContent = dead.includes('hot') ? '◆ HOT CAM DOWN · PYTHON CONSTRICTION' : dead.includes('cool') ? '◆ COOL CAM · A MOMENT OF PRIVACY' : ''; tag.style.display = tag.textContent ? '' : 'none'; }).catch(() => {}); }
   setInterval(layoutPoll, 5000); layoutPoll();
   // ---- court status (overlay/whereabouts.json from the bot's director): where she is, since when
   const WHERE = { cool: 'OUT ON THE COOL SIDE', hot: 'OUT ON THE HOT SIDE', hothide: 'IN THE HOT HIDE', coldhide: 'IN THE COLD HIDE' };
