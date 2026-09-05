@@ -382,6 +382,39 @@ def cam_vista(cam="coolcam"):
     if HYBRID: return True
     return cam_goto(cam, *VISTA)
 _guard = {"timer": None, "last": 0}
+_cine = {"last": 0}
+CINE_MINUTES = float(CFG.get("CLEOBOT_CINE_MINUTES", "5"))
+def cinematographer():
+    """Big shots by eye, not by step count: when the cool cam is showing something lame (no snake, a wall, bark filling the frame),
+    ask the vision eye how interesting the picture is and which way a better composition lies; take up to two nudges, re-judging each time.
+    Works in hybrid mode too (relative moves only). The glass guard still runs after every move."""
+    import subprocess
+    if LLM_BACKEND != "cli" or time.time() - _cine["last"] < CINE_MINUTES * 60 or _track["on"] or _patrol["on"]: return
+    if not _cam_sess.acquire(blocking=False): return
+    _cine["last"] = time.time()
+    try:
+        for step in range(3):
+            f = f"{HERE}/cli-workdir/frames/cine.jpg"
+            subprocess.run([FFMPEG, "-loglevel", "error", "-y", "-rtsp_transport", "tcp", "-i", f"{RTSP}/coolcam", "-frames:v", "1", "-vf", "scale=800:-1", "-q:v", "4", f], capture_output=True, timeout=20)
+            if not os.path.exists(f): return
+            prompt = ("Use the Read tool on exactly this file and nothing else: frames/cine.jpg. It is the live picture from a pan-tilt camera inside a ball python's terrarium, shown to an audience. "
+                      "Judge it as a cinematographer. Reply ONLY with JSON: {\"snake\": true/false, \"score\": 1-5 (5 = a beautiful, well-composed view of the enclosure or the snake; 1 = a wall, a blur, a single object filling the frame, glass glare), "
+                      "\"nudge\": \"up|down|left|right|none\" (which small camera move would most improve the composition: reveal the cork log, the vines, the branches, the hides, or centre the snake), \"why\": \"six words\"}. "
+                      "Never suggest a move toward a human room seen through the glass (walls, furniture, windows) — prefer down or toward the plants and bark in that case.")
+            if not _cli_lock.acquire(timeout=20): return
+            try:
+                os.chdir(f"{HERE}/cli-workdir")
+                txt = cli_call([CLI_BIN, "-p", prompt, "--model", CLI_MODEL, "--max-turns", "3", "--tools", "Read", "--no-session-persistence", "--system-prompt", "You describe images factually and reply only with JSON. You only read the file named in the prompt."], timeout=75)
+                m = re.search(r"\{.*\}", txt or "", re.S); j = json.loads(m.group(0)) if m else {}
+            finally: _cli_lock.release()
+            _llm["rip_looks"] = _llm.get("rip_looks", 0) + 1
+            score = int(j.get("score") or 0); nudge = j.get("nudge") or "none"
+            log(f"cinematographer: score {score}/5, snake {j.get('snake')}, {j.get('why')}, nudge {nudge}")
+            if score >= 4 or nudge not in ("up", "down", "left", "right") or (j.get("snake") and score >= 3): return
+            if not cam_move("coolcam", nudge, 40): return
+            time.sleep(4)
+    except Exception as e: log("cinematographer error:", type(e).__name__, str(e)[:60])
+    finally: _cam_sess.release()
 def glass_guard(reason="move"):
     """PRIVACY GUARD: after any cool-cam move (debounced) and at start, one vision look at the cool cam's picture. If it shows the room through
     the glass (walls, furniture, a window, people) instead of the inside of the terrarium, black that camera out on the stream (overlay/blackout.json)
@@ -1836,6 +1869,10 @@ class Bot:
                 except Exception as e: log("guard schedule error:", e)
                 try: threading.Thread(target=self.haiku_bank_fill, daemon=True).start() if now - getattr(self, "_bank_t", 0) > 720 else None
                 except Exception as e: log("bank error:", e)
+                try:
+                    m = ((hub() or {}).get("motion") or {}).get("cool", {})
+                    if TRACK_ON and not m.get("moving") and now - m.get("lastMove", 0) > 180 and int(_llm["viewers"]) >= 1: threading.Thread(target=cinematographer, daemon=True).start()   # a lame shot with people watching: fix it by eye
+                except Exception as e: log("cine error:", e)
                 try: director_look(self)
                 except Exception as e: log("director error:", e)
                 if PATROL_ON and TRACK_ON and dead_cam() == "hot" and not _patrol["on"] and not _track["on"] and now - _patrol["last"] > 600:
