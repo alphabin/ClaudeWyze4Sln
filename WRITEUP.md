@@ -151,29 +151,7 @@ it and republishes H.264 into a local mediamtx over WHIP; everything else pulls 
 - The provisioner renews the RTC token every 45 min (`RENEW_EVERY`), and the page asks for a fresh session on
   every reconnect.
 
-## 7b. Pan/tilt over the lake channel (Pan V4) — found 2026-09-03
-
-The Agora data stream that carries `set_property camera::resolution` also carries pan/tilt. The camera acknowledges every
-command (`*_ack` with `result`: 1 = done, 2 = unknown), which is how the names were found: sending guesses and reading the acks.
-
-    client.sendStreamMessage(new TextEncoder().encode(JSON.stringify(
-      [{"cmd":"run_action","action":"camera-position::move-position","params":{"direction":"left","speed":5,"step":10}}])))
-    // ack: {"cmd":"run_action_ack","action":"camera-position::move-position","result":1,"ts":...}
-    // direction: left | right | up | down   step: 1–60 (10 = a small nudge, 20 clearly visible)   speed: 5 works
-    // also seen: "camera-position::stop-move-position"
-
-Verified by measuring the picture: left 20 then right 20 returns to the starting frame (difference 0.7 vs a noise floor of 0.3).
-Params like `{"direction":"left"}` alone, `{"horizontal":..}`, `{"pan":..}` are refused (result 2); `direction` + `speed` + `step` are all required.
-`get_property` on `camera-position::*` names returns nothing, so position readback is not available; keep your own step ledger to go "home".
-The **Pan V3** (Kinesis path) does **not** accept any of this: a sweep of 1,560 interface/function combinations on its data channel found only
-`resolutions` (query), `resolution` (switch) and `playback` (SD-card playback: needs `startTime_json`/`count_json`). Its pan/tilt remains TUTK-only
-(the bridge's `rotary_*` / `cruise_points` commands, issue #835) or the Wyze app. TUTK from a Docker VM behind NAT times out (`IOTC_ER_TIMEOUT`);
-we then put the bridge on a VM that sits directly on the Wi-Fi (Colima profile with `--vm-type qemu --network-mode bridged`, container in host network mode, no NAT anywhere, same subnet as the camera) and it STILL times out on `IOTC_Connect_ByUIDEx`, in both `NET_MODE=ANY` and `NET_MODE=LAN`. The camera (HL_PAN3, firmware 4.50.17.10, p2p type 3, DTLS) simply no longer answers third-party TUTK connections — the same lock-down the community reported for Pan V3 firmware 4.50.5+ since early 2025 (bridge issues #1432, #1466). Conclusion: on current firmware the Pan V3's pan/tilt is reachable only from the Wyze app. Video still works via Kinesis WebRTC (this kit's `cam.html`).
-
-In this kit: `chatbot/cleobot.py` `cam_move()` / `cam_home()` (via the decoder page's debug port), chat commands `cam left|right|up|down [step]`,
-`cam home`, `cam find` (a vision call says where the snake is; the camera nudges toward her), and an automatic find-and-nudge when the sensor hub reports motion.
-
-
+## 8. Troubleshooting
 
 | Symptom | Cause | Fix |
 |---|---|---|
@@ -215,6 +193,12 @@ In this kit: `chatbot/cleobot.py` `cam_move()` / `cam_home()` (via the decoder p
 - If you improve on this (a proper bridge integration, Linux units, a Home Assistant add-on), please open an issue
   or PR so the next Pan V4 owner finds one place with everything.
 
-## 7c. Wyze Cam OG: it's Agora too (2026-09-04)
+## 8. Director mode, a frame system, and one eye for two sides (2026-09-04, evening)
 
-The Wyze Cam OG (`GW_GC1`) is "not supported" by docker-wyze-bridge (no TUTK), and the Kinesis signaling the Pan V3 answers gets no reply from an OG. A debug Chrome (`--remote-debugging-port`) logged into the Wyze web portal showed why: the portal plays OG cameras over **Agora** (`wrtc_stats` / `traffic_stats` frames, an Agora `sid`/`uid`), the same "lake" provider as the Pan V4. So the Pan V4 recipe carries over unchanged: `app/v4/camera/get-streams` with provider `lake` (the provisioner), the Agora web SDK in a headless Chrome (`lake.html?cam=<slug>`), WHIP into mediamtx. `LAKE_CAMS` just gains the OG nicknames. Two OGs cost nothing extra: one headless Chrome each.
+With the hot cam dead and two OG hide cams added, the stream needed a real layout instead of two fixed windows. What shipped:
+
+- **Compact stage.** The header and footer drop to two thirds; the cameras get 1920x720. Hero window left (1223x688), a column of two 597x336 windows right (three 597x218 strips when there are more sources). All geometry lives in `obs/watchdog.py`, which places the OBS scene items and writes `overlay/layout.json`; the overlay draws a rounded gold frame, an engraved label plate and a bottom fade per cell from that file, and cuts the felt canvas around each window. OBS "outer bounds" scaling does not clip, so every non-16:9 cell gets an exact crop instead (`crop_for`).
+- **Director mode.** Every 4 minutes the bot decides where she is: cool-side motion from the sensor hub is free; otherwise one vision call over a still from each live camera. `overlay/director.json` makes that camera the hero with a "she's here" plate. Every look also goes to `logs/whereabouts.jsonl`; transitions feed the masthead's court-status plate ("in the cold hide · since 6:40 pm") and a 24 h summary in her prompt, so she can say when she came out.
+- **The reel earns its slot.** It plays in the column only when nothing is happening (10 min without motion), and every clip is vision-checked (snake visible, no person) before it goes in.
+- **Pan V4 survey.** A grid of frames over pan and tilt showed the useful range: a quarter up is the enclosure, half up is the mesh roof and the room through the glass. Hence a hard tilt ceiling in `cam_move` (privacy) and a vista preset the patrol rests at. The step ledger is now persisted, so "home" survives restarts.
+- **Preview harness.** `overlay.html?preview=tarot|fortune|interlude|pull|pulls|menu` replays that state's last JSON as fresh, so a headless Chrome pointed at the bridge's static URL renders each special for design checks without touching the live stream.

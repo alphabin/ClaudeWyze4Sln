@@ -736,15 +736,31 @@ def dead_cam():
     try:
         c = json.load(open(f"{ROOT}/overlay/cams.json")); return c.get("dead") if time.time() - c.get("ts", 0) < 900 else None
     except Exception: return None
+def whereabouts_summary(hours=24):
+    """Her movements from the director log: where she has been and when she came out (last N hours), in words the model can use."""
+    try:
+        W = {"cool": "out on the cool side", "hot": "out on the hot side", "hothide": "in the hot hide", "coldhide": "in the cold hide"}
+        rows = [json.loads(l) for l in open(f"{ROOT}/logs/whereabouts.jsonl") if l.strip()]; cut = time.time() - hours * 3600
+        rows = [r for r in rows if r.get("ts", 0) > cut]
+        if not rows: return ""
+        moves = []; cur = None
+        for r in rows:
+            w = r.get("where")
+            if w != cur: moves.append((r["ts"], w)); cur = w
+        def hm(t): return time.strftime("%-I:%M %p", time.localtime(t)).lower()
+        parts = [f"{hm(t)} {W.get(w, 'out of sight' if not w else w)}" for t, w in moves[-8:]]
+        outs = [t for t, w in moves if w in ("cool", "hot")]
+        return f"WHEREABOUTS (last {hours} h, from her cameras): " + "; ".join(parts) + (f". She came out into the open {len(outs)} time(s), first at {hm(outs[0])}." if outs else ". She has not come out into the open in that window.")
+    except Exception: return ""
 def situation():
     """Live notes she must know when she speaks (shown to the model as trusted facts)."""
     d = dead_cam()
     try: kills = json.load(open(f"{ROOT}/overlay/kills.json")).get("count", 0)
     except Exception: kills = 0
     tally = f" Cameras destroyed by her so far: {kills} (the stream keeps a counter; she is proud of it)." if kills else ""
-    if d == "hot": return tally + " SITUATION: the hot-side camera is temporarily unavailable due to python constriction — she coiled around it last night and squeezed it dead. Only the cool-side camera is live; the stream shows it full width. If anyone asks about the black/missing hot side or the second camera, say exactly that, with pride. A new camera is coming."
+    if d == "hot": return tally + " " + whereabouts_summary() + " SITUATION: the hot-side camera is temporarily unavailable due to python constriction — she coiled around it last night and squeezed it dead. Only the cool-side camera is live; the stream shows it full width. If anyone asks about the black/missing hot side or the second camera, say exactly that, with pride. A new camera is coming."
     if d == "cool": return "SITUATION: the cool-side camera is temporarily unavailable (she got it); only the hot-side camera is live, shown full width."
-    return tally
+    return tally + " " + whereabouts_summary()
 def facts():
     try: return json.load(open(f"{ROOT}/overlay/facts.json"))
     except Exception: return ["Ball pythons are constrictors and not venomous."]
