@@ -383,6 +383,20 @@ def cam_vista(cam="coolcam"):
     return cam_goto(cam, *VISTA)
 _guard = {"timer": None, "last": 0}
 _cine = {"last": 0}
+_showdown = {"last": 0}
+SHOWDOWN_TITLES = ["THE GOOD, THE BAD AND THE SCALY", "A FISTFUL OF SUBSTRATE", "FOR A FEW MICE MORE", "ONCE UPON A TIME IN THE TERRARIUM", "HIGH NOON AT THE GLASS", "THE QUEEN WITH NO NAME"]
+def showdown(bot=None, why="", say=True):
+    """The spaghetti-western moment: letterbox, sun-baked grade and grain on the stage, a title card, an original whistle-and-twang sting.
+    At most once per 20 min. Fires when she comes out of a hide, on 'showdown' in chat, and once a night on its own."""
+    if time.time() - _showdown["last"] < 1200: return False
+    _showdown["last"] = time.time(); title = random.choice(SHOWDOWN_TITLES)
+    try: json.dump({"ts": int(time.time()), "title": title, "sub": "A STANDOFF AT THE GLASS", "why": why}, open(f"{ROOT}/overlay/showdown.json", "w"))
+    except Exception as e: log("showdown.json error:", e)
+    log(f"showdown: {title} ({why})")
+    if bot is not None and say:
+        line = random.choice(["High noon at the glass. Draw, human. I blink slower.", "The wind stops. The mice go quiet. She is out.", "Every court has its outlaw. Mine wears the crown.", "Squint. Stare. Nobody moves first. That is how I win."])
+        threading.Timer(3.5, lambda: (bot.send(f"🤠 {line}"), speak(line, "court")), ).start()
+    return True
 CINE_MINUTES = float(CFG.get("CLEOBOT_CINE_MINUTES", "5"))
 def cinematographer():
     """Big shots by eye, not by step count: when the cool cam is showing something lame (no snake, a wall, bark filling the frame),
@@ -815,6 +829,7 @@ def director_look(bot=None):
         try: w = json.load(open(wf))
         except Exception: w = {"now": None, "since": out["ts"], "log": []}
         if out.get("where") != w.get("now"):
+            if w.get("now") in ("hothide", "coldhide") and out.get("where") in ("cool", "hot"): threading.Thread(target=showdown, args=(bot, "she came out of the " + w["now"]), daemon=True).start()   # the reveal
             w["log"] = (w.get("log") or [])[-60:] + [{"ts": out["ts"], "where": out.get("where")}]; w["now"] = out.get("where"); w["since"] = out["ts"]
         w["seen"] = out["ts"] if out.get("where") else w.get("seen"); w["ts"] = out["ts"]; json.dump(w, open(wf, "w"))
     except Exception as e: log("whereabouts error:", e)
@@ -1873,6 +1888,10 @@ class Bot:
                     m = ((hub() or {}).get("motion") or {}).get("cool", {})
                     if TRACK_ON and not m.get("moving") and now - m.get("lastMove", 0) > 180 and int(_llm["viewers"]) >= 1: threading.Thread(target=cinematographer, daemon=True).start()   # a lame shot with people watching: fix it by eye
                 except Exception as e: log("cine error:", e)
+                try:
+                    hr = time.localtime(now).tm_hour
+                    if (hr >= 23 or hr < 3) and int(_llm["viewers"]) >= 1 and ((hub() or {}).get("motion") or {}).get("cool", {}).get("moving") and now - _showdown["last"] > 5 * 3600 and random.random() < 0.05: showdown(self, "nightly")
+                except Exception as e: log("showdown error:", e)
                 try: director_look(self)
                 except Exception as e: log("director error:", e)
                 if PATROL_ON and TRACK_ON and dead_cam() == "hot" and not _patrol["on"] and not _track["on"] and now - _patrol["last"] > 600:
@@ -2471,6 +2490,8 @@ class Bot:
         elif FORTUNE_RX.search(t) and ai_first_ok():                              # the Oracle: crystal ball on the overlay + a fortune in chat
             reply = fortune(user, t, v=v, recent=self.recent); path = "fortune" if reply else "fortune-cooldown"
             if not reply and path == "fortune-cooldown": reply = random.choice(["The ball is clouded for a few minutes — the Oracle grants three fortunes an hour per courtier.", "The mist is resting. Give it a few minutes, then ask again."])
+        elif re.search(r"\b(showdown|duel|standoff|high noon|western|spaghetti)\b", low):
+            path = "showdown"; reply = None if showdown(self, f"asked by {user}") else "The showdown just passed, courtier. The dust needs twenty minutes to settle."
         elif re.search(r"\b(haiku|poem|poetry|interlude)\b", low) and ai_first_ok():
             path = "haiku"
             if now - getattr(self, "last_interlude", 0) < 600: reply = "The moon interlude has just passed, courtier — the ink must dry. Ask again in a little while."

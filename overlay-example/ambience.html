@@ -242,6 +242,34 @@ function moonInterlude(f) {
   say('interlude ' + (day ? 'blossom' : 'moon') + ' ' + modeName + ' ' + lead + ' ' + shape);
 }
 window.moonInterlude = moonInterlude;
+// ---------- Showdown: an original western sting for the standoff at the glass (overlay/showdown.json). Not the film theme — its own tune. ----------
+let showdownTs = 0;
+function showdownWatch() { setInterval(async () => { try { const f = await (await fetch('showdown.json?' + Date.now(), { cache: 'no-store' })).json();
+  if (!f || !f.ts || f.ts === showdownTs || Date.now() / 1000 - f.ts > 60) return; showdownTs = f.ts; showdown(f); } catch {} }, 2000); }
+function whistle(L, out, f, s, dur, peak) { const o = ctx.createOscillator(), g = ctx.createGain(), vib = ctx.createOscillator(), vg = ctx.createGain(); o.type = 'sine'; o.frequency.value = f;
+  vib.frequency.value = 5.5; vg.gain.setValueAtTime(0, s); vg.gain.linearRampToValueAtTime(f * 0.018, s + Math.min(0.8, dur * 0.5)); vib.connect(vg); vg.connect(o.frequency);
+  g.gain.setValueAtTime(0, s); g.gain.linearRampToValueAtTime(peak, s + 0.06); g.gain.setValueAtTime(peak, s + dur - 0.12); g.gain.linearRampToValueAtTime(0, s + dur); o.connect(g); g.connect(out); o.start(s); o.stop(s + dur + 0.05); vib.start(s); vib.stop(s + dur + 0.05);
+  const br = ctx.createBufferSource(); br.buffer = noiseBuffer(dur + 0.5, 'white'); const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f; bp.Q.value = 12; const bg = ctx.createGain(); bg.gain.setValueAtTime(0, s); bg.gain.linearRampToValueAtTime(peak * 0.25, s + 0.1); bg.gain.linearRampToValueAtTime(0, s + dur); br.connect(bp); bp.connect(bg); bg.connect(out); br.start(s); br.stop(s + dur + 0.5); }
+function wah(L, out, f, s, dur, peak) { const o = ctx.createOscillator(), g = ctx.createGain(), bp = ctx.createBiquadFilter(); o.type = 'sawtooth'; o.frequency.value = f; bp.type = 'bandpass'; bp.Q.value = 5;
+  bp.frequency.setValueAtTime(f * 1.5, s); bp.frequency.exponentialRampToValueAtTime(f * 5, s + dur * 0.6); bp.frequency.exponentialRampToValueAtTime(f * 1.6, s + dur);
+  g.gain.setValueAtTime(0, s); g.gain.linearRampToValueAtTime(peak, s + 0.03); g.gain.exponentialRampToValueAtTime(0.0005, s + dur); o.connect(bp); bp.connect(g); g.connect(out); o.start(s); o.stop(s + dur + 0.05); }
+function rattle(L, out, s, dur, peak) { for (let t = 0; t < dur; t += 0.045 + Math.random() * 0.02) { const n = ctx.createBufferSource(); n.buffer = noiseBuffer(0.03, 'white'); const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 5000;
+  const g = ctx.createGain(); const p = peak * (0.5 + 0.5 * Math.sin(t / dur * Math.PI)); g.gain.setValueAtTime(p, s + t); g.gain.exponentialRampToValueAtTime(0.0003, s + t + 0.03); n.connect(hp); hp.connect(g); g.connect(out); n.start(s + t); n.stop(s + t + 0.04); } }
+function showdown(f) {
+  window._oracleAt = now(); const t = now() + 0.3, L = layer('oracle'); L.gain.gain.setValueAtTime(1, t);
+  const W = place(L, 0.1, 0.9), C = place(L, -0.5, 1.3), G = place(L, 0.4, 1.0), R = place(L, -0.7, 0.8), D = place(L, 0, 1.6);
+  // whistle: a minor-pentatonic call with the leap, answered by the wah; original phrase, D minor
+  const d = 146.83, sc = [d * 2, d * 2 * 6 / 5, d * 2 * 4 / 3, d * 2 * 3 / 2, d * 2 * 9 / 5, d * 4];                     // D F G A C D'
+  const call = [[5, 0.55], [3, 0.5], [2, 0.5], [0, 1.4]], answer = [[3, 0.45], [2, 0.45], [1, 0.45], [0, 1.6]];
+  let s = t; for (const [i, len] of call) { whistle(L, W, sc[i], s, len, 0.09); s += len + 0.05; }
+  s += 0.35; wah(L, C, d, s, 0.45, 0.16); wah(L, C, d * 4 / 5, s + 0.5, 0.7, 0.16);                                          // the two-note wah
+  s += 1.4; for (const [i, len] of answer) { whistle(L, W, sc[i] / 2, s, len, 0.085); s += len + 0.05; }
+  koto(L, G, d / 2, t + 0.1, 3.5, 0.14); koto(L, G, d / 2 * 3 / 2, t + 0.12, 3.2, 0.08); koto(L, G, d / 2, s - 0.4, 4.5, 0.16);   // low twang under the call, and at the end
+  rattle(L, R, t + 4.9, 1.6, 0.05); rattle(L, R, s + 0.2, 1.2, 0.04);                                                       // her rattle: a bluff, she is a python
+  taiko(L, D, t + 0.05, 0.1); taiko(L, D, s + 0.1, 0.14);
+  say('showdown ' + (f && f.title || ''));
+}
+window.showdown = showdown;
 // ---------- the Oracle's voice: overlay/voice.json -> voice/<ts>.m4a, played through a warm EQ and a whisper of hall; the bed ducks while she speaks ----------
 let voiceTs = 0;
 function voiceWatch() { setInterval(async () => { try { const f = await (await fetch('voice.json?' + Date.now(), { cache: 'no-store' })).json();
@@ -308,7 +336,7 @@ async function start() {
   if (Object.keys(rec).length) { say('using recordings ' + Object.keys(rec).join(',')); const tickR = () => { const ph = rec[phaseFor()] ? phaseFor() : Object.keys(rec)[0]; if (ph !== phase) { phase = ph; playRecording(ph); } }; tickR(); setInterval(tickR, 30000); }
   else { wind(); crickets(); frogs(); nightjar(); owl(); birds('dawnbirds', 10, 1, 5, dawnCurve); birds('daybirds', 5, 5, 20, drifter(500)); flyby(); cicadas(); rain(); applyPhase(phaseFor()); setInterval(() => applyPhase(phaseFor()), 30000); }
   setInterval(weather, 10 * 60e3);
-  oracleWatch(); tarotWatch(); interludeWatch(); voiceWatch(); musicBed();
+  oracleWatch(); tarotWatch(); interludeWatch(); showdownWatch(); voiceWatch(); musicBed();
   if (ctx.state !== 'running') { try { await ctx.resume(); } catch {} }
   say('running: ' + ctx.state);
 }
