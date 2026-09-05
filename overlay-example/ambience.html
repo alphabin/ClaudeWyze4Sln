@@ -267,6 +267,7 @@ function showdown(f) {
   koto(L, G, d / 2, t + 0.1, 3.5, 0.14); koto(L, G, d / 2 * 3 / 2, t + 0.12, 3.2, 0.08); koto(L, G, d / 2, s - 0.4, 4.5, 0.16);   // low twang under the call, and at the end
   rattle(L, R, t + 4.9, 1.6, 0.05); rattle(L, R, s + 0.2, 1.2, 0.04);                                                       // her rattle: a bluff, she is a python
   taiko(L, D, t + 0.05, 0.1); taiko(L, D, s + 0.1, 0.14);
+  for (const c of (f && f.cuts) || []) { taiko(L, D, t + c, 0.18); wah(L, C, d * 2, t + c + 0.05, 0.25, 0.1); }      // a hit on every camera cut
   say('showdown ' + (f && f.title || ''));
 }
 window.showdown = showdown;

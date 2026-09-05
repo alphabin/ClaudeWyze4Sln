@@ -385,13 +385,41 @@ _guard = {"timer": None, "last": 0}
 _cine = {"last": 0}
 _showdown = {"last": 0}
 SHOWDOWN_TITLES = ["THE GOOD, THE BAD AND THE SCALY", "A FISTFUL OF SUBSTRATE", "FOR A FEW MICE MORE", "ONCE UPON A TIME IN THE TERRARIUM", "HIGH NOON AT THE GLASS", "THE QUEEN WITH NO NAME"]
+def showdown_cuts(cuts):
+    """The close-ups: at each cut the next live camera takes the hero window for a few seconds (OBS transforms swapped, then restored),
+    and the pan camera makes a slow cinematic drift, relative moves only."""
+    try:
+        lay = json.load(open(f"{ROOT}/overlay/layout.json")); cells = lay.get("cells") or []
+        hero = next((c for c in cells if c.get("hero")), None); others = [c for c in cells if c.get("live") and not c.get("hero")]
+        if not hero or not others: return
+        NAME = {"cool": "Cool Side (Relay)", "hot": "Hot Side (Relay)", "hothide": "Hot Hide (OG)", "coldhide": "Cold Hide (OG)"}
+        scene = obs_req("GetCurrentProgramScene")["currentProgramSceneName"]; items = {i["sourceName"]: i for i in obs_req("GetSceneItemList", {"sceneName": scene})["sceneItems"]}
+        def place(src, x, y, w, h, idx=None):
+            it = items.get(src)
+            if not it: return
+            obs_req("SetSceneItemTransform", {"sceneName": scene, "sceneItemId": it["sceneItemId"], "sceneItemTransform": {"positionX": x, "positionY": y, "boundsType": "OBS_BOUNDS_SCALE_INNER", "boundsWidth": w, "boundsHeight": h, "boundsAlignment": 0, "cropTop": 0, "cropBottom": 0, "cropLeft": 0, "cropRight": 0}})
+            if idx is not None: obs_req("SetSceneItemIndex", {"sceneName": scene, "sceneItemId": it["sceneItemId"], "sceneItemIndex": idx})
+        saved = {c["key"]: dict(items[NAME[c["key"]]]["sceneItemTransform"]) for c in cells if c.get("live") and NAME.get(c["key"]) in items}
+        t0 = time.time()
+        if hero["key"] == "cool": threading.Thread(target=lambda: (time.sleep(1.0), cam_move("coolcam", "left", 18), time.sleep(6), cam_move("coolcam", "right", 18)), daemon=True).start()   # the slow drift
+        top = len([c for c in cells if c.get("live")])
+        for k, c in enumerate(others[:len(cuts) - 1]):
+            time.sleep(max(0, t0 + cuts[k] - time.time())); place(NAME[c["key"]], hero["x"], hero["y"], hero["w"], hero["h"], idx=top); log(f"showdown cut: {c['key']} takes the hero")
+        time.sleep(max(0, t0 + cuts[-1] - time.time()))
+        for key, tr in saved.items():                                                   # everything back where the watchdog put it
+            it = items[NAME[key]]; obs_req("SetSceneItemTransform", {"sceneName": scene, "sceneItemId": it["sceneItemId"], "sceneItemTransform": {k2: tr[k2] for k2 in ("positionX", "positionY", "boundsType", "boundsWidth", "boundsHeight", "boundsAlignment", "cropTop", "cropBottom", "cropLeft", "cropRight")}})
+            obs_req("SetSceneItemIndex", {"sceneName": scene, "sceneItemId": it["sceneItemId"], "sceneItemIndex": 0})
+        log("showdown: cuts done, layout restored")
+    except Exception as e: log("showdown cuts error:", type(e).__name__, str(e)[:80])
 def showdown(bot=None, why="", say=True):
     """The spaghetti-western moment: letterbox, sun-baked grade and grain on the stage, a title card, an original whistle-and-twang sting.
     At most once per 20 min. Fires when she comes out of a hide, on 'showdown' in chat, and once a night on its own."""
     if time.time() - _showdown["last"] < 1200: return False
     _showdown["last"] = time.time(); title = random.choice(SHOWDOWN_TITLES)
-    try: json.dump({"ts": int(time.time()), "title": title, "sub": "A STANDOFF AT THE GLASS", "why": why}, open(f"{ROOT}/overlay/showdown.json", "w"))
+    cuts = [4.0, 7.5, 11.0]
+    try: json.dump({"ts": int(time.time()), "title": title, "sub": "A STANDOFF AT THE GLASS", "why": why, "cuts": cuts}, open(f"{ROOT}/overlay/showdown.json", "w"))
     except Exception as e: log("showdown.json error:", e)
+    threading.Thread(target=showdown_cuts, args=(cuts,), daemon=True).start()
     log(f"showdown: {title} ({why})")
     if bot is not None and say:
         line = random.choice(["High noon at the glass. Draw, human. I blink slower.", "The wind stops. The mice go quiet. She is out.", "Every court has its outlaw. Mine wears the crown.", "Squint. Stare. Nobody moves first. That is how I win."])
