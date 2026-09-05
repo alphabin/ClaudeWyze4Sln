@@ -2181,6 +2181,9 @@ class Bot:
         if not SHOWS_ON or not self._broadcaster(): return
         key = current_show()
         if key == getattr(self, "show_key", None) and not force: return
+        try: announced = json.load(open(f"{HERE}/show_state.json")).get("key")
+        except Exception: announced = None
+        self._announce_ok = (key != announced); json.dump({"key": key, "ts": int(time.time())}, open(f"{HERE}/show_state.json", "w"))
         cid, name, title, tags = SHOWS[key]
         if dead_cam() == "hot": title = ("☠ she constricted a camera · " + title)                                   # the story goes in the title while the hot cam is dead
         body = json.dumps({"game_id": cid, "title": title[:140], "tags": tags[:10]}).encode()
@@ -2195,7 +2198,7 @@ class Bot:
         try: json.dump({"show": key, "name": name, "label": {"court": "THE COURT IS OPEN", "oracle": "ORACLE HOURS", "night": "NIGHT WATCH", "rip": "PACK RIP NIGHT"}[key], "ts": int(time.time())}, open(f"{ROOT}/overlay/show.json", "w"))
         except Exception as e: log("show.json error:", e)
         if prev and not self.room_empty():
-            self.send({"oracle": "🔮 Oracle hours begin. The cards are shuffled and the ball is clear — say 'tarot' or ask 'will I ever…'. Prime time in my court.",
+            if getattr(self, "_announce_ok", True): self.send({"oracle": "🔮 Oracle hours begin. The cards are shuffled and the ball is clear — say 'tarot' or ask 'will I ever…'. Prime time in my court.",
                        "night": "🌙 Night watch. I patrol, you rest; the soundscape is yours. Say 'tarot' if the dark asks you questions.",
                        "court": "☀️ The court is open. I rest by day and answer everything — ask me anything about ball pythons, or say 'menu'.",
                        "rip": "🎴 Pack rip night at my glass. Say RIP to hype it; I judge every pull."}[key])
@@ -2294,8 +2297,11 @@ class Bot:
             n += 1; log("<- (replayed)", r["user"], ":", r["text"][:120]); threading.Thread(target=self.handle, args=(r["user"], r["text"], r.get("tags") or {}), daemon=True).start(); time.sleep(0.3)
         if n: log(f"replayed {n} message(s) missed during the restart")
     def handle(self, user, text, tags=None):
-        try: json.dump({"ts": time.time()}, open(f"{HERE}/last_seen.json", "w"))
-        except Exception: pass
+        try: self._handle(user, text, tags)
+        finally:
+            try: json.dump({"ts": time.time()}, open(f"{HERE}/last_seen.json", "w"))
+            except Exception: pass
+    def _handle(self, user, text, tags=None):
         t = text.strip(); self.last_decision = {"score": None, "path": "ignored", "model": None}
         if user in IGNORE: return                                             # other bots
         verdict = guard_in(user, t, {"first": user not in self.seen, "visits": (self.court.get(user) or {}).get("visits", 0)})
