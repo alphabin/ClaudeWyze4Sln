@@ -269,13 +269,14 @@ def set_info(name):
 def value_words(v):
     if not v: return "the ledgers are silent on this one"
     lo, hi, st, rar, n = v
+    if hi <= 0: return "the ledgers have no price for this one yet"
     if hi < 1: return f"pennies on the market ({st}, {rar})"
     if n == 1 or hi < lo * 1.6: return f"about ${hi:,.2f} on the market ({st}, {rar})" if hi < 10 else f"about ${hi:,.0f} on the market ({st}, {rar})"
     return f"anywhere from ${lo:,.0f} to ${hi:,.0f} depending on the printing — the {st} {rar} version is the ${hi:,.0f} one"
 RIP_CAM = CFG.get("CLEOBOT_RIP_CAM", "coolcam")                          # the terrarium camera the cards are held up to (1080p on the relay)
 RIPCAM_RTSP = CFG.get("CLEOBOT_RIPCAM_RTSP", "rtsp://127.0.0.1:8556/ripcam")   # the companion phone camera, when it is publishing
-RIPCAM_LAYOUT = {"table": (960, 80, 900, 506), "eagle": (1400, 250, 480, 270),                 # x, y, w, h on the 1920x1080 canvas (phone held sideways)
-                 "table_p": (1330, 60, 540, 960), "eagle_p": (1590, 60, 300, 533)}             # phone held upright
+RIPCAM_LAYOUT = {"table": (960, 80, 900, 506), "eagle": (793, 616, 448, 252),                  # x, y, w, h on the 1920x1080 canvas (phone held sideways); eagle = a PiP over the hero (compact stage)
+                 "table_p": (1330, 60, 540, 960), "eagle_p": (960, 300, 318, 566)}             # phone held upright
 _ripcam = {"live": False, "mode": None, "portrait": False, "miss": 0}
 def ripcam_orient():
     """Is the phone publishing upright (portrait) or sideways? One ffprobe when it goes live."""
@@ -701,6 +702,15 @@ def director_look(bot=None):
         where = head or (seen[0] if seen else None)
         out = {"where": where, "head": head, "how": "vision", "seen": seen}
     out["ts"] = int(time.time()); json.dump(out, open(f"{ROOT}/overlay/director.json", "w")); log(f"director: she is at {out.get('where')} ({out.get('how')})")
+    try:                                                                            # whereabouts: every look to the log, every change to the overlay (her comings and goings)
+        os.makedirs(f"{ROOT}/logs", exist_ok=True); open(f"{ROOT}/logs/whereabouts.jsonl", "a").write(json.dumps({"ts": out["ts"], "where": out.get("where"), "how": out.get("how")}) + "\n")
+        wf = f"{ROOT}/overlay/whereabouts.json"
+        try: w = json.load(open(wf))
+        except Exception: w = {"now": None, "since": out["ts"], "log": []}
+        if out.get("where") != w.get("now"):
+            w["log"] = (w.get("log") or [])[-60:] + [{"ts": out["ts"], "where": out.get("where")}]; w["now"] = out.get("where"); w["since"] = out["ts"]
+        w["seen"] = out["ts"] if out.get("where") else w.get("seen"); w["ts"] = out["ts"]; json.dump(w, open(wf, "w"))
+    except Exception as e: log("whereabouts error:", e)
 def dead_cam():
     """'hot' | 'cool' | None from overlay/cams.json (obs/watchdog.py): a camera relay that has been dead for 3 checks."""
     try:
@@ -1995,6 +2005,7 @@ class Bot:
             else: vf = "scale=-2:600"
             subprocess.run([CFG.get("CLEOBOT_FFMPEG", "/opt/homebrew/bin/ffmpeg"), "-loglevel", "error", "-y", "-i", src, "-vf", vf, "-q:v", "3", dst], check=True, timeout=20, capture_output=True)
             value = None
+            if val and val[1] <= 0: val = None                                              # a zero in the index is "no price yet", not pennies (new sets)
             if val: lo, hi, st, rar, k = val; value = ("pennies" if hi < 1 else f"${hi:,.2f}" if hi < 10 else f"${hi:,.0f}" if (k == 1 or hi < lo * 1.6) else f"${lo:,.0f} – ${hi:,.0f}") + f" · {st}"
             json.dump({"image": f"pulls/{ts}.jpg", "name": name, "holo": bool(d.get("holo")), "verdict": verdict, "n": n, "value": value, "number": d.get("number"), "kind": kind, "stage": stage, "ts": ts}, open(f"{ROOT}/overlay/pull.json", "w"))
             for f in os.listdir(f"{ROOT}/overlay/pulls"):

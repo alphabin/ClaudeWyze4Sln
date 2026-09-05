@@ -74,8 +74,17 @@ def plan(alive, settled):
     slots = G["col2"] if len(col) <= 2 else G["col3"]
     for k, (x, y, w, h) in zip(col[:3], slots): cells.append((k, x, y, w, h))
     return cells
+def crop_for(w, h, sw=1920, sh=1080, osd=True):
+    """Crop a source so it fills a cell of another shape exactly (OBS 'outer bounds' does not clip, it spills over the neighbours).
+    osd: first shave the bottom 4.5% off a camera picture — that is where Wyze burns its clock in."""
+    sw, sh = sw or 1920, sh or 1080; base_b = int(sh * 0.06) if osd else 0; sh2 = sh - base_b
+    want = w / h; have = sw / sh2
+    if abs(want - have) < 0.02: return {"cropTop": 0, "cropBottom": base_b, "cropLeft": 0, "cropRight": 0}
+    if want > have: c = int((sh2 - sw / want) / 2); return {"cropTop": c, "cropBottom": c + base_b, "cropLeft": 0, "cropRight": 0}
+    c = int((sw - sh2 * want) / 2); return {"cropTop": 0, "cropBottom": base_b, "cropLeft": c, "cropRight": c}
 def apply_layout(cells, alive):
-    scene = obs([("GetCurrentProgramScene", None)])[0]["currentProgramSceneName"]; items = {i["sourceName"]: i["sceneItemId"] for i in obs([("GetSceneItemList", {"sceneName": scene})])[0]["sceneItems"]}
+    scene = obs([("GetCurrentProgramScene", None)])[0]["currentProgramSceneName"]; lst = obs([("GetSceneItemList", {"sceneName": scene})])[0]["sceneItems"]
+    items = {i["sourceName"]: i["sceneItemId"] for i in lst}; sizes = {i["sourceName"]: (i["sceneItemTransform"].get("sourceWidth"), i["sceneItemTransform"].get("sourceHeight")) for i in lst}
     placed = {k: (x, y, w, h) for k, x, y, w, h in cells}; reqs = []
     for key, src in list(((k, v[0]) for k, v in CAMS.items())) + [("reel", "Highlights")]:
         iid = items.get(src)
@@ -83,7 +92,7 @@ def apply_layout(cells, alive):
         if key in placed:
             x, y, w, h = placed[key]
             reqs += [("SetSceneItemIndex", {"sceneName": scene, "sceneItemId": iid, "sceneItemIndex": 0}), ("SetSceneItemEnabled", {"sceneName": scene, "sceneItemId": iid, "sceneItemEnabled": True}),
-                     ("SetSceneItemTransform", {"sceneName": scene, "sceneItemId": iid, "sceneItemTransform": {"positionX": x, "positionY": y, "boundsType": "OBS_BOUNDS_SCALE_INNER" if abs(w / h - 16 / 9) < 0.05 else "OBS_BOUNDS_SCALE_OUTER", "boundsWidth": w, "boundsHeight": h, "boundsAlignment": 0, "cropTop": 0, "cropBottom": 0, "cropLeft": 0, "cropRight": 0}})]
+                     ("SetSceneItemTransform", {"sceneName": scene, "sceneItemId": iid, "sceneItemTransform": {"positionX": x, "positionY": y, "boundsType": "OBS_BOUNDS_SCALE_INNER", "boundsWidth": w, "boundsHeight": h, "boundsAlignment": 0, **crop_for(w, h, *sizes.get(src, (0, 0)), osd=(key != "reel"))}})]
         else: reqs.append(("SetSceneItemEnabled", {"sceneName": scene, "sceneItemId": iid, "sceneItemEnabled": False}))
     reel = items.get("Highlights")
     if reel and "reel" in placed: reqs.append(("SetSceneItemIndex", {"sceneName": scene, "sceneItemId": reel, "sceneItemIndex": len([k for k in placed if k != "reel"])}))   # above the cameras, under the overlay

@@ -238,8 +238,10 @@
   #pull .holo-tag{display:inline-block;margin:0;vertical-align:middle;padding:2px 10px;border:1px solid #9fd8ff;border-radius:999px;color:#bfe6ff;font-family:var(--display);font-size:12px;letter-spacing:.2em}
   /* the companion phone cam: a drawn frame around the OBS 'Rip Cam' source — Card Table during a rip, Eagle Eye otherwise */
   #kills{position:absolute;right:430px;top:212px;z-index:6;display:flex;align-items:center;gap:10px;padding:3px 12px 3px 14px;background:rgba(10,8,20,.55);border:1px solid rgba(217,182,91,.5);border-radius:999px;font-family:'Cinzel',serif;letter-spacing:.22em} #kills .k{font-size:11px;color:#f2d27a} #kills .n{font-size:16px;font-weight:700;color:#fff;text-shadow:0 0 12px rgba(224,72,60,.8)}
+  #cells{position:absolute;inset:0;z-index:2;pointer-events:none;transition:opacity .6s} body.busy #cells .plate,body.busy #cells .here{opacity:0;transition:opacity .4s}
+  #tarot,#oracle,#haiku,#menu,#pull,#moon,#petals,#dim,#fog,#flash{z-index:20} #cam-rest,#kills,#show{z-index:8}
   #cells .cell{position:absolute;pointer-events:none;border-radius:12px;box-shadow:0 0 0 1.5px rgba(217,182,91,.55),0 0 0 5px rgba(8,5,12,.9),0 0 0 6px rgba(217,182,91,.22),0 18px 40px rgba(0,0,0,.55)}
-  #cells .cell:after{content:"";position:absolute;left:0;right:0;bottom:0;height:64px;border-radius:0 0 12px 12px;background:linear-gradient(180deg,rgba(6,4,10,0),rgba(6,4,10,.88))}   /* hides the cameras' own burned-in clocks */
+  #cells .cell:after{content:"";position:absolute;left:0;right:0;bottom:0;height:90px;border-radius:0 0 12px 12px;background:linear-gradient(180deg,rgba(6,4,10,0),rgba(6,4,10,.6) 45%,rgba(6,4,10,.96))}   /* hides the cameras' own burned-in clocks */
   #cells .cell .plate{position:absolute;left:14px;top:12px;display:flex;align-items:center;gap:8px;padding:5px 12px 5px 10px;border-radius:6px;background:linear-gradient(180deg,rgba(24,14,30,.92),rgba(10,6,16,.92));border:1px solid rgba(217,182,91,.55);box-shadow:0 4px 14px rgba(0,0,0,.5);font-family:'Cinzel',serif;font-size:13px;letter-spacing:.2em;color:#f2d27a;text-transform:uppercase}
   #cells .cell .plate b{font-size:14px;line-height:1;color:#e8c56b;font-weight:400} #cells .cell.hothide .plate b,#cells .cell.hot .plate b{color:#e0a83b} #cells .cell.coldhide .plate b,#cells .cell.cool .plate b{color:#8fd0ff}
   #cells .cell.small .plate{font-size:11px;padding:4px 10px 4px 8px;left:10px;top:10px}
@@ -253,13 +255,18 @@
   /* ---- compact: header and footer at two thirds, the stage grows to 1920x720 (y 180-900) so the cameras get the room ---- */
   body.compact #head{left:0;right:auto;width:2880px;padding:0 60px;box-sizing:border-box;transform:scale(.6667);transform-origin:top left}
   body.compact #stars{transform:scale(.6667);transform-origin:top left;width:2880px}
-  body.compact #show{top:136px;right:40px} body.compact #kills{top:136px;right:300px}
+  body.compact #show{top:136px;right:40px} body.compact #kills{top:136px;right:335px}
   body.compact #rule{top:906px} body.compact #facts{top:912px;height:30px} body.compact #fact{font-size:22px} body.compact #fact .cmd{font-size:13px}
   body.compact #cards{top:950px;bottom:14px;gap:16px} body.compact .card{grid-template-rows:14px 40px 1fr;row-gap:5px;padding:9px 18px 8px}
   body.compact .big{font-size:34px} body.compact .big.act{font-size:22px;padding-top:6px} body.compact .aside{font-size:13px} body.compact .foot{font-size:12px;gap:3px}
   body.compact canvas.spark{height:32px;width:140px} body.compact .vit{grid-template-columns:1fr 140px}
   body.compact #pull{top:900px;height:180px;padding:12px 60px 12px 70px} body.compact #pull .img{width:114px;height:160px} body.compact #pull .nm{font-size:30px} body.compact #pull .vd{font-size:18px} body.compact #pull .val{font-size:26px}
-  body.compact #cam-rest{top:884px;right:50px;font-size:10px} body.compact #menu{top:430px}
+  body.compact #cam-rest{top:136px;right:620px;font-size:10px} body.compact #menu{top:430px}
+  body.compact #tarot{top:330px} body.compact #oracle{top:400px} body.compact #haiku{top:370px}
+  #status{position:absolute;left:500px;top:44px;z-index:8;display:none;align-items:center;gap:16px;padding:10px 18px 10px 14px;border-radius:10px;background:linear-gradient(180deg,rgba(24,14,30,.9),rgba(10,6,16,.92));border:1px solid rgba(217,182,91,.5);box-shadow:0 8px 24px rgba(0,0,0,.5)}
+  body.compact #status{display:flex}
+  #status .dot{width:12px;height:12px;border-radius:50%;background:#f2d27a;box-shadow:0 0 14px #f2d27a;animation:pulse 2s ease-out infinite} #status.lost .dot{background:#8a7a9a;box-shadow:none;animation:none}
+  #status .k{font-family:'Cinzel',serif;font-size:11px;letter-spacing:.3em;color:#c9a24d} #status .v{font-family:'Cinzel',serif;font-size:19px;letter-spacing:.12em;color:#f6efdc;line-height:1.1} #status .s{font-size:12px;color:#b7a9c4;letter-spacing:.08em;margin-top:3px}
   #cam-rest{position:absolute;right:24px;top:786px;z-index:6;padding:3px 12px;background:rgba(10,8,20,.85);border:1px solid rgba(217,182,91,.5);border-radius:999px;color:#f2d27a;font-family:'Cinzel',serif;font-size:11px;letter-spacing:.22em}
   .win.reel{box-shadow:inset 0 0 0 2px rgba(217,182,91,.55),inset 0 0 60px rgba(0,0,0,.5)}
   #ripframe{position:absolute;pointer-events:none;opacity:0;transition:opacity .8s;border:3px solid #c9a24d;border-radius:12px;box-shadow:0 0 0 6px rgba(20,8,14,.85),0 18px 50px rgba(0,0,0,.65),inset 0 0 40px rgba(0,0,0,.35)}
@@ -420,6 +427,9 @@
   }
   // ---- compositing: static parts (sky, horizon, glows) are rendered once per phase; the moving layers
   //      (trees, vines, mist, light, leaves, birds) are redrawn ~20x per second with slow, independent motion ----
+  // ---- preview harness: ?preview=tarot|fortune|interlude|pull|menu replays that state's last JSON as if it were fresh (design checks without the bot)
+  const PREVIEW = new URLSearchParams(location.search).get('preview'); const _fetch = window.fetch.bind(window);
+  if (PREVIEW) window.fetch = (u, o) => { const name = String(u).split('?')[0]; if (name === PREVIEW + '.json') return _fetch(u, o).then(r => r.json()).then(j => { j.ts = Date.now() / 1000; return { json: () => Promise.resolve(j) }; }); return _fetch(u, o); };
   let CELLS = null;
   const ST = { top: 270, h: 540 };                                  // the camera stage (compact mode: 180 / 720 — set from layout.json)
   const baseCanvas = document.createElement('canvas'); baseCanvas.width = 1920; baseCanvas.height = 1080;
@@ -631,7 +641,7 @@
     else { lab.textContent = 'Did you know'; lab.classList.remove('offer'); nextFact(); } }
   function menuTick() { const busy = ['tarot', 'oracle', 'haiku'].some(id => document.getElementById(id).classList.contains('on')); if (busy) return;
     const m = document.getElementById('menu'); m.classList.add('on'); setTimeout(() => m.classList.remove('on'), 14000); }
-  setTimeout(() => { menuTick(); setInterval(menuTick, 40 * 60 * 1000); }, 90 * 1000);
+  setTimeout(() => { menuTick(); setInterval(menuTick, 40 * 60 * 1000); }, PREVIEW === 'menu' ? 1500 : 90 * 1000);
   // ---- Rip Night pull card (overlay/pull.json from the bot) ----
   let pullTs = 0;
   function pullPoll() { fetch('pull.json?' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(f => {
@@ -661,6 +671,17 @@
     let tag = document.getElementById('cam-rest'); if (!tag) { tag = document.createElement('div'); tag.id = 'cam-rest'; document.body.appendChild(tag); }
     const dead = (f.dead || []).filter(k => k === 'hot' || k === 'cool'); tag.textContent = dead.length ? ('◆ ' + dead.map(k => k.toUpperCase()).join(' + ') + ' SIDE CAM TEMPORARILY UNAVAILABLE DUE TO PYTHON CONSTRICTION') : ''; tag.style.display = dead.length ? '' : 'none'; }).catch(() => {}); }
   setInterval(layoutPoll, 5000); layoutPoll();
+  // ---- court status (overlay/whereabouts.json from the bot's director): where she is, since when
+  const WHERE = { cool: 'OUT ON THE COOL SIDE', hot: 'OUT ON THE HOT SIDE', hothide: 'IN THE HOT HIDE', coldhide: 'IN THE COLD HIDE' };
+  const hmt = t => new Date(t * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toLowerCase();
+  function statusPoll() { fetch('whereabouts.json?' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(w => { let el = document.getElementById('status'); if (!el) { el = document.createElement('div'); el.id = 'status'; document.body.appendChild(el); }
+    const mins = w.since ? Math.round((Date.now() / 1000 - w.since) / 60) : 0, ago = mins < 60 ? mins + ' min' : (mins / 60).toFixed(mins < 600 ? 1 : 0) + ' h';
+    const moving = (HUB && HUB.motion && HUB.motion.cool && HUB.motion.cool.moving);
+    if (w.now) { el.classList.remove('lost'); el.innerHTML = `<div class="dot"></div><div><div class="k">THE QUEEN IS</div><div class="v">${WHERE[w.now] || w.now}</div><div class="s">${moving ? 'on the move' : 'since ' + hmt(w.since) + ' · ' + ago}</div></div>`; }
+    else { el.classList.add('lost'); const last = (w.log || []).filter(x => x.where).slice(-1)[0]; el.innerHTML = `<div class="dot"></div><div><div class="k">THE QUEEN IS</div><div class="v">OUT OF SIGHT</div><div class="s">${last ? 'last seen ' + hmt(last.ts) + ' · ' + (WHERE[last.where] || last.where).toLowerCase() : 'somewhere in the court'}</div></div>`; }
+    el.style.display = document.body.classList.contains('compact') ? 'flex' : 'none'; }).catch(() => {}); }
+  setInterval(statusPoll, 10000); setTimeout(statusPoll, 1500);
+  setInterval(() => document.body.classList.toggle('busy', ['tarot', 'oracle', 'haiku', 'menu', 'pull'].some(id => document.getElementById(id).classList.contains('on'))), 300);   // a special on stage: the cell plates step aside
   // ---- cameras destroyed (overlay/kills.json): the queen's trophy count, in the header
   function killsPoll() { fetch('kills.json?' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(k => { let el = document.getElementById('kills'); if (!el) { el = document.createElement('div'); el.id = 'kills'; document.body.appendChild(el); }
     const n = (k && k.count) || 0; el.innerHTML = '<span class="k">☠ CAMERAS DESTROYED</span><span class="n">' + n + '</span>'; el.style.display = n ? '' : 'none'; }).catch(() => {}); }
